@@ -45,7 +45,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val settings by Store.settings.collectAsState()
-            NeonTheme(mode = settings.themeMode) {
+            NeonTheme(mode = settings.themeMode, textScale = settings.textScale) {
                 Surface(Modifier.fillMaxSize(), color = Neon.Black) {
                     AppRoot()
                 }

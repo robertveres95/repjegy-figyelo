@@ -17,6 +17,7 @@ Android-app, ami figyeli a repülőjegyárakat, és értesítést küld, ha egy 
 - Célár; értesítés be/ki egy koppintással a kártyán (csengő gomb)
 - Automatikus ellenőrzés a háttérben (3, 6, 12, 24 óránként vagy kikapcsolva)
 - Témák: automatikus (rendszer szerint), nappali, éjszakai (neon) és szemkímélő; animált felület
+- Állítható betűméret (normál, nagy, extra nagy); nagy, jól olvasható indulási idők a találati listában
 - Frissítésfigyelő: új kiadásnál az app kötelező frissítést kér, és naponta egyszer értesítést is küld
 - Árgörbe a korábbi ellenőrzésekből, „Megnyitás” gomb a foglalási/kereső oldalhoz
 - Forrásonkénti állapot minden figyelésnél (melyik forrás hány ajánlatot adott, vagy miért hibázott)

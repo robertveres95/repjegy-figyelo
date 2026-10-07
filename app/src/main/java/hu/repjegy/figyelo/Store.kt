@@ -39,6 +39,7 @@ object Store {
             currency = prefs.getString("currency", "HUF") ?: "HUF",
             intervalHours = prefs.getInt("intervalHours", 6),
             themeMode = prefs.getString("themeMode", THEME_AUTO) ?: THEME_AUTO,
+            textScale = prefs.getInt("textScale", 100),
         )
         val arr = runCatching { JSONArray(prefs.getString("watches", "[]") ?: "[]") }
             .getOrDefault(JSONArray())
@@ -86,6 +87,7 @@ object Store {
             .putString("currency", settings.currency)
             .putInt("intervalHours", settings.intervalHours)
             .putString("themeMode", settings.themeMode)
+            .putInt("textScale", settings.textScale)
             .apply()
         _settings.value = settings
     }

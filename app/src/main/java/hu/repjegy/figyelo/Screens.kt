@@ -465,14 +465,19 @@ private fun WatchCard(
             ) {
               Column {
                 Spacer(Modifier.height(8.dp))
-                Text("Összes ajánlat", style = MaterialTheme.typography.titleSmall)
+                Text("ÖSSZES AJÁNLAT", style = MaterialTheme.typography.titleMedium, color = Neon.Green)
                 w.offers.forEachIndexed { index, offer ->
-                    Column(Modifier.padding(top = 8.dp)) {
+                    Column(
+                        Modifier
+                            .padding(top = 10.dp)
+                            .fillMaxWidth()
+                            .border(0.5.dp, Neon.Line, RoundedCornerShape(12.dp))
+                            .padding(12.dp),
+                    ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 "${index + 1}. ${formatPrice(offer.price, currency)}",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.titleLarge,
                                 modifier = Modifier.weight(1f),
                             )
                             offer.url?.let { url ->
@@ -516,27 +521,44 @@ private fun WatchCard(
 /** Egy ajánlat részletei: pontos indulás/érkezés, légitársaság, forrás, megjegyzés. */
 @Composable
 private fun OfferDetails(offer: Offer, highlight: Boolean) {
-    val style = if (highlight) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall
-    Column(Modifier.padding(top = 4.dp)) {
-        val out = offer.outboundText()
-        val ret = offer.returnText()
-        if (out != null) {
-            Text("Indulás: $out", style = style, fontWeight = if (highlight) FontWeight.Medium else null)
-        } else {
-            Text("Indulási idő: a forrás nem adta meg", style = style)
+    Column(Modifier.padding(top = 6.dp)) {
+        val out = offer.outboundParts()
+        val ret = offer.returnParts()
+        if (out != null) LegBlock("INDULÁS", out, highlight) else {
+            Text("Indulási idő: a forrás nem adta meg", style = MaterialTheme.typography.bodyLarge)
         }
-        if (ret != null) Text("Vissza: $ret", style = style, fontWeight = if (highlight) FontWeight.Medium else null)
+        if (ret != null) {
+            Spacer(Modifier.height(6.dp))
+            LegBlock("VISSZA", ret, highlight)
+        }
+        Spacer(Modifier.height(4.dp))
         Text(
             listOfNotNull(offer.airline, "forrás: ${offer.source}").joinToString(" · "),
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
         offer.note?.let {
-            Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.tertiary)
         }
     }
+}
+
+/** Egy út nagy, jól olvasható időpontokkal: a napon belüli idő a legnagyobb, mert ezt hasonlítjuk össze. */
+@Composable
+private fun LegBlock(label: String, parts: LegParts, highlight: Boolean) {
+    Text(
+        "$label · ${parts.day}",
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Text(
+        parts.times,
+        style = MaterialTheme.typography.titleLarge,
+        color = if (highlight) Neon.Green else Neon.Text,
+    )
+    parts.route?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
 }
 
 @Composable
@@ -796,7 +818,10 @@ private fun SettingsScreen(onDone: () -> Unit) {
     var currency by remember { mutableStateOf(initial.currency) }
     var interval by remember { mutableStateOf(initial.intervalHours) }
     var themeMode by remember { mutableStateOf(initial.themeMode) }
-    val draft = Settings(googleOn, ryanairOn, wizzOn, serpOn, ignavOn, apiKey, ignavKey, currency, interval, themeMode)
+    var textScale by remember { mutableStateOf(initial.textScale) }
+    val draft = Settings(
+        googleOn, ryanairOn, wizzOn, serpOn, ignavOn, apiKey, ignavKey, currency, interval, themeMode, textScale,
+    )
 
     val watches by Store.watches.collectAsState()
     val activeWatches = watches.filter { !it.isExpired() }
@@ -828,6 +853,10 @@ private fun SettingsScreen(onDone: () -> Unit) {
                 themeMode = mode
                 // Azonnal látszik, mentés nélkül is
                 Store.saveSettings(Store.settings.value.copy(themeMode = mode))
+            }
+            ChoiceField("Betűméret", TEXT_SCALES, textScale) { scale ->
+                textScale = scale
+                Store.saveSettings(Store.settings.value.copy(textScale = scale))
             }
 
             SectionTitle("Árforrások – kulcs nélkül")

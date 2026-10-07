@@ -211,6 +211,7 @@ data class Settings(
     val currency: String = "HUF",
     val intervalHours: Int = 6,
     val themeMode: String = THEME_AUTO,
+    val textScale: Int = 100,          // betűméret százalékban
 ) {
     val useSerpApi: Boolean get() = serpOn && apiKey.isNotBlank()
     val useIgnav: Boolean get() = ignavOn && ignavKey.isNotBlank()
@@ -238,6 +239,12 @@ val CURRENCIES = listOf(
     "EUR" to "Euró (€)",
     "USD" to "Dollár ($)",
     "GBP" to "Font (£)",
+)
+
+val TEXT_SCALES = listOf(
+    100 to "Normál",
+    115 to "Nagy",
+    130 to "Extra nagy",
 )
 
 val INTERVALS = listOf(
@@ -305,3 +312,33 @@ fun describeLeg(departure: String?, arrival: String?, stops: Int?, from: String?
 fun Offer.outboundText(): String? = describeLeg(departure, arrival, stops, fromCode, toCode)
 
 fun Offer.returnText(): String? = describeLeg(returnDeparture, returnArrival, returnStops, toCode, fromCode)
+
+/** Egy út darabokra bontva a jól olvasható, nagybetűs megjelenítéshez. */
+data class LegParts(val day: String, val times: String, val route: String?)
+
+fun legParts(departure: String?, arrival: String?, stops: Int?, from: String?, to: String?): LegParts? {
+    val dep = departure?.let { runCatching { java.time.LocalDateTime.parse(it) }.getOrNull() } ?: return null
+    val arr = arrival?.let { runCatching { java.time.LocalDateTime.parse(it) }.getOrNull() }
+    val times = buildString {
+        append("%02d:%02d".format(dep.hour, dep.minute))
+        if (arr != null) {
+            append(" → ")
+            append("%02d:%02d".format(arr.hour, arr.minute))
+            val days = java.time.temporal.ChronoUnit.DAYS.between(dep.toLocalDate(), arr.toLocalDate())
+            if (days > 0) append(" (+$days nap)")
+        }
+    }
+    val route = listOfNotNull(
+        if (from != null && to != null) "$from → $to" else null,
+        when (stops) {
+            null -> null
+            0 -> "közvetlen"
+            else -> "$stops átszállás"
+        },
+    ).joinToString(" · ").ifBlank { null }
+    return LegParts(dep.format(legDateFormat), times, route)
+}
+
+fun Offer.outboundParts(): LegParts? = legParts(departure, arrival, stops, fromCode, toCode)
+
+fun Offer.returnParts(): LegParts? = legParts(returnDeparture, returnArrival, returnStops, toCode, fromCode)

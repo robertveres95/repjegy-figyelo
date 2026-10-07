@@ -9,6 +9,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.core.view.WindowCompat
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -213,7 +216,7 @@ private val NeonTypography = Typography().run {
 }
 
 @Composable
-fun NeonTheme(mode: String, content: @Composable () -> Unit) {
+fun NeonTheme(mode: String, textScale: Int = 100, content: @Composable () -> Unit) {
     val palette = paletteFor(mode, isSystemInDarkTheme())
     if (Neon.palette != palette) Neon.palette = palette
     val colors = remember(palette) { colorSchemeFor(palette) }
@@ -230,7 +233,14 @@ fun NeonTheme(mode: String, content: @Composable () -> Unit) {
             window.decorView.setBackgroundColor(palette.background.toArgb())
         }
     }
-    MaterialTheme(colorScheme = colors, typography = NeonTypography, content = content)
+    // Betűméret: a rendszer betűméretére szorzunk rá, így a telefon beállítása is érvényes marad
+    val density = LocalDensity.current
+    val scaled = remember(density, textScale) {
+        Density(density.density, density.fontScale * textScale / 100f)
+    }
+    CompositionLocalProvider(LocalDensity provides scaled) {
+        MaterialTheme(colorScheme = colors, typography = NeonTypography, content = content)
+    }
 }
 
 /** Izzó szövegstílus (halvány fényudvar a betűk körül); a nem izzó témákban hatástalan. */
