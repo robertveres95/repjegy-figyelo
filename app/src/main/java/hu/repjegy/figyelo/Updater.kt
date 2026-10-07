@@ -31,6 +31,9 @@ object Updater {
 
     val currentBuild: Int get() = BuildConfig.VERSION_CODE
 
+    /** A felhasználónak mutatott verziószám, pl. 7 → "1.0.7". */
+    fun versionName(build: Int): String = "1.0.$build"
+
     /** Lekéri a legfrissebb kiadást. Hálózati hiba esetén csendben null. */
     fun check(): Release? = runCatching {
         val res = Http.request(
@@ -85,7 +88,7 @@ object Updater {
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_flight)
             .setContentTitle("Új verzió érhető el")
-            .setContentText("A Repjegy figyelő ${release.build}. buildje megjelent. Koppints a frissítéshez.")
+            .setContentText("Megjelent a Repjegy figyelő ${versionName(release.build)}. Koppints a frissítéshez.")
             .setContentIntent(pending)
             .setAutoCancel(true)
             .build()

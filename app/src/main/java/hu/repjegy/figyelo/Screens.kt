@@ -185,28 +185,33 @@ private fun UpdateOverlay(release: Updater.Release) {
                 "ÚJ VERZIÓ",
                 style = MaterialTheme.typography.headlineMedium.glow(),
                 color = Neon.Green,
-                modifier = Modifier.scale(pulse),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().scale(pulse),
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
             Text(
-                "Megjelent a Repjegy figyelő ${release.build}. buildje. A használathoz frissítened kell " +
-                    "(most: ${Updater.currentBuild}. build).",
+                "Megjelent a Repjegy figyelő ${Updater.versionName(release.build)}.\n" +
+                    "A használathoz frissítened kell.",
                 style = MaterialTheme.typography.bodyLarge,
             )
             Spacer(Modifier.height(12.dp))
             Text(
                 "1. Koppints a gombra, a böngésző letölti az új verziót.\n" +
-                    "2. Nyisd meg a letöltött fájlt, és telepítsd a régi fölé.\n" +
-                    "A figyeléseid megmaradnak.",
+                    "2. Nyisd meg a letöltött fájlt, és telepítsd (idegen forrásból származó " +
+                    "alkalmazás telepítését engedélyezni kell).",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "😎Nyugi a figyeléseid megmaradnak😎",
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(18.dp))
             Button(onClick = { openUrl(context, release.apkUrl) }, modifier = Modifier.fillMaxWidth()) {
                 Text("Letöltés és frissítés", fontWeight = FontWeight.Bold)
-            }
-            TextButton(onClick = { openUrl(context, release.pageUrl) }, modifier = Modifier.fillMaxWidth()) {
-                Text("Kiadás megnyitása a GitHubon")
             }
         }
     }
@@ -903,7 +908,7 @@ private fun SettingsScreen(onDone: () -> Unit) {
 
             SectionTitle("Verzió")
             Text(
-                "Telepítve: ${Updater.currentBuild}. build. Új verzió megjelenésekor az app szól, és frissítést kér.",
+                "Telepítve: ${Updater.versionName(Updater.currentBuild)}. Új verzió megjelenésekor az app szól, és frissítést kér.",
                 style = MaterialTheme.typography.bodyMedium,
             )
             var updateMsg by remember { mutableStateOf<String?>(null) }

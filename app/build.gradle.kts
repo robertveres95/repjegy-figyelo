@@ -16,7 +16,7 @@ android {
         // magát a legfrissebb kiadással (frissítésfigyelő).
         val build = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
         versionCode = build
-        versionName = "1.$build"
+        versionName = "1.0.$build"
     }
 
     signingConfigs {
