@@ -18,6 +18,7 @@ Android-app, ami figyeli a repülőjegyárakat, és értesítést küld, ha egy 
 - Automatikus ellenőrzés a háttérben (3, 6, 12, 24 óránként vagy kikapcsolva)
 - Témák: automatikus (rendszer szerint), nappali, éjszakai (neon) és szemkímélő; animált felület
 - Állítható betűméret (normál, nagy, extra nagy); nagy, jól olvasható indulási idők a találati listában
+- 3D nyitóanimáció hidegindításkor (three.js, az appba csomagolva)
 - Frissítésfigyelő: új kiadásnál az app kötelező frissítést kér, és naponta egyszer értesítést is küld
 - Árgörbe a korábbi ellenőrzésekből, „Megnyitás” gomb a foglalási/kereső oldalhoz
 - Forrásonkénti állapot minden figyelésnél (melyik forrás hány ajánlatot adott, vagy miért hibázott)
@@ -37,6 +38,7 @@ Android-app, ami figyeli a repülőjegyárakat, és értesítést küld, ha egy 
 - A nem forintos árakat az EKB napi árfolyamával (frankfurter.dev) váltjuk át.
 - A Google Flights-lekérdezés a nyílt forrású fast-flights, a Wizz Air-felület leírása a flywizz könyvtár alapján készült.
 - A repülőtér-lista az OurAirports nyílt adatbázisából származik (menetrend szerinti járatú repterek).
+- A nyitóanimáció a three.js (MIT licenc) könyvtárat használja, az appba csomagolva.
 - A Google Flights a legtöbb légitársaságot és irodát lefedi, de nem mindet.
 
 ## Fejlesztés

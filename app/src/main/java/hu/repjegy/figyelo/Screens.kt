@@ -130,6 +130,7 @@ private val timeFormat = DateTimeFormatter.ofPattern("MMM d. HH:mm", HU)
 fun AppRoot() {
     var screen by remember { mutableStateOf<Screen>(Screen.Home) }
     val update by Updater.available.collectAsState()
+    var showSplash by remember { mutableStateOf(App.splashPending) }
     BackHandler(enabled = screen != Screen.Home) { screen = Screen.Home }
 
     LaunchedEffect(Unit) { App.scope.launch { Updater.check() } }
@@ -158,8 +159,15 @@ fun AppRoot() {
             }
         }
 
-        AnimatedVisibility(visible = update != null, enter = fadeIn(tween(400)), exit = fadeOut()) {
+        AnimatedVisibility(visible = update != null && !showSplash, enter = fadeIn(tween(400)), exit = fadeOut()) {
             update?.let { UpdateOverlay(it) }
+        }
+
+        if (showSplash) {
+            SplashOverlay(onFinished = {
+                App.splashPending = false
+                showSplash = false
+            })
         }
     }
 }
@@ -170,8 +178,9 @@ private fun UpdateOverlay(release: Updater.Release) {
     val context = LocalContext.current
     BackHandler(enabled = true) { }
     val transition = rememberInfiniteTransition(label = "update")
+    // Ugyanaz az ütem, mint a keret lüktetése (NeonCard: 1100 ms), így együtt pulzálnak
     val pulse by transition.animateFloat(
-        0.9f, 1.08f, infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "p",
+        0.95f, 1.05f, infiniteRepeatable(tween(1100, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "p",
     )
     Box(
         Modifier

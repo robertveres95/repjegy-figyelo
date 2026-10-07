@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden}
+  #c3{position:fixed;inset:0}
+  #txt{position:fixed;left:0;right:0;top:58%;text-align:center;font-family:sans-serif;pointer-events:none}
+  #ti{font-size:24px;font-weight:500;color:#fff;letter-spacing:.5px}
+  #ve{font-size:14px;color:#9aa3ad;margin-top:6px;font-family:monospace}
+</style>
+</head>
+<body>
+<div id="c3"></div>
+<div id="txt"><div id="ti">Repjegy figyelő</div><div id="ve"></div></div>
+<script src="three.min.js"></script>
+<script>
+// Az Android oldal ezt hívja vissza, ha az animáció végére ért (vagy hiba történt).
+function finish(){ try { Splash.done(); } catch (e) {} }
+window.onerror = function(){ finish(); };
+
+var params = new URLSearchParams(location.search);
+document.getElementById('ve').textContent = params.get('v') || '';
+
+var W = window.innerWidth, H = window.innerHeight;
+var R = new THREE.WebGLRenderer({antialias:true, alpha:true});
+R.setPixelRatio(Math.min(window.devicePixelRatio || 1, 3));
+R.setSize(W, H);
+R.setClearColor(0x000000, 0);
+document.getElementById('c3').appendChild(R.domElement);
+
+var S = new THREE.Scene(), C = new THREE.PerspectiveCamera(50, W / H, .05, 200);
+C.position.set(0, 0, 10); C.lookAt(0, 0.3, 0);
+S.add(new THREE.HemisphereLight(0xffffff, 0x20262e, .75));
+var sun = new THREE.DirectionalLight(0xffffff, 1.15); sun.position.set(3, 6, 4); S.add(sun);
+var rim = new THREE.DirectionalLight(0x9fb4c8, .5); rim.position.set(-4, -2, -6); S.add(rim);
+
+var white = new THREE.MeshStandardMaterial({color:0xf7f8fa, metalness:.25, roughness:.32});
+var grey = new THREE.MeshStandardMaterial({color:0xc9d0d8, metalness:.5, roughness:.3});
+var dark = new THREE.MeshStandardMaterial({color:0x1b232c, metalness:.6, roughness:.15});
+
+// ---- Repülőmodell (orra a +Z irányba néz)
+var P = new THREE.Group();
+var prof = [[0,-2.75],[.1,-2.65],[.22,-2.3],[.36,-1.6],[.45,-.6],[.46,1.5],[.42,2.15],[.32,2.55],[.18,2.82],[.05,2.95],[0,2.97]]
+  .map(function(p){ return new THREE.Vector2(p[0], p[1]); });
+var fus = new THREE.LatheGeometry(prof, 48); fus.rotateX(Math.PI / 2); P.add(new THREE.Mesh(fus, white));
+
+function wing(shape, depth, z, y, mir){
+  var g = new THREE.ExtrudeGeometry(shape, {depth:depth, bevelEnabled:true, bevelThickness:.02, bevelSize:.02, bevelSegments:2});
+  g.rotateX(Math.PI / 2);
+  var m = new THREE.Mesh(g, white);
+  m.position.set(0, y, z);
+  if (mir) m.scale.x = -1;
+  m.rotation.z = (mir ? -1 : 1) * 0.06;
+  return m;
+}
+var ws = new THREE.Shape(); ws.moveTo(.3,.55); ws.lineTo(2.5,-.75); ws.lineTo(2.55,-1.02); ws.lineTo(.3,-.55); ws.closePath();
+P.add(wing(ws, .06, .25, -.12, false)); P.add(wing(ws, .06, .25, -.12, true));
+var hs = new THREE.Shape(); hs.moveTo(.12,.25); hs.lineTo(1.15,-.35); hs.lineTo(1.17,-.55); hs.lineTo(.12,-.25); hs.closePath();
+P.add(wing(hs, .04, -2.2, .08, false)); P.add(wing(hs, .04, -2.2, .08, true));
+var fs = new THREE.Shape(); fs.moveTo(-1.6,.3); fs.lineTo(-2.25,.3); fs.lineTo(-2.85,1.55); fs.lineTo(-2.45,1.55); fs.closePath();
+var fg = new THREE.ExtrudeGeometry(fs, {depth:.05, bevelEnabled:true, bevelThickness:.015, bevelSize:.015, bevelSegments:2});
+fg.rotateY(-Math.PI / 2); fg.translate(.025, 0, 0); P.add(new THREE.Mesh(fg, white));
+[-1, 1].forEach(function(s){
+  var n = new THREE.Mesh(new THREE.CylinderGeometry(.17,.15,.75,32), grey); n.rotation.x = Math.PI/2; n.position.set(s*1.05,-.32,.55); P.add(n);
+  var i = new THREE.Mesh(new THREE.CylinderGeometry(.13,.13,.02,32), dark); i.rotation.x = Math.PI/2; i.position.set(s*1.05,-.32,.935); P.add(i);
+  var py = new THREE.Mesh(new THREE.BoxGeometry(.05,.18,.4), white); py.position.set(s*1.05,-.18,.45); P.add(py);
+  for (var k = 0; k < 16; k++) { var w = new THREE.Mesh(new THREE.BoxGeometry(.01,.05,.06), dark); w.position.set(s*.452,.16,-1.5+k*.2); P.add(w); }
+});
+var cockpit = new THREE.Mesh(new THREE.SphereGeometry(.2,24,12), dark); cockpit.scale.set(1.25,.45,1); cockpit.position.set(0,.24,2.45); P.add(cockpit);
+var tips = [];
+[[2.55,0x2bff5a],[-2.55,0xff3b3b]].forEach(function(d){
+  var l = new THREE.Mesh(new THREE.SphereGeometry(.04,8,8), new THREE.MeshBasicMaterial({color:d[1]}));
+  l.position.set(d[0], -.12 + Math.abs(d[0])*.06, -.9); P.add(l); tips.push(l);
+});
+S.add(P);
+
+// ---- Útvonal: kicsiben indul a távolban, kört tesz, majd a néző feje fölött elhúz
+var curve = new THREE.CatmullRomCurve3([[0,1.3,-26],[-4,4,-36],[-11,3,-50],[-12,-2,-62],[-3,-4,-64],[6,-1.5,-52],[6,.5,-34],[3,1,-16],[.8,1.2,-2],[0,1.25,7],[0,1.3,14]]
+  .map(function(p){ return new THREE.Vector3(p[0], p[1], p[2]); }), false, 'catmullrom', .5);
+
+// ---- Halvány kondenzcsík mindkét szárnyvégről
+var trails = tips.map(function(){
+  var n = 140, g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n*3), 3));
+  g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n*3), 3));
+  S.add(new THREE.Line(g, new THREE.LineBasicMaterial({vertexColors:true, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false})));
+  return {pts:[], g:g, n:n};
+});
+
+var ease = function(t){ return t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2; };
+var txt = document.getElementById('txt');
+var tmp = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+var t0 = null, finished = false;
+
+function frame(now){
+  if (t0 === null) t0 = now;
+  var t = (now - t0) / 1000;
+  txt.style.opacity = t < .25 ? t/.25 : t < .75 ? 1 : Math.max(0, 1 - (t-.75)/.3);
+  var u = ease(Math.min(Math.max((t-.7)/2.2, 0), 1)), u2 = Math.min(u+.01, 1), u3 = Math.min(u+.02, 1);
+  curve.getPoint(u, a); curve.getPoint(u2, b); curve.getPoint(u3, c);
+  P.position.copy(a);
+  if (u < 1) P.lookAt(b);
+  var d1 = b.clone().sub(a), d2 = c.clone().sub(b);
+  var turn = d1.x*d2.z - d1.z*d2.x;
+  P.rotateZ(Math.max(-1.1, Math.min(1.1, -turn*.9)));
+  P.scale.setScalar(t < .5 ? .85 + .15*Math.sin(t/.5*Math.PI/2) : 1);
+  trails.forEach(function(tr, i){
+    tips[i].getWorldPosition(tmp);
+    if (t > .75 && u < .995) tr.pts.push({p:tmp.clone(), t:t});
+    tr.pts = tr.pts.filter(function(s){ return t - s.t < 1.1; }).slice(-tr.n);
+    var pa = tr.g.attributes.position.array, ca = tr.g.attributes.color.array;
+    tr.pts.forEach(function(s, k){
+      pa[k*3] = s.p.x; pa[k*3+1] = s.p.y; pa[k*3+2] = s.p.z;
+      var f = .22 * (1 - (t-s.t)/1.1) * (k/tr.pts.length);
+      ca[k*3] = f; ca[k*3+1] = f; ca[k*3+2] = f;
+    });
+    tr.g.setDrawRange(0, tr.pts.length);
+    tr.g.attributes.position.needsUpdate = true; tr.g.attributes.color.needsUpdate = true;
+  });
+  P.visible = t < 2.92;
+  R.render(S, C);
+  // 2,8 mp: a gép elhúzott a fejünk fölött – az app most kezdheti felerősíteni a főképernyőt
+  if (t >= 2.8 && !finished) { finished = true; finish(); }
+  if (t < 3.2) requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

@@ -37,6 +37,9 @@ class App : Application() {
     }
 
     companion object {
+        /** Hidegindításkor igaz: ilyenkor egyszer lefut a nyitóanimáció. */
+        var splashPending = true
+
         /** Alkalmazásszintű scope: a kézi ellenőrzés akkor is lefut, ha közben képernyőt váltasz. */
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     }
