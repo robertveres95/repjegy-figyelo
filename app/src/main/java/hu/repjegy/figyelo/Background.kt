@@ -24,12 +24,14 @@ import androidx.work.WorkerParameters
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
         Store.init(this)
+        scope.launch { Airports.preload(this@App) }
         Notifier.createChannel(this)
         Scheduler.schedule(this)
     }
@@ -102,7 +104,7 @@ object Notifier {
         }
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_flight)
-            .setContentTitle("${w.from} → ${w.to}: ${formatPrice(price, currency)}")
+            .setContentTitle("${w.routeTitle}: ${formatPrice(price, currency)}")
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setPriority(NotificationCompat.PRIORITY_HIGH)

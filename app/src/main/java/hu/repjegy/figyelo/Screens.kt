@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
@@ -40,6 +41,9 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -68,12 +72,13 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -209,7 +214,7 @@ private fun WatchCard(
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "${w.from} → ${w.to}",
+                    w.routeTitle,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
@@ -221,6 +226,13 @@ private fun WatchCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            }
+            if (w.fromLabel != null || w.toLabel != null) {
+                Text(
+                    "${w.from} → ${w.to}".replace(",", ", "),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             Text(dateLine(w), style = MaterialTheme.typography.bodyMedium)
             Text(
@@ -366,8 +378,15 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
     val appContext = LocalContext.current.applicationContext
     val today = remember { LocalDate.now() }
 
-    var from by remember { mutableStateOf(existing?.from ?: "BUD") }
-    var to by remember { mutableStateOf(existing?.to ?: "") }
+    var fromPlace by remember {
+        mutableStateOf(
+            if (existing != null) Airports.placeFor(appContext, existing.from, existing.fromLabel)
+            else Airports.placeFor(appContext, "BUD", null)
+        )
+    }
+    var toPlace by remember {
+        mutableStateOf(existing?.let { Airports.placeFor(appContext, it.to, it.toLabel) })
+    }
     var roundTrip by remember { mutableStateOf(existing?.isRoundTrip ?: true) }
     var outDate by remember {
         mutableStateOf(existing?.outboundDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: today.plusDays(30))
@@ -391,24 +410,28 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
     if (infantsOnLap > adults) infantsOnLap = adults
 
     fun save() {
-        val code = Regex("^[A-Z]{3}(,[A-Z]{3})*$")
         val targetValue = target.toIntOrNull()
+        val from = fromPlace
+        val to = toPlace
         error = when {
-            !code.matches(from) -> "Az indulási hely 3 betűs repülőtér-kód legyen (pl. BUD)."
-            !code.matches(to) -> "Az érkezési hely 3 betűs repülőtér-kód legyen (pl. LHR)."
-            from == to -> "Az indulási és érkezési hely nem lehet ugyanaz."
+            from == null -> "Válaszd ki az indulási repülőteret a listából."
+            to == null -> "Válaszd ki az érkezési repülőteret a listából."
+            from.codes.split(',').any { it in to.codes.split(',') } ->
+                "Az indulási és érkezési hely nem lehet ugyanaz."
             outDate.isBefore(today) -> "Az indulás dátuma nem lehet a múltban."
             roundTrip && retDate.isBefore(outDate) -> "A visszaút nem lehet az indulás előtt."
             adults + children + infantsInSeat + infantsOnLap > 9 -> "Legfeljebb 9 utas adható meg."
             targetValue == null || targetValue <= 0 -> "Adj meg egy célárat."
             else -> null
         }
-        if (error != null || targetValue == null) return
+        if (error != null || targetValue == null || from == null || to == null) return
 
         val fresh = Watch(
             id = existing?.id ?: UUID.randomUUID().toString(),
-            from = from,
-            to = to,
+            from = from.codes,
+            to = to.codes,
+            fromLabel = from.city,
+            toLabel = to.city,
             outboundDate = outDate.toString(),
             returnDate = if (roundTrip) retDate.toString() else null,
             travelClass = travelClass,
@@ -423,7 +446,13 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
         )
         val sameSearch = existing != null && existing.searchKey() == fresh.searchKey()
         val toSave = if (sameSearch) {
-            existing!!.copy(targetPrice = targetValue, notify = notify, lastNotifiedPrice = null)
+            existing!!.copy(
+                targetPrice = targetValue,
+                notify = notify,
+                lastNotifiedPrice = null,
+                fromLabel = from.city,
+                toLabel = to.city,
+            )
         } else {
             fresh
         }
@@ -456,24 +485,8 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             SectionTitle("Útvonal")
-            OutlinedTextField(
-                value = from,
-                onValueChange = { v -> from = v.uppercase().filter { it in 'A'..'Z' || it == ',' } },
-                label = { Text("Honnan") },
-                supportingText = { Text("Repülőtér-kód, pl. BUD") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = to,
-                onValueChange = { v -> to = v.uppercase().filter { it in 'A'..'Z' || it == ',' } },
-                label = { Text("Hova") },
-                supportingText = { Text("Több repülőtér vesszővel: LHR,LGW,STN") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
-                modifier = Modifier.fillMaxWidth(),
-            )
+            AirportField("Honnan", fromPlace) { fromPlace = it }
+            AirportField("Hova", toPlace) { toPlace = it }
             SwitchRow("Oda-vissza út", roundTrip) { roundTrip = it }
 
             SectionTitle("Dátum")
@@ -627,6 +640,86 @@ private fun SettingsScreen(onDone: () -> Unit) {
 }
 
 // ---------------------------------------------------------------- Közös elemek
+
+@Composable
+private fun AirportField(label: String, selected: Place?, onSelect: (Place?) -> Unit) {
+    val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    var text by remember { mutableStateOf(selected?.fieldText ?: "") }
+    var expanded by remember { mutableStateOf(false) }
+    val results = remember(text, selected) {
+        if (selected != null && text == selected.fieldText) emptyList()
+        else Airports.search(context, text)
+    }
+    val showMenu = expanded && results.isNotEmpty()
+
+    ExposedDropdownMenuBox(expanded = showMenu, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = text,
+            onValueChange = {
+                text = it
+                expanded = true
+                if (selected != null) onSelect(null)
+            },
+            label = { Text(label) },
+            placeholder = { Text("Város, repülőtér vagy kód") },
+            supportingText = {
+                Text(
+                    when {
+                        selected != null -> selected.subtitle
+                        text.isNotBlank() && results.isEmpty() -> "Nincs találat"
+                        else -> "Kezdj el gépelni, pl. Budapest, London, Bécs"
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            },
+            singleLine = true,
+            trailingIcon = {
+                if (text.isNotEmpty()) {
+                    IconButton(onClick = {
+                        text = ""
+                        onSelect(null)
+                        expanded = false
+                    }) { Icon(Icons.Filled.Clear, contentDescription = "Törlés") }
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(MenuAnchorType.PrimaryEditable),
+        )
+        ExposedDropdownMenu(expanded = showMenu, onDismissRequest = { expanded = false }) {
+            results.forEach { place ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(
+                                place.title,
+                                style = MaterialTheme.typography.bodyLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                place.subtitle,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    },
+                    onClick = {
+                        text = place.fieldText
+                        onSelect(place)
+                        expanded = false
+                        focusManager.clearFocus()
+                    },
+                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun SectionTitle(text: String) {

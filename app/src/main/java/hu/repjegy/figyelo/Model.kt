@@ -13,6 +13,8 @@ data class Watch(
     // Keresési beállítások
     val from: String,
     val to: String,
+    val fromLabel: String? = null,     // pl. "Budapest"
+    val toLabel: String? = null,       // pl. "London"
     val outboundDate: String,          // YYYY-MM-DD
     val returnDate: String?,           // null = csak oda
     val travelClass: Int,              // 1 turista, 2 prémium turista, 3 business, 4 első
@@ -36,6 +38,9 @@ data class Watch(
 ) {
     val isRoundTrip: Boolean get() = returnDate != null
 
+    /** Kártyán és értesítésben használt útvonalnév, pl. "Budapest → London". */
+    val routeTitle: String get() = "${fromLabel ?: from} → ${toLabel ?: to}"
+
     fun isExpired(today: LocalDate = LocalDate.now()): Boolean =
         runCatching { LocalDate.parse(outboundDate).isBefore(today) }.getOrDefault(false)
 
@@ -54,6 +59,8 @@ data class Watch(
         put("id", id)
         put("from", from)
         put("to", to)
+        putOpt("fromLabel", fromLabel)
+        putOpt("toLabel", toLabel)
         put("outboundDate", outboundDate)
         putOpt("returnDate", returnDate)
         put("travelClass", travelClass)
@@ -87,6 +94,8 @@ data class Watch(
                 id = o.getString("id"),
                 from = o.getString("from"),
                 to = o.getString("to"),
+                fromLabel = o.stringOrNull("fromLabel"),
+                toLabel = o.stringOrNull("toLabel"),
                 outboundDate = o.getString("outboundDate"),
                 returnDate = o.stringOrNull("returnDate"),
                 travelClass = o.optInt("travelClass", 1),

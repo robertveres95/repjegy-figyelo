@@ -4,7 +4,7 @@ Android-app, ami figyeli a repülőjegyárakat (Google Flights-adat a SerpApi-n 
 
 ## Mit tud
 
-- Útvonal repülőtér-kóddal (több kód is megadható vesszővel, pl. `LHR,LGW,STN`)
+- Repülőtér-kereső gépelés közbeni javaslatokkal (név, város – magyarul is –, vagy kód), több repülőteres városoknál „minden repülőtér” opció
 - Csak oda vagy oda-vissza, dátumválasztóval
 - Osztály: turista, prémium turista, business, első
 - Utasok: felnőtt, gyerek, csecsemő (saját ülésen vagy ölben)
@@ -23,6 +23,7 @@ Android-app, ami figyeli a repülőjegyárakat (Google Flights-adat a SerpApi-n 
 
 - Az ingyenes SerpApi-keret havi 250 keresés. A Beállítások képernyő mutatja a becsült fogyasztást.
 - A feladott poggyász díja nincs benne az árban, csak a kézipoggyász-szűrő.
+- A repülőtér-lista az OurAirports nyílt adatbázisából származik (menetrend szerinti járatú repterek).
 - A Google Flights a legtöbb légitársaságot és irodát lefedi, de nem mindet.
 
 ## Fejlesztés
