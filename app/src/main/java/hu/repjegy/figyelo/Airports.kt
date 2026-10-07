@@ -94,7 +94,7 @@ object Airports {
                 }
                 score to e
             }
-            .sortedWith(compareBy({ it.first }, { it.second.place.title }))
+            .sortedWith(compareBy<Pair<Int, Entry>>({ it.first }, { it.second.place.title }))
             .take(limit)
             .map { it.second.place }
     }

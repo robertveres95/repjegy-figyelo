@@ -379,13 +379,13 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
     val today = remember { LocalDate.now() }
 
     var fromPlace by remember {
-        mutableStateOf(
+        mutableStateOf<Place?>(
             if (existing != null) Airports.placeFor(appContext, existing.from, existing.fromLabel)
             else Airports.placeFor(appContext, "BUD", null)
         )
     }
     var toPlace by remember {
-        mutableStateOf(existing?.let { Airports.placeFor(appContext, it.to, it.toLabel) })
+        mutableStateOf<Place?>(existing?.let { Airports.placeFor(appContext, it.to, it.toLabel) })
     }
     var roundTrip by remember { mutableStateOf(existing?.isRoundTrip ?: true) }
     var outDate by remember {
