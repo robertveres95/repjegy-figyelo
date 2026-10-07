@@ -83,15 +83,26 @@ object Scheduler {
 }
 
 object Notifier {
-    private const val CHANNEL_ID = "price_alerts"
+    // Új csatorna kell, mert a meglévő csatorna rezgését az Android nem engedi utólag módosítani
+    private const val CHANNEL_ID = "price_alerts_v2"
+    private const val OLD_CHANNEL_ID = "price_alerts"
+
+    /** Két rövid rezgés: várakozás, rezgés, szünet, rezgés (ms). */
+    private val VIBRATION = longArrayOf(0, 180, 140, 180)
 
     fun createChannel(context: Context) {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        manager.deleteNotificationChannel(OLD_CHANNEL_ID)
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Árriasztások",
             NotificationManager.IMPORTANCE_HIGH,
-        ).apply { description = "Értesítés, ha egy figyelt jegy a célár alá esik" }
-        context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        ).apply {
+            description = "Értesítés, ha egy figyelt jegy a célár alá esik"
+            enableVibration(true)
+            vibrationPattern = VIBRATION
+        }
+        manager.createNotificationChannel(channel)
     }
 
     fun priceDrop(context: Context, w: Watch, currency: String) {
@@ -125,6 +136,7 @@ object Notifier {
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVibrate(VIBRATION)
             .setContentIntent(pending)
             .setAutoCancel(true)
             .build()

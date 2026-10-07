@@ -14,7 +14,7 @@ Android-app, ami figyeli a repülőjegyárakat, és értesítést küld, ha egy 
 - Utasok: felnőtt, gyerek, csecsemő (saját ülésen vagy ölben)
 - Kézipoggyász, feladott poggyász, átszállások száma
 - Minden ajánlatnál pontos indulási és érkezési idő, légitársaság, forrás
-- Célár; értesítés be/ki egy koppintással a kártyán (csengő gomb)
+- Célár; értesítés be/ki egy koppintással a kártyán (csengő gomb); az árriasztás két rövid rezgéssel jelez
 - Automatikus ellenőrzés a háttérben (3, 6, 12, 24 óránként vagy kikapcsolva)
 - Témák: automatikus (rendszer szerint), nappali, éjszakai (neon) és szemkímélő; animált felület
 - Állítható betűméret (normál, nagy, extra nagy); nagy, jól olvasható indulási idők a találati listában
@@ -39,6 +39,7 @@ Android-app, ami figyeli a repülőjegyárakat, és értesítést küld, ha egy 
 - A Google Flights-lekérdezés a nyílt forrású fast-flights, a Wizz Air-felület leírása a flywizz könyvtár alapján készült.
 - A repülőtér-lista az OurAirports nyílt adatbázisából származik (menetrend szerinti járatú repterek).
 - A nyitóanimáció a three.js (MIT licenc) könyvtárat használja, az appba csomagolva.
+- Betűtípus: Plus Jakarta Sans (SIL Open Font License), az appba csomagolva.
 - A Google Flights a legtöbb légitársaságot és irodát lefedi, de nem mindet.
 
 ## Fejlesztés

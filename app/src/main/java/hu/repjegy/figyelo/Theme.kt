@@ -65,6 +65,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -204,14 +205,28 @@ private fun colorSchemeFor(p: AppPalette) = if (p.isLight) {
     )
 }
 
-/** Monospace „terminál” betűk a címekhez és árakhoz, normál a folyószöveghez. */
+/** Az app saját betűtípusa (Plus Jakarta Sans, SIL OFL), így minden telefonon ugyanúgy néz ki. */
+val AppFont = FontFamily(
+    Font(R.font.jakarta_regular, FontWeight.Normal),
+    Font(R.font.jakarta_medium, FontWeight.Medium),
+    Font(R.font.jakarta_semibold, FontWeight.SemiBold),
+    Font(R.font.jakarta_bold, FontWeight.Bold),
+)
+
 private val NeonTypography = Typography().run {
+    fun TextStyle.app(weight: FontWeight? = null) = copy(fontFamily = AppFont, fontWeight = weight ?: fontWeight)
     copy(
-        headlineMedium = headlineMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold),
-        titleLarge = titleLarge.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold),
-        titleMedium = titleMedium.copy(fontFamily = FontFamily.Monospace),
-        titleSmall = titleSmall.copy(fontFamily = FontFamily.Monospace),
-        labelSmall = labelSmall.copy(fontFamily = FontFamily.Monospace),
+        displayLarge = displayLarge.app(), displayMedium = displayMedium.app(), displaySmall = displaySmall.app(),
+        headlineLarge = headlineLarge.app(FontWeight.Bold),
+        headlineMedium = headlineMedium.app(FontWeight.Bold),
+        headlineSmall = headlineSmall.app(FontWeight.SemiBold),
+        titleLarge = titleLarge.app(FontWeight.Bold),
+        titleMedium = titleMedium.app(FontWeight.SemiBold),
+        titleSmall = titleSmall.app(FontWeight.SemiBold),
+        bodyLarge = bodyLarge.app(), bodyMedium = bodyMedium.app(), bodySmall = bodySmall.app(),
+        labelLarge = labelLarge.app(FontWeight.SemiBold),
+        labelMedium = labelMedium.app(FontWeight.Medium),
+        labelSmall = labelSmall.app(FontWeight.Medium),
     )
 }
 
@@ -392,7 +407,7 @@ fun BellToggle(on: Boolean, onToggle: () -> Unit) {
         Text(
             if (on) "BE" else "KI",
             color = tint,
-            style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold),
+            style = MaterialTheme.typography.labelMedium.copy(fontFamily = AppFont, fontWeight = FontWeight.Bold),
             fontSize = 12.sp,
         )
     }

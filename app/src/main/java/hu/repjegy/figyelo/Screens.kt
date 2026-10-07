@@ -305,7 +305,7 @@ private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: 
                 contentColor = Neon.Green,
                 elevation = androidx.compose.material3.FloatingActionButtonDefaults.elevation(2.dp, 2.dp, 2.dp, 2.dp),
                 icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text("ÚJ FIGYELÉS", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold) },
+                text = { Text("ÚJ FIGYELÉS", fontWeight = FontWeight.Bold) },
                 modifier = Modifier.border(0.8.dp, Neon.Green.copy(alpha = borderAlpha), fabShape),
             )
         },
@@ -946,7 +946,7 @@ private fun SettingsScreen(onDone: () -> Unit) {
 
             SectionTitle("Verzió")
             Text(
-                "Telepítve: ${Updater.versionName(Updater.currentBuild)}. Új verzió megjelenésekor az app szól, és frissítést kér.",
+                "Telepítve: ${Updater.versionName(Updater.currentBuild)}.",
                 style = MaterialTheme.typography.bodyMedium,
             )
             var updateMsg by remember { mutableStateOf<String?>(null) }
