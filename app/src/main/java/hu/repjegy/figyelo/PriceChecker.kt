@@ -2,12 +2,18 @@ package hu.repjegy.figyelo
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 
 object PriceChecker {
 
     private const val MAX_HISTORY = 120
+    private const val MAX_OFFERS = 10
+
+    private class SourceRun(val name: String, val search: () -> List<Offer>)
 
     suspend fun checkAll(context: Context) {
         Store.watches.value
@@ -18,10 +24,11 @@ object PriceChecker {
     suspend fun checkOne(context: Context, id: String) = withContext(Dispatchers.IO) {
         val watch = Store.watches.value.find { it.id == id } ?: return@withContext
         val settings = Store.settings.value
+        val currency = settings.currency
         val now = System.currentTimeMillis()
 
         if (!settings.isReady) {
-            Store.update(id) { it.copy(lastError = "Hiányzik az árforrás kulcsa (Beállítások)") }
+            Store.update(id) { it.copy(lastError = "Nincs bekapcsolt árforrás (Beállítások)") }
             return@withContext
         }
         if (watch.isExpired()) {
@@ -32,37 +39,50 @@ object PriceChecker {
 
         Store.checking.update { it + id }
         try {
-            val results = mutableListOf<FareResult>()
-            val errors = mutableListOf<String>()
-
-            // Feladott poggyásznál a SerpApi ára félrevezető lenne, ha az Ignav is elérhető.
-            val skipSerpApi = watch.checkedBag && settings.useIgnav
-            if (settings.useSerpApi && !skipSerpApi) {
-                runCatching {
-                    val r = SerpApi.search(watch, settings.apiKey, settings.currency)
-                    FareResult(r.price, r.airline, r.flightsUrl, "SerpApi")
-                }.onSuccess { results += it }
-                    .onFailure { errors += "SerpApi: ${it.message ?: it.javaClass.simpleName}" }
-            }
-            if (settings.useIgnav) {
-                runCatching { Ignav.search(watch, settings.ignavKey, settings.currency) }
-                    .onSuccess { results += it }
-                    .onFailure { errors += "Ignav: ${it.message ?: it.javaClass.simpleName}" }
+            val runs = buildList {
+                if (settings.googleOn) add(SourceRun(GoogleFlights.NAME) { GoogleFlights.search(watch, currency) })
+                if (settings.ryanairOn) add(SourceRun(Ryanair.NAME) { Ryanair.search(watch, currency) })
+                if (settings.wizzOn) add(SourceRun(WizzAir.NAME) { WizzAir.search(watch, currency) })
+                if (settings.useSerpApi) add(SourceRun(SerpApi.NAME) { SerpApi.search(watch, settings.apiKey, currency) })
+                if (settings.useIgnav) add(SourceRun(Ignav.NAME) { Ignav.search(watch, settings.ignavKey, currency) })
             }
 
-            val best = results.minByOrNull { it.price }
-            if (best == null) {
+            // Minden forrás párhuzamosan fut; egyik hibája sem akasztja meg a többit.
+            val outcomes = coroutineScope {
+                runs.map { run ->
+                    async { run.name to runCatching { run.search() } }
+                }.awaitAll()
+            }
+
+            val statuses = outcomes.map { (name, result) ->
+                result.fold(
+                    onSuccess = { offers ->
+                        SourceStatus(name, true, if (offers.isEmpty()) "nincs járat" else "${offers.size} ajánlat")
+                    },
+                    onFailure = { e ->
+                        when (e) {
+                            is SkipSourceException -> SourceStatus(name, true, e.message ?: "kihagyva")
+                            else -> SourceStatus(name, false, e.message ?: e.javaClass.simpleName)
+                        }
+                    },
+                )
+            }
+            val allOffers = outcomes.flatMap { it.second.getOrNull().orEmpty() }
+            val offers = rank(watch, allOffers)
+
+            if (offers.isEmpty()) {
+                val anyWorked = statuses.any { it.ok }
                 Store.update(id) {
-                    it.copy(lastChecked = now, lastError = errors.joinToString("\n").ifBlank { "Nincs találat" })
+                    it.copy(
+                        lastChecked = now,
+                        sourceStatus = statuses,
+                        lastError = if (anyWorked) "Nincs találat ezekkel a beállításokkal" else "Egyik forrás sem válaszolt",
+                    )
                 }
                 return@withContext
             }
 
-            val warnings = errors.toMutableList()
-            if (watch.checkedBag && !settings.useIgnav) {
-                warnings += "A feladott poggyász díja nincs benne az árban (csak az Ignav számolja)."
-            }
-
+            val best = offers.first()
             var toNotify: Watch? = null
             Store.update(id) { cur ->
                 // Közben módosított keresést nem keverünk régi eredménnyel
@@ -74,10 +94,8 @@ object PriceChecker {
                     lowestPrice = minOf(cur.lowestPrice ?: best.price, best.price),
                     lastChecked = now,
                     lastError = null,
-                    bestAirline = best.airline,
-                    bestSource = best.source,
-                    sourceWarning = warnings.joinToString("\n").ifBlank { null },
-                    flightsUrl = best.flightsUrl ?: cur.flightsUrl,
+                    offers = offers,
+                    sourceStatus = statuses,
                     history = (cur.history + PricePoint(now, best.price)).takeLast(MAX_HISTORY),
                     lastNotifiedPrice = when {
                         shouldNotify -> best.price
@@ -89,9 +107,29 @@ object PriceChecker {
                 if (shouldNotify) toNotify = next
                 next
             }
-            toNotify?.let { Notifier.priceDrop(context, it, settings.currency) }
+            toNotify?.let { Notifier.priceDrop(context, it, currency) }
         } finally {
             Store.checking.update { it - id }
         }
+    }
+
+    /**
+     * Ugyanaz a járat több forrásból is jöhet: ilyenkor a legolcsóbbat tartjuk meg.
+     * Ha poggyászt kértél, a poggyász nélküli (fapados alap-) árak a lista végére kerülnek,
+     * hogy ne ezek nyerjenek tévesen.
+     */
+    private fun rank(w: Watch, offers: List<Offer>): List<Offer> {
+        val deduped = offers
+            .groupBy { o ->
+                if (o.departure != null) {
+                    listOf(o.departure, o.returnDeparture, o.fromCode, o.toCode, o.airline?.lowercase()).joinToString("|")
+                } else {
+                    "${o.source}|${o.price}|${o.airline}"
+                }
+            }
+            .map { (_, same) -> same.minWith(compareBy<Offer>({ !it.bagsIncluded }, { it.price })) }
+        return deduped
+            .sortedWith(compareBy<Offer>({ w.wantsBags && !it.bagsIncluded }, { it.price }))
+            .take(MAX_OFFERS)
     }
 }

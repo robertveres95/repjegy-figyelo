@@ -7,6 +7,63 @@ import java.util.Locale
 
 data class PricePoint(val time: Long, val price: Int)
 
+/** Egy konkrét ajánlat egy forrásból, a választott pénznemben. */
+data class Offer(
+    val price: Int,
+    val source: String,
+    val airline: String? = null,
+    val fromCode: String? = null,
+    val toCode: String? = null,
+    val departure: String? = null,         // helyi idő, "yyyy-MM-ddTHH:mm"
+    val arrival: String? = null,
+    val stops: Int? = null,
+    val returnDeparture: String? = null,
+    val returnArrival: String? = null,
+    val returnStops: Int? = null,
+    val url: String? = null,
+    val bagsIncluded: Boolean = true,      // a kért poggyász díja benne van-e
+    val note: String? = null,              // pl. "becsült ár"
+) {
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("price", price)
+        put("source", source)
+        putOpt("airline", airline)
+        putOpt("fromCode", fromCode)
+        putOpt("toCode", toCode)
+        putOpt("departure", departure)
+        putOpt("arrival", arrival)
+        putOpt("stops", stops)
+        putOpt("returnDeparture", returnDeparture)
+        putOpt("returnArrival", returnArrival)
+        putOpt("returnStops", returnStops)
+        putOpt("url", url)
+        put("bagsIncluded", bagsIncluded)
+        putOpt("note", note)
+    }
+
+    companion object {
+        fun fromJson(o: JSONObject) = Offer(
+            price = o.getInt("price"),
+            source = o.optString("source", "?"),
+            airline = o.stringOrNull("airline"),
+            fromCode = o.stringOrNull("fromCode"),
+            toCode = o.stringOrNull("toCode"),
+            departure = o.stringOrNull("departure"),
+            arrival = o.stringOrNull("arrival"),
+            stops = o.intOrNull("stops"),
+            returnDeparture = o.stringOrNull("returnDeparture"),
+            returnArrival = o.stringOrNull("returnArrival"),
+            returnStops = o.intOrNull("returnStops"),
+            url = o.stringOrNull("url"),
+            bagsIncluded = o.optBoolean("bagsIncluded", true),
+            note = o.stringOrNull("note"),
+        )
+    }
+}
+
+/** Egy forrás eredménye az utolsó ellenőrzéskor. */
+data class SourceStatus(val source: String, val ok: Boolean, val text: String)
+
 /** Egy figyelt út a keresési beállításokkal és az utolsó eredményekkel. */
 data class Watch(
     val id: String,
@@ -23,7 +80,7 @@ data class Watch(
     val infantsInSeat: Int,
     val infantsOnLap: Int,
     val bags: Int,                     // kézipoggyászok száma összesen
-    val checkedBag: Boolean = false,   // feladott poggyász utasonként (csak Ignav)
+    val checkedBag: Boolean = false,   // feladott poggyász
     val stops: Int,                    // 0 mindegy, 1 közvetlen, 2 max 1, 3 max 2 átszállás
     val targetPrice: Int,
     val notify: Boolean,
@@ -33,16 +90,20 @@ data class Watch(
     val lastChecked: Long? = null,
     val lastError: String? = null,
     val lastNotifiedPrice: Int? = null,
-    val bestAirline: String? = null,
-    val flightsUrl: String? = null,
-    val bestSource: String? = null,    // melyik forrás adta a legjobb árat
-    val sourceWarning: String? = null, // ha egy forrás hibázott, de a másik működött
+    val offers: List<Offer> = emptyList(),          // ár szerint rendezve, az első a legjobb
+    val sourceStatus: List<SourceStatus> = emptyList(),
     val history: List<PricePoint> = emptyList(),
 ) {
     val isRoundTrip: Boolean get() = returnDate != null
 
+    val wantsBags: Boolean get() = bags > 0 || checkedBag
+
+    val seatedPassengers: Int get() = adults + children + infantsInSeat
+
     /** Kártyán és értesítésben használt útvonalnév, pl. "Budapest → London". */
     val routeTitle: String get() = "${fromLabel ?: from} → ${toLabel ?: to}"
+
+    val bestOffer: Offer? get() = offers.firstOrNull()
 
     fun isExpired(today: LocalDate = LocalDate.now()): Boolean =
         runCatching { LocalDate.parse(outboundDate).isBefore(today) }.getOrDefault(false)
@@ -55,8 +116,7 @@ data class Watch(
 
     fun clearResults(): Watch = copy(
         lastPrice = null, lowestPrice = null, lastChecked = null, lastError = null,
-        lastNotifiedPrice = null, bestAirline = null, flightsUrl = null, history = emptyList(),
-        bestSource = null, sourceWarning = null,
+        lastNotifiedPrice = null, offers = emptyList(), sourceStatus = emptyList(), history = emptyList(),
     )
 
     fun toJson(): JSONObject = JSONObject().apply {
@@ -82,10 +142,12 @@ data class Watch(
         putOpt("lastChecked", lastChecked)
         putOpt("lastError", lastError)
         putOpt("lastNotifiedPrice", lastNotifiedPrice)
-        putOpt("bestAirline", bestAirline)
-        putOpt("flightsUrl", flightsUrl)
-        putOpt("bestSource", bestSource)
-        putOpt("sourceWarning", sourceWarning)
+        put("offers", JSONArray().apply { offers.forEach { put(it.toJson()) } })
+        put("sourceStatus", JSONArray().apply {
+            sourceStatus.forEach {
+                put(JSONObject().put("source", it.source).put("ok", it.ok).put("text", it.text))
+            }
+        })
         val h = JSONArray()
         history.forEach { h.put(JSONArray().put(it.time).put(it.price)) }
         put("history", h)
@@ -96,6 +158,16 @@ data class Watch(
             val h = o.optJSONArray("history") ?: JSONArray()
             val history = (0 until h.length()).mapNotNull { i ->
                 h.optJSONArray(i)?.let { PricePoint(it.getLong(0), it.getInt(1)) }
+            }
+            val offersArr = o.optJSONArray("offers") ?: JSONArray()
+            val offers = (0 until offersArr.length()).mapNotNull { i ->
+                offersArr.optJSONObject(i)?.let { runCatching { Offer.fromJson(it) }.getOrNull() }
+            }
+            val statusArr = o.optJSONArray("sourceStatus") ?: JSONArray()
+            val status = (0 until statusArr.length()).mapNotNull { i ->
+                statusArr.optJSONObject(i)?.let {
+                    SourceStatus(it.optString("source"), it.optBoolean("ok"), it.optString("text"))
+                }
             }
             return Watch(
                 id = o.getString("id"),
@@ -120,10 +192,8 @@ data class Watch(
                 lastChecked = o.longOrNull("lastChecked"),
                 lastError = o.stringOrNull("lastError"),
                 lastNotifiedPrice = o.intOrNull("lastNotifiedPrice"),
-                bestAirline = o.stringOrNull("bestAirline"),
-                flightsUrl = o.stringOrNull("flightsUrl"),
-                bestSource = o.stringOrNull("bestSource"),
-                sourceWarning = o.stringOrNull("sourceWarning"),
+                offers = offers,
+                sourceStatus = status,
                 history = history,
             )
         }
@@ -131,29 +201,22 @@ data class Watch(
 }
 
 data class Settings(
+    val googleOn: Boolean = true,
+    val ryanairOn: Boolean = true,
+    val wizzOn: Boolean = true,
+    val serpOn: Boolean = false,
+    val ignavOn: Boolean = false,
     val apiKey: String = "",           // SerpApi
     val ignavKey: String = "",
-    val source: String = SOURCE_SERPAPI,
     val currency: String = "HUF",
     val intervalHours: Int = 6,
 ) {
-    val useSerpApi: Boolean get() = source == SOURCE_SERPAPI || source == SOURCE_BOTH
-    val useIgnav: Boolean get() = source == SOURCE_IGNAV || source == SOURCE_BOTH
+    val useSerpApi: Boolean get() = serpOn && apiKey.isNotBlank()
+    val useIgnav: Boolean get() = ignavOn && ignavKey.isNotBlank()
 
-    /** Van-e kulcs minden kiválasztott forráshoz. */
-    val isReady: Boolean
-        get() = (!useSerpApi || apiKey.isNotBlank()) && (!useIgnav || ignavKey.isNotBlank())
+    /** Van-e legalább egy működőképes forrás. */
+    val isReady: Boolean get() = googleOn || ryanairOn || wizzOn || useSerpApi || useIgnav
 }
-
-const val SOURCE_SERPAPI = "serpapi"
-const val SOURCE_IGNAV = "ignav"
-const val SOURCE_BOTH = "both"
-
-val SOURCES = listOf(
-    SOURCE_SERPAPI to "SerpApi (Google Flights)",
-    SOURCE_IGNAV to "Ignav",
-    SOURCE_BOTH to "Mindkettő – az olcsóbb számít",
-)
 
 val TRAVEL_CLASSES = listOf(
     1 to "Turista",
@@ -198,11 +261,45 @@ fun formatPrice(price: Int, currency: String): String {
     return "$digits ${currencySymbol(currency)}"
 }
 
-private fun JSONObject.stringOrNull(key: String): String? =
+internal fun JSONObject.stringOrNull(key: String): String? =
     if (has(key) && !isNull(key)) getString(key) else null
 
-private fun JSONObject.intOrNull(key: String): Int? =
+internal fun JSONObject.intOrNull(key: String): Int? =
     if (has(key) && !isNull(key)) getInt(key) else null
 
-private fun JSONObject.longOrNull(key: String): Long? =
+internal fun JSONObject.longOrNull(key: String): Long? =
     if (has(key) && !isNull(key)) getLong(key) else null
+
+// ---------------------------------------------------------------- Időpontok kiírása
+
+private val legDateFormat = java.time.format.DateTimeFormatter.ofPattern("MMM d., EEE", HU)
+
+/**
+ * Egy út szöveges leírása, pl. "nov. 5., cs 06:25 → 08:10 (BUD → STN), közvetlen".
+ * Ha az érkezés másnapra esik, "+1 nap" jelzést kap.
+ */
+fun describeLeg(departure: String?, arrival: String?, stops: Int?, from: String?, to: String?): String? {
+    val dep = departure?.let { runCatching { java.time.LocalDateTime.parse(it) }.getOrNull() } ?: return null
+    val arr = arrival?.let { runCatching { java.time.LocalDateTime.parse(it) }.getOrNull() }
+    return buildString {
+        append(dep.format(legDateFormat))
+        append(" ")
+        append("%02d:%02d".format(dep.hour, dep.minute))
+        if (arr != null) {
+            append(" → ")
+            append("%02d:%02d".format(arr.hour, arr.minute))
+            val days = java.time.temporal.ChronoUnit.DAYS.between(dep.toLocalDate(), arr.toLocalDate())
+            if (days > 0) append(" (+$days nap)")
+        }
+        if (from != null && to != null) append(" · $from → $to")
+        when (stops) {
+            null -> Unit
+            0 -> append(" · közvetlen")
+            else -> append(" · $stops átszállás")
+        }
+    }
+}
+
+fun Offer.outboundText(): String? = describeLeg(departure, arrival, stops, fromCode, toCode)
+
+fun Offer.returnText(): String? = describeLeg(returnDeparture, returnArrival, returnStops, toCode, fromCode)

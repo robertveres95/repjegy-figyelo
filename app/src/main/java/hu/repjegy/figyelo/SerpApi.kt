@@ -3,19 +3,16 @@ package hu.repjegy.figyelo
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLEncoder
 
 /**
- * Google Flights-árak lekérdezése a SerpApi-n keresztül.
+ * Google Flights-árak a SerpApi-n keresztül (opcionális, kulcsos tartalék).
  * Dokumentáció: https://serpapi.com/google-flights-api
  */
 object SerpApi {
+    const val NAME = "SerpApi"
 
-    class Result(val price: Int, val airline: String?, val flightsUrl: String?)
-
-    fun search(w: Watch, apiKey: String, currency: String): Result {
+    fun search(w: Watch, apiKey: String, currency: String): List<Offer> {
         val params = linkedMapOf(
             "engine" to "google_flights",
             "departure_id" to w.from,
@@ -36,57 +33,58 @@ object SerpApi {
         )
         w.returnDate?.let { params["return_date"] = it }
 
-        val query = params.entries.joinToString("&") { (k, v) ->
-            "$k=${URLEncoder.encode(v, "UTF-8")}"
+        val query = params.entries.joinToString("&") { (k, v) -> "$k=${URLEncoder.encode(v, "UTF-8")}" }
+        val res = Http.request("https://serpapi.com/search.json?$query", timeoutMs = 90_000)
+        val json = runCatching { JSONObject(res.body) }.getOrNull()
+            ?: throw IOException("Hibás válasz (HTTP ${res.code})")
+        if (json.has("error")) {
+            val message = json.getString("error")
+            if (message.contains("hasn't returned any results", ignoreCase = true)) return emptyList()
+            throw FatalSourceException(translateError(message))
         }
-        val conn = URL("https://serpapi.com/search.json?$query").openConnection() as HttpURLConnection
-        conn.connectTimeout = 30_000
-        conn.readTimeout = 90_000
-        try {
-            val code = conn.responseCode
-            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-            val body = stream?.bufferedReader()?.use { it.readText() } ?: ""
-            val json = runCatching { JSONObject(body) }.getOrNull()
-                ?: throw IOException("Hibás válasz a szervertől (HTTP $code)")
-            if (json.has("error")) throw IOException(translateError(json.getString("error")))
 
-            var best: JSONObject? = null
-            for (key in listOf("best_flights", "other_flights")) {
-                val arr = json.optJSONArray(key) ?: JSONArray()
-                for (i in 0 until arr.length()) {
-                    val option = arr.optJSONObject(i) ?: continue
-                    val price = option.optInt("price", -1)
-                    if (price > 0 && (best == null || price < best.optInt("price"))) best = option
-                }
+        val flightsUrl = json.optJSONObject("search_metadata")
+            ?.optString("google_flights_url")?.takeIf { it.isNotBlank() }
+            ?: GoogleFlights.searchUrl(w, currency)
+
+        val offers = mutableListOf<Offer>()
+        for (key in listOf("best_flights", "other_flights")) {
+            val arr = json.optJSONArray(key) ?: JSONArray()
+            for (i in 0 until arr.length()) {
+                val option = arr.optJSONObject(i) ?: continue
+                val price = option.optInt("price", -1)
+                if (price <= 0) continue
+                val flights = option.optJSONArray("flights") ?: JSONArray()
+                val first = flights.optJSONObject(0)
+                val last = flights.optJSONObject(flights.length() - 1)
+                val airlines = (0 until flights.length())
+                    .mapNotNull { flights.optJSONObject(it)?.optString("airline")?.takeIf(String::isNotBlank) }
+                    .distinct()
+                offers += Offer(
+                    price = price,
+                    source = NAME,
+                    airline = airlines.takeIf { it.isNotEmpty() }?.joinToString(", "),
+                    fromCode = first?.optJSONObject("departure_airport")?.optString("id"),
+                    toCode = last?.optJSONObject("arrival_airport")?.optString("id"),
+                    departure = toIso(first?.optJSONObject("departure_airport")?.optString("time")),
+                    arrival = toIso(last?.optJSONObject("arrival_airport")?.optString("time")),
+                    stops = if (flights.length() > 0) flights.length() - 1 else null,
+                    url = flightsUrl,
+                    bagsIncluded = !w.checkedBag,
+                    note = if (w.checkedBag) "feladott poggyász nélkül" else null,
+                )
             }
-
-            val flightsUrl = json.optJSONObject("search_metadata")
-                ?.optString("google_flights_url")?.takeIf { it.isNotBlank() }
-
-            if (best != null) {
-                return Result(best.getInt("price"), airlinesOf(best), flightsUrl)
-            }
-            val lowest = json.optJSONObject("price_insights")?.optInt("lowest_price", -1) ?: -1
-            if (lowest > 0) return Result(lowest, null, flightsUrl)
-            throw IOException("Nincs találat ezekkel a beállításokkal")
-        } finally {
-            conn.disconnect()
         }
+        return offers
     }
 
-    private fun airlinesOf(option: JSONObject): String? {
-        val flights = option.optJSONArray("flights") ?: return null
-        val names = (0 until flights.length())
-            .mapNotNull { flights.optJSONObject(it)?.optString("airline")?.takeIf(String::isNotBlank) }
-            .distinct()
-        return names.takeIf { it.isNotEmpty() }?.joinToString(", ")
-    }
+    /** "2026-11-05 06:25" → "2026-11-05T06:25" */
+    private fun toIso(raw: String?): String? =
+        raw?.takeIf { it.length >= 16 }?.replace(' ', 'T')?.substring(0, 16)
 
     private fun translateError(message: String): String = when {
-        message.contains("Invalid API key", ignoreCase = true) -> "Érvénytelen SerpApi-kulcs"
-        message.contains("run out of searches", ignoreCase = true) -> "Elfogyott a havi keresési keret"
-        message.contains("hasn't returned any results", ignoreCase = true) ->
-            "Nincs találat ezekkel a beállításokkal"
+        message.contains("Invalid API key", ignoreCase = true) -> "érvénytelen kulcs"
+        message.contains("run out of searches", ignoreCase = true) -> "elfogyott a havi keret"
         else -> message
     }
 }

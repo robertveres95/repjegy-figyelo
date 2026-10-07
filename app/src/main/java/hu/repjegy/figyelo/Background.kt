@@ -87,8 +87,9 @@ object Notifier {
             PackageManager.PERMISSION_GRANTED
         ) return
 
-        val price = w.lastPrice ?: return
-        val intent = (w.flightsUrl?.let { Intent(Intent.ACTION_VIEW, Uri.parse(it)) }
+        val best = w.bestOffer ?: return
+        val price = best.price
+        val intent = (best.url?.let { Intent(Intent.ACTION_VIEW, Uri.parse(it)) }
             ?: Intent(context, MainActivity::class.java))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val pending = PendingIntent.getActivity(
@@ -99,8 +100,11 @@ object Notifier {
         )
         val text = buildString {
             append("A célár (${formatPrice(w.targetPrice, currency)}) alá esett.")
-            w.bestAirline?.let { append(" $it.") }
-            append(" Koppints a megnyitáshoz.")
+            best.outboundText()?.let { append("\nIndulás: $it") }
+            best.returnText()?.let { append("\nVissza: $it") }
+            append("\n")
+            append(listOfNotNull(best.airline, best.source).distinct().joinToString(" · "))
+            best.note?.let { append(" ($it)") }
         }
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_flight)

@@ -24,10 +24,18 @@ object Store {
     fun init(context: Context) {
         if (initialized) return
         prefs = context.applicationContext.getSharedPreferences("repjegy", Context.MODE_PRIVATE)
+        val oldSource = prefs.getString("source", null)
+        val serpKey = prefs.getString("apiKey", "") ?: ""
+        val ignavKey = prefs.getString("ignavKey", "") ?: ""
         _settings.value = Settings(
-            apiKey = prefs.getString("apiKey", "") ?: "",
-            ignavKey = prefs.getString("ignavKey", "") ?: "",
-            source = prefs.getString("source", SOURCE_SERPAPI) ?: SOURCE_SERPAPI,
+            googleOn = prefs.getBoolean("googleOn", true),
+            ryanairOn = prefs.getBoolean("ryanairOn", true),
+            wizzOn = prefs.getBoolean("wizzOn", true),
+            // Korábbi verzióból: ha volt kulcs és használta, maradjon bekapcsolva
+            serpOn = prefs.getBoolean("serpOn", serpKey.isNotBlank() && oldSource != "ignav"),
+            ignavOn = prefs.getBoolean("ignavOn", ignavKey.isNotBlank() && oldSource != "serpapi"),
+            apiKey = serpKey,
+            ignavKey = ignavKey,
             currency = prefs.getString("currency", "HUF") ?: "HUF",
             intervalHours = prefs.getInt("intervalHours", 6),
         )
@@ -67,9 +75,13 @@ object Store {
     @Synchronized
     fun saveSettings(settings: Settings) {
         prefs.edit()
+            .putBoolean("googleOn", settings.googleOn)
+            .putBoolean("ryanairOn", settings.ryanairOn)
+            .putBoolean("wizzOn", settings.wizzOn)
+            .putBoolean("serpOn", settings.serpOn)
+            .putBoolean("ignavOn", settings.ignavOn)
             .putString("apiKey", settings.apiKey)
             .putString("ignavKey", settings.ignavKey)
-            .putString("source", settings.source)
             .putString("currency", settings.currency)
             .putInt("intervalHours", settings.intervalHours)
             .apply()

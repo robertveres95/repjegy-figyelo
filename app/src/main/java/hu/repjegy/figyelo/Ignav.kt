@@ -5,45 +5,34 @@ import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
-import java.net.URLEncoder
 import kotlin.math.ceil
 
-/** Egy forrás által talált legjobb ár, már a választott pénznemben. */
-class FareResult(
-    val price: Int,
-    val airline: String?,
-    val flightsUrl: String?,
-    val source: String,
-)
-
-/** Olyan hiba, aminél nincs értelme a többi repülőtér-párral próbálkozni (pl. rossz kulcs). */
-class FatalSourceException(message: String) : IOException(message)
-
 /**
- * Árak az Ignav API-ból. Dokumentáció: https://ignav.com/docs
- * Egy kérés egy indulási és egy érkezési repülőteret kezel, ezért a
- * „minden repülőtér” választásnál több kérést küldünk (legfeljebb [MAX_PAIRS]).
+ * Árak az Ignav API-ból (opcionális, kulcsos tartalék). Dokumentáció: https://ignav.com/docs
+ * Egy kérés egy indulási és egy érkezési repülőteret kezel.
  */
 object Ignav {
+    const val NAME = "Ignav"
     const val MAX_PAIRS = 6
     private const val MARKET = "HU"
 
-    fun search(w: Watch, apiKey: String, currency: String): FareResult {
-        val pairs = w.from.split(',').flatMap { o -> w.to.split(',').map { d -> o to d } }
-            .take(MAX_PAIRS)
-        var best: FareResult? = null
+    fun search(w: Watch, apiKey: String, currency: String): List<Offer> {
+        val pairs = w.from.split(',').flatMap { o -> w.to.split(',').map { d -> o to d } }.take(MAX_PAIRS)
+        val offers = mutableListOf<Offer>()
         var lastError: Exception? = null
+        var anySuccess = false
         for ((origin, destination) in pairs) {
             try {
-                val r = searchPair(w, origin, destination, apiKey, currency)
-                if (r != null && (best == null || r.price < best.price)) best = r
+                offers += searchPair(w, origin, destination, apiKey, currency)
+                anySuccess = true
             } catch (e: FatalSourceException) {
                 throw e
             } catch (e: Exception) {
                 lastError = e
             }
         }
-        return best ?: throw (lastError ?: IOException("Nincs találat ezekkel a beállításokkal"))
+        if (!anySuccess && lastError != null) throw lastError
+        return offers
     }
 
     private fun searchPair(
@@ -52,7 +41,7 @@ object Ignav {
         destination: String,
         apiKey: String,
         currency: String,
-    ): FareResult? {
+    ): List<Offer> {
         val body = JSONObject().apply {
             put("origin", origin)
             put("destination", destination)
@@ -82,77 +71,92 @@ object Ignav {
         }
 
         val path = if (w.isRoundTrip) "round-trip" else "one-way"
-        val conn = URL("https://ignav.com/api/fares/$path").openConnection() as HttpURLConnection
-        conn.requestMethod = "POST"
-        conn.connectTimeout = 30_000
-        conn.readTimeout = 90_000
-        conn.doOutput = true
-        conn.setRequestProperty("X-Api-Key", apiKey)
-        conn.setRequestProperty("Content-Type", "application/json")
-        conn.setRequestProperty("Accept", "application/json")
-        try {
-            conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
-            val code = conn.responseCode
-            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-            val text = stream?.bufferedReader()?.use { it.readText() } ?: ""
-            val json = runCatching { JSONObject(text) }.getOrNull()
-
-            if (code !in 200..299) {
-                val message = json?.optJSONObject("error")?.optString("message")?.takeIf { it.isNotBlank() }
-                throw errorFor(code, message)
+        val res = Http.request(
+            "https://ignav.com/api/fares/$path",
+            method = "POST",
+            headers = mapOf(
+                "X-Api-Key" to apiKey,
+                "Content-Type" to "application/json",
+                "Accept" to "application/json",
+            ),
+            body = body.toString(),
+            timeoutMs = 90_000,
+        )
+        val json = runCatching { JSONObject(res.body) }.getOrNull()
+        if (res.code !in 200..299) {
+            val message = json?.optJSONObject("error")?.optString("message")?.takeIf { it.isNotBlank() }
+            throw when (res.code) {
+                401, 403 -> FatalSourceException("érvénytelen kulcs")
+                402 -> FatalSourceException("elfogyott a keret")
+                429 -> FatalSourceException("túl sok kérés, később újrapróbálom")
+                else -> IOException(message ?: "HTTP ${res.code}")
             }
-            if (json == null) throw IOException("Hibás válasz az Ignavtól")
+        }
+        if (json == null) throw IOException("hibás válasz")
 
-            val itineraries = json.optJSONArray("itineraries") ?: JSONArray()
-            var bestAmount = Double.MAX_VALUE
-            var bestCurrency = ""
-            var bestItinerary: JSONObject? = null
-            for (i in 0 until itineraries.length()) {
-                val itin = itineraries.optJSONObject(i) ?: continue
-                val price = itin.optJSONObject("price") ?: continue
-                val amount = price.optDouble("amount", Double.NaN)
-                if (amount.isNaN() || amount <= 0) continue
-                val cur = price.optString("currency", currency)
-                val inTarget = Rates.convert(amount, cur, currency)
-                if (inTarget < bestAmount) {
-                    bestAmount = inTarget
-                    bestCurrency = cur
-                    bestItinerary = itin
+        val itineraries = json.optJSONArray("itineraries") ?: JSONArray()
+        val url = GoogleFlights.searchUrl(w.copy(from = origin, to = destination), currency)
+        val offers = mutableListOf<Offer>()
+        for (i in 0 until itineraries.length()) {
+            val itin = itineraries.optJSONObject(i) ?: continue
+            val price = itin.optJSONObject("price") ?: continue
+            val amount = price.optDouble("amount", Double.NaN)
+            if (amount.isNaN() || amount <= 0) continue
+            val inTarget = Rates.convert(amount, price.optString("currency", currency), currency)
+            val outbound = itin.optJSONObject("outbound")
+            val inbound = itin.optJSONObject("inbound")
+            val outSegs = outbound?.optJSONArray("segments")
+            val inSegs = inbound?.optJSONArray("segments")
+            val carriers = listOfNotNull(outbound, inbound)
+                .mapNotNull { it.optString("carrier").takeIf { c -> c.isNotBlank() && c != "null" } }
+                .distinct()
+            offers += Offer(
+                price = ceil(inTarget).toInt(),
+                source = NAME,
+                airline = carriers.takeIf { it.isNotEmpty() }?.joinToString(", "),
+                fromCode = origin,
+                toCode = destination,
+                departure = segmentTime(outSegs?.optJSONObject(0), "depart"),
+                arrival = segmentTime(outSegs?.let { it.optJSONObject(it.length() - 1) }, "arriv"),
+                stops = outSegs?.let { it.length() - 1 },
+                returnDeparture = segmentTime(inSegs?.optJSONObject(0), "depart"),
+                returnArrival = segmentTime(inSegs?.let { it.optJSONObject(it.length() - 1) }, "arriv"),
+                returnStops = inSegs?.let { it.length() - 1 },
+                url = url,
+                bagsIncluded = true,
+            )
+        }
+        return offers
+    }
+
+    /**
+     * Helyi indulási/érkezési idő kiolvasása egy szakaszból. A pontos mezőnevet nem
+     * rögzítjük: az első olyan mezőt vesszük, aminek a neve tartalmazza a kulcsszót
+     * (és lehetőleg a "local" szót), az értéke pedig dátum-idő.
+     */
+    private fun segmentTime(segment: JSONObject?, keyword: String): String? {
+        segment ?: return null
+        val candidates = mutableListOf<Pair<Int, String>>()
+        fun scan(obj: JSONObject, prefix: String) {
+            val keys = obj.keys()
+            while (keys.hasNext()) {
+                val k = keys.next()
+                val full = "$prefix$k".lowercase()
+                when (val v = obj.opt(k)) {
+                    is JSONObject -> scan(v, "$full.")
+                    is String -> if (full.contains(keyword) && Regex("""^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}""").containsMatchIn(v)) {
+                        val score = when {
+                            full.contains("local") -> 0
+                            full.contains("utc") -> 2
+                            else -> 1
+                        }
+                        candidates += score to v.replace(' ', 'T').substring(0, 16)
+                    }
                 }
             }
-            val itinerary = bestItinerary ?: return null
-            return FareResult(
-                price = ceil(bestAmount).toInt(),
-                airline = carriersOf(itinerary),
-                flightsUrl = googleFlightsUrl(w, origin, destination),
-                source = if (bestCurrency.isNotBlank() && bestCurrency != currency) "Ignav ($bestCurrency-ből átváltva)" else "Ignav",
-            )
-        } finally {
-            conn.disconnect()
         }
-    }
-
-    private fun carriersOf(itinerary: JSONObject): String? {
-        val names = listOf("outbound", "inbound").mapNotNull { leg ->
-            itinerary.optJSONObject(leg)?.optString("carrier")?.takeIf { it.isNotBlank() && it != "null" }
-        }.distinct()
-        return names.takeIf { it.isNotEmpty() }?.joinToString(", ")
-    }
-
-    private fun errorFor(code: Int, message: String?): IOException = when (code) {
-        401, 403 -> FatalSourceException("Érvénytelen Ignav-kulcs")
-        402 -> FatalSourceException("Elfogyott az Ignav-keret")
-        429 -> FatalSourceException("Túl sok Ignav-kérés, később újrapróbálom")
-        else -> IOException(message ?: "Ignav-hiba (HTTP $code)")
-    }
-
-    /** Google Flights-keresés linkje, hogy a találatot meg lehessen nyitni. */
-    fun googleFlightsUrl(w: Watch, origin: String, destination: String): String {
-        val q = buildString {
-            append("Flights from $origin to $destination on ${w.outboundDate}")
-            w.returnDate?.let { append(" through $it") }
-        }
-        return "https://www.google.com/travel/flights?hl=hu&q=" + URLEncoder.encode(q, "UTF-8")
+        scan(segment, "")
+        return candidates.minByOrNull { it.first }?.second
     }
 }
 
