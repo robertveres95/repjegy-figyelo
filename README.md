@@ -14,8 +14,10 @@ Android-app, ami figyeli a repülőjegyárakat, és értesítést küld, ha egy 
 - Utasok: felnőtt, gyerek, csecsemő (saját ülésen vagy ölben)
 - Kézipoggyász, feladott poggyász, átszállások száma
 - Minden ajánlatnál pontos indulási és érkezési idő, légitársaság, forrás
-- Célár és értesítés be/ki figyelésenként
-- Automatikus ellenőrzés a háttérben (3, 6, 12 vagy 24 óránként)
+- Célár; értesítés be/ki egy koppintással a kártyán (csengő gomb)
+- Automatikus ellenőrzés a háttérben (3, 6, 12, 24 óránként vagy kikapcsolva)
+- Neon (fekete–zöld) felület animációkkal
+- Frissítésfigyelő: új kiadásnál az app kötelező frissítést kér, és naponta egyszer értesítést is küld
 - Árgörbe a korábbi ellenőrzésekből, „Megnyitás” gomb a foglalási/kereső oldalhoz
 - Forrásonkénti állapot minden figyelésnél (melyik forrás hány ajánlatot adott, vagy miért hibázott)
 
@@ -38,4 +40,4 @@ Android-app, ami figyeli a repülőjegyárakat, és értesítést küld, ha egy 
 
 ## Fejlesztés
 
-Kotlin + Jetpack Compose, WorkManager. Minden `main`-re pusholt változás után a GitHub Actions automatikusan új APK-t készít.
+Kotlin + Jetpack Compose, WorkManager. Minden `main`-re pusholt változás után a GitHub Actions automatikusan új APK-t készít `build-N` kiadásként. Az app verziószáma (versionCode) is N, ebből tudja, hogy van-e újabb kiadás. A repónak nyilvánosnak kell maradnia, hogy a frissítésfigyelő kulcs nélkül elérje.

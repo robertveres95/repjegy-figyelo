@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -27,7 +28,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+        )
         Store.init(this)
 
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -38,16 +42,8 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            val dark = isSystemInDarkTheme()
-            val context = LocalContext.current
-            val colors = when {
-                Build.VERSION.SDK_INT >= 31 && dark -> dynamicDarkColorScheme(context)
-                Build.VERSION.SDK_INT >= 31 -> dynamicLightColorScheme(context)
-                dark -> darkColorScheme()
-                else -> lightColorScheme()
-            }
-            MaterialTheme(colorScheme = colors) {
-                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            NeonTheme {
+                Surface(Modifier.fillMaxSize(), color = Neon.Black) {
                     AppRoot()
                 }
             }

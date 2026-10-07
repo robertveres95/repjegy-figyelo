@@ -12,8 +12,11 @@ android {
         applicationId = "hu.repjegy.figyelo"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // A GitHub Actions futásszáma = a kiadás „build-N” száma, így az app össze tudja vetni
+        // magát a legfrissebb kiadással (frissítésfigyelő).
+        val build = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
+        versionCode = build
+        versionName = "1.$build"
     }
 
     signingConfigs {
@@ -43,6 +46,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

@@ -46,7 +46,8 @@ class App : Application() {
 class CheckWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         Store.init(applicationContext)
-        PriceChecker.checkAll(applicationContext)
+        if (Store.settings.value.intervalHours > 0) PriceChecker.checkAll(applicationContext)
+        Updater.dailyCheck(applicationContext)
         return Result.success()
     }
 }
@@ -55,7 +56,16 @@ object Scheduler {
     private const val WORK_NAME = "price-check"
 
     fun schedule(context: Context) {
-        val hours = Store.settings.value.intervalHours.toLong().coerceAtLeast(1)
+        val hours = Store.settings.value.intervalHours.toLong()
+        if (hours <= 0) {
+            // Automatikus ellenőrzés kikapcsolva; a frissítésfigyelő miatt naponta egyszer azért fut
+            val daily = PeriodicWorkRequestBuilder<CheckWorker>(24, TimeUnit.HOURS)
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .build()
+            WorkManager.getInstance(context)
+                .enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, daily)
+            return
+        }
         val request = PeriodicWorkRequestBuilder<CheckWorker>(hours, TimeUnit.HOURS)
             .setConstraints(
                 Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()

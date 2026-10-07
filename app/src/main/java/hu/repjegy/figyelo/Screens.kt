@@ -3,6 +3,33 @@
 package hu.repjegy.figyelo
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -19,7 +46,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -71,6 +98,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -101,17 +129,119 @@ private val timeFormat = DateTimeFormatter.ofPattern("MMM d. HH:mm", HU)
 @Composable
 fun AppRoot() {
     var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+    val update by Updater.available.collectAsState()
     BackHandler(enabled = screen != Screen.Home) { screen = Screen.Home }
 
-    when (val s = screen) {
-        Screen.Home -> HomeScreen(
-            onAdd = { screen = Screen.Edit(null) },
-            onEdit = { screen = Screen.Edit(it) },
-            onSettings = { screen = Screen.Options },
-        )
-        is Screen.Edit -> EditScreen(s.id, onDone = { screen = Screen.Home })
-        Screen.Options -> SettingsScreen(onDone = { screen = Screen.Home })
+    LaunchedEffect(Unit) { App.scope.launch { Updater.check() } }
+
+    Box(Modifier.fillMaxSize().background(Neon.Black)) {
+        AnimatedContent(
+            targetState = screen,
+            transitionSpec = {
+                val forward = targetState != Screen.Home
+                val dir = if (forward) 1 else -1
+                (slideInHorizontally(tween(320, easing = FastOutSlowInEasing)) { it * dir / 3 } + fadeIn(tween(320)))
+                    .togetherWith(
+                        slideOutHorizontally(tween(320, easing = FastOutSlowInEasing)) { -it * dir / 3 } + fadeOut(tween(200))
+                    )
+            },
+            label = "screens",
+        ) { s ->
+            when (s) {
+                Screen.Home -> HomeScreen(
+                    onAdd = { screen = Screen.Edit(null) },
+                    onEdit = { screen = Screen.Edit(it) },
+                    onSettings = { screen = Screen.Options },
+                )
+                is Screen.Edit -> EditScreen(s.id, onDone = { screen = Screen.Home })
+                Screen.Options -> SettingsScreen(onDone = { screen = Screen.Home })
+            }
+        }
+
+        AnimatedVisibility(visible = update != null, enter = fadeIn(tween(400)), exit = fadeOut()) {
+            update?.let { UpdateOverlay(it) }
+        }
     }
+}
+
+/** Kötelező frissítés: amíg nincs telepítve az új verzió, ez takarja az appot. */
+@Composable
+private fun UpdateOverlay(release: Updater.Release) {
+    val context = LocalContext.current
+    BackHandler(enabled = true) { }
+    val transition = rememberInfiniteTransition(label = "update")
+    val pulse by transition.animateFloat(
+        0.9f, 1.08f, infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "p",
+    )
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Neon.Black.copy(alpha = 0.96f))
+            .padding(24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        NeonCard(pulse = true, modifier = Modifier.fillMaxWidth().enterAnimation()) {
+            Text(
+                "ÚJ VERZIÓ",
+                style = MaterialTheme.typography.headlineMedium.glow(),
+                color = Neon.Green,
+                modifier = Modifier.scale(pulse),
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Megjelent a Repjegy figyelő ${release.build}. buildje. A használathoz frissítened kell " +
+                    "(most: ${Updater.currentBuild}. build).",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "1. Koppints a gombra, a böngésző letölti az új verziót.\n" +
+                    "2. Nyisd meg a letöltött fájlt, és telepítsd a régi fölé.\n" +
+                    "A figyeléseid megmaradnak.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(16.dp))
+            Button(onClick = { openUrl(context, release.apkUrl) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Letöltés és frissítés", fontWeight = FontWeight.Bold)
+            }
+            TextButton(onClick = { openUrl(context, release.pageUrl) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Kiadás megnyitása a GitHubon")
+            }
+        }
+    }
+}
+
+/** Fekete, átlátszó felső sáv izzó, monospace címmel. */
+@Composable
+private fun NeonTopBar(
+    title: String,
+    onBack: (() -> Unit)? = null,
+    actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {},
+) {
+    TopAppBar(
+        title = {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleLarge.glow(radius = 22f),
+                color = Neon.Green,
+            )
+        },
+        navigationIcon = {
+            if (onBack != null) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Vissza", tint = Neon.Green)
+                }
+            }
+        },
+        actions = actions,
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = Neon.Black,
+            scrolledContainerColor = Neon.Black,
+            actionIconContentColor = Neon.Green,
+            navigationIconContentColor = Neon.Green,
+        ),
+    )
 }
 
 // ---------------------------------------------------------------- Főképernyő
@@ -124,14 +254,23 @@ private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: 
     val appContext = LocalContext.current.applicationContext
 
     Scaffold(
+        containerColor = Neon.Black,
         topBar = {
-            TopAppBar(
-                title = { Text("Repjegy figyelő") },
+            val spin = rememberInfiniteTransition(label = "spin")
+            val angle by spin.animateFloat(0f, 360f, infiniteRepeatable(tween(900, easing = LinearEasing)), label = "a")
+            NeonTopBar(
+                title = "REPJEGY//FIGYELŐ",
                 actions = {
                     IconButton(
                         onClick = { App.scope.launch { PriceChecker.checkAll(appContext) } },
                         enabled = checking.isEmpty() && watches.isNotEmpty() && settings.isReady,
-                    ) { Icon(Icons.Filled.Refresh, contentDescription = "Összes ellenőrzése") }
+                    ) {
+                        Icon(
+                            Icons.Filled.Refresh,
+                            contentDescription = "Összes ellenőrzése",
+                            modifier = if (checking.isNotEmpty()) Modifier.rotate(angle) else Modifier,
+                        )
+                    }
                     IconButton(onClick = onSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = "Beállítások")
                     }
@@ -139,10 +278,17 @@ private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: 
             )
         },
         floatingActionButton = {
+            val glow = rememberInfiniteTransition(label = "fab")
+            val fabScale by glow.animateFloat(
+                1f, 1.06f, infiniteRepeatable(tween(1200, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "s",
+            )
             ExtendedFloatingActionButton(
                 onClick = onAdd,
+                containerColor = Neon.Green,
+                contentColor = Neon.Black,
                 icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text("Új figyelés") },
+                text = { Text("ÚJ FIGYELÉS", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold) },
+                modifier = Modifier.scale(fabScale),
             )
         },
     ) { padding ->
@@ -164,8 +310,12 @@ private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: 
                     )
                 }
             }
-            items(watches, key = { it.id }) { w ->
+            itemsIndexed(watches, key = { _, item -> item.id }) { index, w ->
                 WatchCard(
+                    modifier = Modifier.animateItem().enterAnimation(delayMs = index * 70),
+                    onToggleNotify = {
+                        Store.update(w.id) { it.copy(notify = !it.notify, lastNotifiedPrice = null) }
+                    },
                     w = w,
                     currency = settings.currency,
                     isChecking = w.id in checking,
@@ -181,12 +331,9 @@ private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: 
 
 @Composable
 private fun SetupCard(onSettings: () -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Nincs bekapcsolt árforrás", style = MaterialTheme.typography.titleMedium)
+    NeonCard(color = Neon.Amber, pulse = true, modifier = Modifier.fillMaxWidth().enterAnimation()) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Nincs bekapcsolt árforrás", style = MaterialTheme.typography.titleMedium, color = Neon.Amber)
             Text(
                 "Kapcsolj be legalább egy árforrást a Beállításokban (a Google Flights, a Ryanair " +
                     "és a Wizz Air kulcs nélkül működik).",
@@ -199,6 +346,8 @@ private fun SetupCard(onSettings: () -> Unit) {
 
 @Composable
 private fun WatchCard(
+    modifier: Modifier,
+    onToggleNotify: () -> Unit,
     w: Watch,
     currency: String,
     isChecking: Boolean,
@@ -207,27 +356,26 @@ private fun WatchCard(
     onEdit: () -> Unit,
     onOpen: (String) -> Unit,
 ) {
-    val good = if (isSystemInDarkTheme()) Color(0xFF81C784) else Color(0xFF2E7D32)
+    val good = Neon.Green
     val best = w.bestOffer
     val belowTarget = best != null && best.price <= w.targetPrice
     var showAll by remember { mutableStateOf(false) }
 
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
+    NeonCard(
+        modifier = modifier.fillMaxWidth(),
+        pulse = belowTarget,
+        scanning = isChecking,
+    ) {
+        Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     w.routeTitle,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleLarge.glow(radius = 12f),
+                    color = Neon.Green,
                     modifier = Modifier.weight(1f),
                 )
-                if (!w.notify) {
-                    Text(
-                        "értesítés ki",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Spacer(Modifier.width(8.dp))
+                BellToggle(on = w.notify, onToggle = onToggleNotify)
             }
             Text(dateLine(w), style = MaterialTheme.typography.bodyMedium)
             Text(
@@ -240,12 +388,17 @@ private fun WatchCard(
             Row(verticalAlignment = Alignment.Bottom) {
                 Column(Modifier.weight(1f)) {
                     Text("Legolcsóbb most", style = MaterialTheme.typography.labelMedium)
+                    // Az ár „pörögve” változik az új értékre
+                    val animatedPrice by animateIntAsState(best?.price ?: 0, tween(900, easing = FastOutSlowInEasing), label = "price")
                     Text(
-                        best?.let { formatPrice(it.price, currency) } ?: "—",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (belowTarget) good else MaterialTheme.colorScheme.onSurface,
+                        if (best != null) formatPrice(animatedPrice, currency) else "—",
+                        style = if (belowTarget) MaterialTheme.typography.headlineMedium.glow(radius = 24f)
+                        else MaterialTheme.typography.headlineMedium,
+                        color = if (belowTarget) good else Neon.Text,
                     )
+                    if (belowTarget) {
+                        Text("▼ CÉLÁR ALATT", style = MaterialTheme.typography.labelSmall, color = Neon.Green)
+                    }
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
@@ -296,7 +449,12 @@ private fun WatchCard(
                 )
             }
 
-            if (showAll && w.offers.size > 1) {
+            AnimatedVisibility(
+                visible = showAll && w.offers.size > 1,
+                enter = expandVertically(tween(350)) + fadeIn(tween(350)),
+                exit = shrinkVertically(tween(250)) + fadeOut(tween(200)),
+            ) {
+              Column {
                 Spacer(Modifier.height(8.dp))
                 Text("Összes ajánlat", style = MaterialTheme.typography.titleSmall)
                 w.offers.forEachIndexed { index, offer ->
@@ -315,12 +473,17 @@ private fun WatchCard(
                         OfferDetails(offer, highlight = false)
                     }
                 }
+              }
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (isChecking) {
-                    CircularProgressIndicator(Modifier.padding(12.dp).size(20.dp), strokeWidth = 2.dp)
-                    Text("Keresés…", style = MaterialTheme.typography.bodySmall)
+                    CircularProgressIndicator(
+                        Modifier.padding(12.dp).size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = Neon.Green,
+                    )
+                    Text("KERESÉS…", style = MaterialTheme.typography.labelSmall, color = Neon.Green)
                 } else {
                     TextButton(onClick = onCheck, enabled = canCheck && !w.isExpired()) {
                         Text("Ellenőrzés")
@@ -399,8 +562,10 @@ private fun detailLine(w: Watch): String {
 
 @Composable
 private fun Sparkline(points: List<PricePoint>, target: Int, modifier: Modifier) {
-    val lineColor = MaterialTheme.colorScheme.primary
-    val targetColor = MaterialTheme.colorScheme.outline
+    val lineColor = Neon.Green
+    val targetColor = Neon.Pink.copy(alpha = 0.7f)
+    val draw = remember(points.size) { Animatable(0f) }
+    LaunchedEffect(points.size) { draw.animateTo(1f, tween(1200, easing = FastOutSlowInEasing)) }
     Canvas(modifier) {
         val prices = points.map { it.price }
         val minP = minOf(prices.min(), target).toFloat()
@@ -424,7 +589,11 @@ private fun Sparkline(points: List<PricePoint>, target: Int, modifier: Modifier)
             val py = y(p.price.toFloat())
             if (i == 0) path.moveTo(x, py) else path.lineTo(x, py)
         }
-        drawPath(path, lineColor, style = Stroke(width = 2.5.dp.toPx()))
+        // A vonal balról jobbra „rajzolódik ki”
+        clipRect(right = size.width * draw.value) {
+            drawPath(path, lineColor.copy(alpha = 0.25f), style = Stroke(width = 8.dp.toPx()))
+            drawPath(path, lineColor, style = Stroke(width = 2.5.dp.toPx()))
+        }
     }
 }
 
@@ -525,15 +694,9 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
     }
 
     Scaffold(
+        containerColor = Neon.Black,
         topBar = {
-            TopAppBar(
-                title = { Text(if (existing == null) "Új figyelés" else "Figyelés szerkesztése") },
-                navigationIcon = {
-                    IconButton(onClick = onDone) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Vissza")
-                    }
-                },
-            )
+            NeonTopBar(if (existing == null) "ÚJ FIGYELÉS" else "SZERKESZTÉS", onBack = onDone)
         },
     ) { padding ->
         Column(
@@ -627,7 +790,7 @@ private fun SettingsScreen(onDone: () -> Unit) {
 
     val watches by Store.watches.collectAsState()
     val activeWatches = watches.filter { !it.isExpired() }
-    val checksPerMonth = (24 / interval) * 30
+    val checksPerMonth = if (interval > 0) (24 / interval) * 30 else 0
     val serpPerMonth = if (draft.useSerpApi) activeWatches.size * checksPerMonth else 0
     val ignavPerMonth = if (draft.useIgnav) {
         activeWatches.sumOf {
@@ -636,15 +799,9 @@ private fun SettingsScreen(onDone: () -> Unit) {
     } else 0
 
     Scaffold(
+        containerColor = Neon.Black,
         topBar = {
-            TopAppBar(
-                title = { Text("Beállítások") },
-                navigationIcon = {
-                    IconButton(onClick = onDone) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Vissza")
-                    }
-                },
-            )
+            NeonTopBar("BEÁLLÍTÁSOK", onBack = onDone)
         },
     ) { padding ->
         Column(
@@ -731,6 +888,21 @@ private fun SettingsScreen(onDone: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            SectionTitle("Verzió")
+            Text(
+                "Telepítve: ${Updater.currentBuild}. build. Új verzió megjelenésekor az app szól, és frissítést kér.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            var updateMsg by remember { mutableStateOf<String?>(null) }
+            OutlinedButton(onClick = {
+                updateMsg = "Keresés…"
+                App.scope.launch {
+                    val found = Updater.check()
+                    updateMsg = if (found == null) "Ez a legfrissebb verzió (vagy nem érhető el a GitHub)." else null
+                }
+            }) { Text("Frissítés keresése") }
+            updateMsg?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Neon.TextDim) }
 
             Button(
                 onClick = {
@@ -848,8 +1020,8 @@ private fun AirportField(label: String, selected: Place?, onSelect: (Place?) -> 
 private fun SectionTitle(text: String) {
     Text(
         text,
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.primary,
+        style = MaterialTheme.typography.titleMedium.glow(radius = 10f),
+        color = Neon.Green,
         modifier = Modifier.padding(top = 8.dp),
     )
 }

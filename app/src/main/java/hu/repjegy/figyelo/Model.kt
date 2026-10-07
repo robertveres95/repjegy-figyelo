@@ -240,6 +240,7 @@ val CURRENCIES = listOf(
 )
 
 val INTERVALS = listOf(
+    0 to "Ki (csak kézi ellenőrzés)",
     3 to "3 óránként",
     6 to "6 óránként",
     12 to "12 óránként",
