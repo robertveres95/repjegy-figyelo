@@ -26,6 +26,8 @@ object Store {
         prefs = context.applicationContext.getSharedPreferences("repjegy", Context.MODE_PRIVATE)
         _settings.value = Settings(
             apiKey = prefs.getString("apiKey", "") ?: "",
+            ignavKey = prefs.getString("ignavKey", "") ?: "",
+            source = prefs.getString("source", SOURCE_SERPAPI) ?: SOURCE_SERPAPI,
             currency = prefs.getString("currency", "HUF") ?: "HUF",
             intervalHours = prefs.getInt("intervalHours", 6),
         )
@@ -66,6 +68,8 @@ object Store {
     fun saveSettings(settings: Settings) {
         prefs.edit()
             .putString("apiKey", settings.apiKey)
+            .putString("ignavKey", settings.ignavKey)
+            .putString("source", settings.source)
             .putString("currency", settings.currency)
             .putInt("intervalHours", settings.intervalHours)
             .apply()

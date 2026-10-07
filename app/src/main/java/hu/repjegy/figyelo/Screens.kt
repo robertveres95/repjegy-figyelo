@@ -130,7 +130,7 @@ private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: 
                 actions = {
                     IconButton(
                         onClick = { App.scope.launch { PriceChecker.checkAll(appContext) } },
-                        enabled = checking.isEmpty() && watches.isNotEmpty() && settings.apiKey.isNotBlank(),
+                        enabled = checking.isEmpty() && watches.isNotEmpty() && settings.isReady,
                     ) { Icon(Icons.Filled.Refresh, contentDescription = "Összes ellenőrzése") }
                     IconButton(onClick = onSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = "Beállítások")
@@ -151,7 +151,7 @@ private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: 
             contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (settings.apiKey.isBlank()) {
+            if (!settings.isReady) {
                 item { SetupCard(onSettings) }
             }
             if (watches.isEmpty()) {
@@ -169,7 +169,7 @@ private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: 
                     w = w,
                     currency = settings.currency,
                     isChecking = w.id in checking,
-                    canCheck = settings.apiKey.isNotBlank(),
+                    canCheck = settings.isReady,
                     onCheck = { App.scope.launch { PriceChecker.checkOne(appContext, w.id) } },
                     onEdit = { onEdit(w.id) },
                     onOpen = { openUrl(appContext, w.flightsUrl) },
@@ -186,9 +186,9 @@ private fun SetupCard(onSettings: () -> Unit) {
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Első lépés: SerpApi-kulcs", style = MaterialTheme.typography.titleMedium)
+            Text("Első lépés: árforrás beállítása", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Az árakat a SerpApi adja (Google Flights-adat). Regisztrálj ingyen, " +
+                "Az árakat a SerpApi (Google Flights) és/vagy az Ignav adja. Regisztrálj ingyen, " +
                     "majd másold be a kulcsot a Beállításokba.",
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -251,8 +251,14 @@ private fun WatchCard(
                         fontWeight = FontWeight.Bold,
                         color = if (belowTarget) good else MaterialTheme.colorScheme.onSurface,
                     )
-                    w.bestAirline?.let {
-                        Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                    val source = listOfNotNull(w.bestAirline, w.bestSource?.let { "forrás: $it" })
+                    if (source.isNotEmpty()) {
+                        Text(
+                            source.joinToString(" · "),
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
                 Column(horizontalAlignment = Alignment.End) {
@@ -282,6 +288,12 @@ private fun WatchCard(
             when {
                 w.isExpired() -> StatusText("Az indulás dátuma elmúlt, a figyelés szünetel.", true)
                 w.lastError != null -> StatusText(w.lastError, true)
+                w.lastChecked != null && w.sourceWarning != null -> StatusText(
+                    "Utoljára ellenőrizve: " +
+                        Instant.ofEpochMilli(w.lastChecked).atZone(ZoneId.systemDefault()).format(timeFormat) +
+                        "\n" + w.sourceWarning,
+                    true,
+                )
                 w.lastChecked != null -> StatusText(
                     "Utoljára ellenőrizve: " +
                         Instant.ofEpochMilli(w.lastChecked).atZone(ZoneId.systemDefault()).format(timeFormat),
@@ -334,6 +346,7 @@ private fun detailLine(w: Watch): String {
     val cls = TRAVEL_CLASSES.firstOrNull { it.first == w.travelClass }?.second ?: ""
     val extra = mutableListOf(pax, cls)
     if (w.bags > 0) extra += "${w.bags} kézipoggyász"
+    if (w.checkedBag) extra += "feladott poggyász"
     if (w.stops != 0) extra += STOP_OPTIONS.firstOrNull { it.first == w.stops }?.second ?: ""
     return extra.joinToString(" · ")
 }
@@ -403,6 +416,7 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
     var stops by remember { mutableStateOf(existing?.stops ?: 0) }
     var target by remember { mutableStateOf(existing?.targetPrice?.toString() ?: "") }
     var notify by remember { mutableStateOf(existing?.notify ?: true) }
+    var checkedBag by remember { mutableStateOf(existing?.checkedBag ?: false) }
     var error by remember { mutableStateOf<String?>(null) }
 
     val maxBags = adults + children + infantsInSeat
@@ -441,6 +455,7 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
             infantsOnLap = infantsOnLap,
             bags = bags,
             stops = stops,
+            checkedBag = checkedBag,
             targetPrice = targetValue,
             notify = notify,
         )
@@ -457,7 +472,7 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
             fresh
         }
         Store.upsert(toSave)
-        if (!sameSearch && Store.settings.value.apiKey.isNotBlank()) {
+        if (!sameSearch && Store.settings.value.isReady) {
             App.scope.launch { PriceChecker.checkOne(appContext, toSave.id) }
         }
         onDone()
@@ -507,8 +522,10 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
 
             SectionTitle("Poggyász és átszállás")
             Stepper("Kézipoggyász", "összesen, minden utasra", bags, 0..maxBags) { bags = it }
+            SwitchRow("Feladott poggyász (utasonként 1)", checkedBag) { checkedBag = it }
             Text(
-                "A feladott poggyász díját a Google Flights-adat nem tartalmazza, ezt foglaláskor nézd meg.",
+                "A feladott poggyászt csak az Ignav számolja bele az árba. Ha a SerpApi-t használod, " +
+                    "a díját foglaláskor nézd meg.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -551,14 +568,24 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
 private fun SettingsScreen(onDone: () -> Unit) {
     val initial = remember { Store.settings.value }
     val context = LocalContext.current
+    var source by remember { mutableStateOf(initial.source) }
     var apiKey by remember { mutableStateOf(initial.apiKey) }
-    var showKey by remember { mutableStateOf(false) }
+    var ignavKey by remember { mutableStateOf(initial.ignavKey) }
     var currency by remember { mutableStateOf(initial.currency) }
     var interval by remember { mutableStateOf(initial.intervalHours) }
+    val draft = Settings(apiKey, ignavKey, source, currency, interval)
 
     val watches by Store.watches.collectAsState()
-    val active = watches.count { !it.isExpired() }
-    val perMonth = active * (24 / interval) * 30
+    val activeWatches = watches.filter { !it.isExpired() }
+    val checksPerMonth = (24 / interval) * 30
+    val serpPerMonth = if (draft.useSerpApi) {
+        activeWatches.count { !(it.checkedBag && draft.useIgnav) } * checksPerMonth
+    } else 0
+    val ignavPerMonth = if (draft.useIgnav) {
+        activeWatches.sumOf {
+            (it.from.split(',').size * it.to.split(',').size).coerceAtMost(Ignav.MAX_PAIRS)
+        } * checksPerMonth
+    } else 0
 
     Scaffold(
         topBar = {
@@ -581,25 +608,42 @@ private fun SettingsScreen(onDone: () -> Unit) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            SectionTitle("Árforrás: SerpApi")
+            SectionTitle("Árforrás")
+            ChoiceField("Honnan jöjjenek az árak?", SOURCES, source) { source = it }
             Text(
-                "Az árakat a SerpApi Google Flights-szolgáltatása adja. Ingyenes regisztrációval " +
-                    "havi 250 keresést kapsz. A kulcs csak ezen a telefonon tárolódik.",
-                style = MaterialTheme.typography.bodyMedium,
+                "Mindkettő esetén minden ellenőrzéskor mindkét forrást lekérdezi, és az olcsóbb árat veszi.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            TextButton(onClick = { openUrl(context, "https://serpapi.com/manage-api-key") }) {
-                Text("Kulcs megszerzése: serpapi.com")
+
+            if (draft.useSerpApi) {
+                SectionTitle("SerpApi (Google Flights)")
+                Text(
+                    "Ingyenes regisztrációval havi 250 keresés.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                TextButton(onClick = { openUrl(context, "https://serpapi.com/manage-api-key") }) {
+                    Text("Kulcs megszerzése: serpapi.com")
+                }
+                SecretField("SerpApi API-kulcs", apiKey) { apiKey = it }
             }
-            OutlinedTextField(
-                value = apiKey,
-                onValueChange = { apiKey = it.trim() },
-                label = { Text("SerpApi API-kulcs") },
-                singleLine = true,
-                visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
-                trailingIcon = {
-                    TextButton(onClick = { showKey = !showKey }) { Text(if (showKey) "Elrejt" else "Mutat") }
-                },
-                modifier = Modifier.fillMaxWidth(),
+
+            if (draft.useIgnav) {
+                SectionTitle("Ignav")
+                Text(
+                    "1000 ingyenes kérés, utána 1000 kérésenként kb. 2 dollár. A feladott poggyászt is " +
+                        "beleszámolja. Több repülőteres városnál repülőtér-páronként egy kérés megy el.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                TextButton(onClick = { openUrl(context, "https://ignav.com") }) {
+                    Text("Kulcs megszerzése: ignav.com")
+                }
+                SecretField("Ignav API-kulcs", ignavKey) { ignavKey = it }
+            }
+            Text(
+                "A kulcsok csak ezen a telefonon tárolódnak.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             SectionTitle("Pénznem")
@@ -614,14 +658,23 @@ private fun SettingsScreen(onDone: () -> Unit) {
 
             SectionTitle("Ellenőrzés gyakorisága")
             ChoiceField("Automatikus ellenőrzés", INTERVALS, interval) { interval = it }
+            if (draft.useSerpApi) {
+                Text(
+                    "SerpApi: kb. $serpPerMonth keresés/hó (ingyenes keret: 250).",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (serpPerMonth > 250) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (draft.useIgnav) {
+                Text(
+                    "Ignav: kb. $ignavPerMonth kérés/hó (1000 ingyenes, utána fizetős).",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Text(
-                "Becsült fogyasztás: kb. $perMonth keresés/hó ($active aktív figyelés). " +
-                    "Az ingyenes keret havi 250.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (perMonth > 250) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                "Az Android energiatakarékossága miatt a háttér-ellenőrzés kicsit csúszhat.",
+                "${activeWatches.size} aktív figyelés alapján. Az Android energiatakarékossága miatt " +
+                    "a háttér-ellenőrzés kicsit csúszhat.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -629,7 +682,7 @@ private fun SettingsScreen(onDone: () -> Unit) {
             Button(
                 onClick = {
                     if (currency != initial.currency) Store.clearAllResults()
-                    Store.saveSettings(Settings(apiKey, currency, interval))
+                    Store.saveSettings(draft)
                     if (interval != initial.intervalHours) Scheduler.schedule(context.applicationContext)
                     onDone()
                 },
@@ -637,6 +690,22 @@ private fun SettingsScreen(onDone: () -> Unit) {
             ) { Text("Mentés") }
         }
     }
+}
+
+@Composable
+private fun SecretField(label: String, value: String, onChange: (String) -> Unit) {
+    var show by remember { mutableStateOf(false) }
+    OutlinedTextField(
+        value = value,
+        onValueChange = { onChange(it.trim()) },
+        label = { Text(label) },
+        singleLine = true,
+        visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
+        trailingIcon = {
+            TextButton(onClick = { show = !show }) { Text(if (show) "Elrejt" else "Mutat") }
+        },
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 // ---------------------------------------------------------------- Közös elemek

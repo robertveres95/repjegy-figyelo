@@ -23,6 +23,7 @@ data class Watch(
     val infantsInSeat: Int,
     val infantsOnLap: Int,
     val bags: Int,                     // kézipoggyászok száma összesen
+    val checkedBag: Boolean = false,   // feladott poggyász utasonként (csak Ignav)
     val stops: Int,                    // 0 mindegy, 1 közvetlen, 2 max 1, 3 max 2 átszállás
     val targetPrice: Int,
     val notify: Boolean,
@@ -34,6 +35,8 @@ data class Watch(
     val lastNotifiedPrice: Int? = null,
     val bestAirline: String? = null,
     val flightsUrl: String? = null,
+    val bestSource: String? = null,    // melyik forrás adta a legjobb árat
+    val sourceWarning: String? = null, // ha egy forrás hibázott, de a másik működött
     val history: List<PricePoint> = emptyList(),
 ) {
     val isRoundTrip: Boolean get() = returnDate != null
@@ -47,12 +50,13 @@ data class Watch(
     /** Ha ez változik, a korábbi árak már nem összehasonlíthatók. */
     fun searchKey(): String = listOf(
         from, to, outboundDate, returnDate, travelClass, adults, children,
-        infantsInSeat, infantsOnLap, bags, stops,
+        infantsInSeat, infantsOnLap, bags, stops, checkedBag,
     ).joinToString("|")
 
     fun clearResults(): Watch = copy(
         lastPrice = null, lowestPrice = null, lastChecked = null, lastError = null,
         lastNotifiedPrice = null, bestAirline = null, flightsUrl = null, history = emptyList(),
+        bestSource = null, sourceWarning = null,
     )
 
     fun toJson(): JSONObject = JSONObject().apply {
@@ -69,6 +73,7 @@ data class Watch(
         put("infantsInSeat", infantsInSeat)
         put("infantsOnLap", infantsOnLap)
         put("bags", bags)
+        put("checkedBag", checkedBag)
         put("stops", stops)
         put("targetPrice", targetPrice)
         put("notify", notify)
@@ -79,6 +84,8 @@ data class Watch(
         putOpt("lastNotifiedPrice", lastNotifiedPrice)
         putOpt("bestAirline", bestAirline)
         putOpt("flightsUrl", flightsUrl)
+        putOpt("bestSource", bestSource)
+        putOpt("sourceWarning", sourceWarning)
         val h = JSONArray()
         history.forEach { h.put(JSONArray().put(it.time).put(it.price)) }
         put("history", h)
@@ -104,6 +111,7 @@ data class Watch(
                 infantsInSeat = o.optInt("infantsInSeat", 0),
                 infantsOnLap = o.optInt("infantsOnLap", 0),
                 bags = o.optInt("bags", 0),
+                checkedBag = o.optBoolean("checkedBag", false),
                 stops = o.optInt("stops", 0),
                 targetPrice = o.optInt("targetPrice", 0),
                 notify = o.optBoolean("notify", true),
@@ -114,6 +122,8 @@ data class Watch(
                 lastNotifiedPrice = o.intOrNull("lastNotifiedPrice"),
                 bestAirline = o.stringOrNull("bestAirline"),
                 flightsUrl = o.stringOrNull("flightsUrl"),
+                bestSource = o.stringOrNull("bestSource"),
+                sourceWarning = o.stringOrNull("sourceWarning"),
                 history = history,
             )
         }
@@ -121,9 +131,28 @@ data class Watch(
 }
 
 data class Settings(
-    val apiKey: String = "",
+    val apiKey: String = "",           // SerpApi
+    val ignavKey: String = "",
+    val source: String = SOURCE_SERPAPI,
     val currency: String = "HUF",
     val intervalHours: Int = 6,
+) {
+    val useSerpApi: Boolean get() = source == SOURCE_SERPAPI || source == SOURCE_BOTH
+    val useIgnav: Boolean get() = source == SOURCE_IGNAV || source == SOURCE_BOTH
+
+    /** Van-e kulcs minden kiválasztott forráshoz. */
+    val isReady: Boolean
+        get() = (!useSerpApi || apiKey.isNotBlank()) && (!useIgnav || ignavKey.isNotBlank())
+}
+
+const val SOURCE_SERPAPI = "serpapi"
+const val SOURCE_IGNAV = "ignav"
+const val SOURCE_BOTH = "both"
+
+val SOURCES = listOf(
+    SOURCE_SERPAPI to "SerpApi (Google Flights)",
+    SOURCE_IGNAV to "Ignav",
+    SOURCE_BOTH to "Mindkettő – az olcsóbb számít",
 )
 
 val TRAVEL_CLASSES = listOf(
