@@ -14,11 +14,10 @@ android {
         targetSdk = 35
         // versionName: a version.properties-ből (pl. 1.1.0) – ezt látja a felhasználó.
         // versionCode: a GitHub Actions futásszáma, mindig nő, így a frissítés a régi fölé települ.
-        val props = java.util.Properties().apply {
-            rootProject.file("version.properties").inputStream().use { load(it) }
-        }
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
-        versionName = props.getProperty("VERSION_NAME")
+        versionName = rootProject.file("version.properties").readLines()
+            .first { it.startsWith("VERSION_NAME=") }
+            .substringAfter("=").trim()
     }
 
     signingConfigs {
