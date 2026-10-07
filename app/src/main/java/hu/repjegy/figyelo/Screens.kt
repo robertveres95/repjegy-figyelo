@@ -278,17 +278,21 @@ private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: 
             )
         },
         floatingActionButton = {
+            // Sötét gomb vékony, lassan lélegző kerettel (nem teli zöld)
             val glow = rememberInfiniteTransition(label = "fab")
-            val fabScale by glow.animateFloat(
-                1f, 1.06f, infiniteRepeatable(tween(1200, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "s",
+            val borderAlpha by glow.animateFloat(
+                0.35f, 0.85f, infiniteRepeatable(tween(1600, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "b",
             )
+            val fabShape = RoundedCornerShape(16.dp)
             ExtendedFloatingActionButton(
                 onClick = onAdd,
-                containerColor = Neon.Green,
-                contentColor = Neon.Black,
+                shape = fabShape,
+                containerColor = Neon.SurfaceHigh,
+                contentColor = Neon.Green,
+                elevation = androidx.compose.material3.FloatingActionButtonDefaults.elevation(2.dp, 2.dp, 2.dp, 2.dp),
                 icon = { Icon(Icons.Filled.Add, contentDescription = null) },
                 text = { Text("ÚJ FIGYELÉS", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold) },
-                modifier = Modifier.scale(fabScale),
+                modifier = Modifier.border(0.8.dp, Neon.Green.copy(alpha = borderAlpha), fabShape),
             )
         },
     ) { padding ->
@@ -786,7 +790,8 @@ private fun SettingsScreen(onDone: () -> Unit) {
     var ignavKey by remember { mutableStateOf(initial.ignavKey) }
     var currency by remember { mutableStateOf(initial.currency) }
     var interval by remember { mutableStateOf(initial.intervalHours) }
-    val draft = Settings(googleOn, ryanairOn, wizzOn, serpOn, ignavOn, apiKey, ignavKey, currency, interval)
+    var themeMode by remember { mutableStateOf(initial.themeMode) }
+    val draft = Settings(googleOn, ryanairOn, wizzOn, serpOn, ignavOn, apiKey, ignavKey, currency, interval, themeMode)
 
     val watches by Store.watches.collectAsState()
     val activeWatches = watches.filter { !it.isExpired() }
@@ -813,6 +818,13 @@ private fun SettingsScreen(onDone: () -> Unit) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            SectionTitle("Megjelenés")
+            ChoiceField("Téma", THEMES, themeMode) { mode ->
+                themeMode = mode
+                // Azonnal látszik, mentés nélkül is
+                Store.saveSettings(Store.settings.value.copy(themeMode = mode))
+            }
+
             SectionTitle("Árforrások – kulcs nélkül")
             Text(
                 "Minden bekapcsolt forrást egyszerre kérdez le, és az összes ajánlatot ár szerint " +

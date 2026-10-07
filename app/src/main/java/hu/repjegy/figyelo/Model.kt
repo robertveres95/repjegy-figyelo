@@ -210,6 +210,7 @@ data class Settings(
     val ignavKey: String = "",
     val currency: String = "HUF",
     val intervalHours: Int = 6,
+    val themeMode: String = THEME_AUTO,
 ) {
     val useSerpApi: Boolean get() = serpOn && apiKey.isNotBlank()
     val useIgnav: Boolean get() = ignavOn && ignavKey.isNotBlank()

@@ -38,6 +38,7 @@ object Store {
             ignavKey = ignavKey,
             currency = prefs.getString("currency", "HUF") ?: "HUF",
             intervalHours = prefs.getInt("intervalHours", 6),
+            themeMode = prefs.getString("themeMode", THEME_AUTO) ?: THEME_AUTO,
         )
         val arr = runCatching { JSONArray(prefs.getString("watches", "[]") ?: "[]") }
             .getOrDefault(JSONArray())
@@ -84,6 +85,7 @@ object Store {
             .putString("ignavKey", settings.ignavKey)
             .putString("currency", settings.currency)
             .putInt("intervalHours", settings.intervalHours)
+            .putString("themeMode", settings.themeMode)
             .apply()
         _settings.value = settings
     }
