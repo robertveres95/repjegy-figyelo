@@ -1,0 +1,732 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
+package hu.repjegy.figyelo
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.util.UUID
+
+private sealed interface Screen {
+    data object Home : Screen
+    data class Edit(val id: String?) : Screen
+    data object Options : Screen
+}
+
+private val dateFormat = DateTimeFormatter.ofPattern("yyyy. MMM d., EEE", HU)
+private val shortDate = DateTimeFormatter.ofPattern("MMM d.", HU)
+private val timeFormat = DateTimeFormatter.ofPattern("MMM d. HH:mm", HU)
+
+@Composable
+fun AppRoot() {
+    var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+    BackHandler(enabled = screen != Screen.Home) { screen = Screen.Home }
+
+    when (val s = screen) {
+        Screen.Home -> HomeScreen(
+            onAdd = { screen = Screen.Edit(null) },
+            onEdit = { screen = Screen.Edit(it) },
+            onSettings = { screen = Screen.Options },
+        )
+        is Screen.Edit -> EditScreen(s.id, onDone = { screen = Screen.Home })
+        Screen.Options -> SettingsScreen(onDone = { screen = Screen.Home })
+    }
+}
+
+// ---------------------------------------------------------------- Főképernyő
+
+@Composable
+private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: () -> Unit) {
+    val watches by Store.watches.collectAsState()
+    val settings by Store.settings.collectAsState()
+    val checking by Store.checking.collectAsState()
+    val appContext = LocalContext.current.applicationContext
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Repjegy figyelő") },
+                actions = {
+                    IconButton(
+                        onClick = { App.scope.launch { PriceChecker.checkAll(appContext) } },
+                        enabled = checking.isEmpty() && watches.isNotEmpty() && settings.apiKey.isNotBlank(),
+                    ) { Icon(Icons.Filled.Refresh, contentDescription = "Összes ellenőrzése") }
+                    IconButton(onClick = onSettings) {
+                        Icon(Icons.Filled.Settings, contentDescription = "Beállítások")
+                    }
+                },
+            )
+        },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = onAdd,
+                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                text = { Text("Új figyelés") },
+            )
+        },
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (settings.apiKey.isBlank()) {
+                item { SetupCard(onSettings) }
+            }
+            if (watches.isEmpty()) {
+                item {
+                    Text(
+                        "Még nincs figyelt út. Az „Új figyelés” gombbal adhatsz hozzá egyet.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 24.dp),
+                    )
+                }
+            }
+            items(watches, key = { it.id }) { w ->
+                WatchCard(
+                    w = w,
+                    currency = settings.currency,
+                    isChecking = w.id in checking,
+                    canCheck = settings.apiKey.isNotBlank(),
+                    onCheck = { App.scope.launch { PriceChecker.checkOne(appContext, w.id) } },
+                    onEdit = { onEdit(w.id) },
+                    onOpen = { openUrl(appContext, w.flightsUrl) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SetupCard(onSettings: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Első lépés: SerpApi-kulcs", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Az árakat a SerpApi adja (Google Flights-adat). Regisztrálj ingyen, " +
+                    "majd másold be a kulcsot a Beállításokba.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Button(onClick = onSettings) { Text("Beállítások") }
+        }
+    }
+}
+
+@Composable
+private fun WatchCard(
+    w: Watch,
+    currency: String,
+    isChecking: Boolean,
+    canCheck: Boolean,
+    onCheck: () -> Unit,
+    onEdit: () -> Unit,
+    onOpen: () -> Unit,
+) {
+    val good = if (isSystemInDarkTheme()) Color(0xFF81C784) else Color(0xFF2E7D32)
+    val belowTarget = w.lastPrice != null && w.lastPrice <= w.targetPrice
+
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "${w.from} → ${w.to}",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                if (!w.notify) {
+                    Text(
+                        "értesítés ki",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Text(dateLine(w), style = MaterialTheme.typography.bodyMedium)
+            Text(
+                detailLine(w),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.Bottom) {
+                Column(Modifier.weight(1f)) {
+                    Text("Legolcsóbb most", style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        w.lastPrice?.let { formatPrice(it, currency) } ?: "—",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (belowTarget) good else MaterialTheme.colorScheme.onSurface,
+                    )
+                    w.bestAirline?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                    }
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        "Célár: ${formatPrice(w.targetPrice, currency)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    w.lowestPrice?.let {
+                        Text(
+                            "Eddigi min.: ${formatPrice(it, currency)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            if (w.history.size >= 2) {
+                Sparkline(
+                    points = w.history,
+                    target = w.targetPrice,
+                    modifier = Modifier.fillMaxWidth().height(56.dp).padding(top = 10.dp),
+                )
+            }
+
+            Spacer(Modifier.height(6.dp))
+            when {
+                w.isExpired() -> StatusText("Az indulás dátuma elmúlt, a figyelés szünetel.", true)
+                w.lastError != null -> StatusText(w.lastError, true)
+                w.lastChecked != null -> StatusText(
+                    "Utoljára ellenőrizve: " +
+                        Instant.ofEpochMilli(w.lastChecked).atZone(ZoneId.systemDefault()).format(timeFormat),
+                    false,
+                )
+                else -> StatusText("Még nem volt ellenőrzés.", false)
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isChecking) {
+                    CircularProgressIndicator(Modifier.padding(12.dp).size(20.dp), strokeWidth = 2.dp)
+                    Text("Keresés…", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    TextButton(onClick = onCheck, enabled = canCheck && !w.isExpired()) {
+                        Text("Ellenőrzés most")
+                    }
+                }
+                if (w.flightsUrl != null) {
+                    TextButton(onClick = onOpen) { Text("Megnyitás") }
+                }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = onEdit) { Text("Szerkesztés") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusText(text: String, isError: Boolean) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+private fun dateLine(w: Watch): String {
+    val out = runCatching { LocalDate.parse(w.outboundDate).format(shortDate) }.getOrDefault(w.outboundDate)
+    val ret = w.returnDate?.let { r -> runCatching { LocalDate.parse(r).format(shortDate) }.getOrDefault(r) }
+    return if (ret != null) "$out – $ret · oda-vissza" else "$out · csak oda"
+}
+
+private fun detailLine(w: Watch): String {
+    val parts = mutableListOf<String>()
+    parts += "${w.adults} felnőtt"
+    if (w.children > 0) parts += "${w.children} gyerek"
+    val infants = w.infantsInSeat + w.infantsOnLap
+    if (infants > 0) parts += "$infants csecsemő"
+    val pax = parts.joinToString(", ")
+    val cls = TRAVEL_CLASSES.firstOrNull { it.first == w.travelClass }?.second ?: ""
+    val extra = mutableListOf(pax, cls)
+    if (w.bags > 0) extra += "${w.bags} kézipoggyász"
+    if (w.stops != 0) extra += STOP_OPTIONS.firstOrNull { it.first == w.stops }?.second ?: ""
+    return extra.joinToString(" · ")
+}
+
+@Composable
+private fun Sparkline(points: List<PricePoint>, target: Int, modifier: Modifier) {
+    val lineColor = MaterialTheme.colorScheme.primary
+    val targetColor = MaterialTheme.colorScheme.outline
+    Canvas(modifier) {
+        val prices = points.map { it.price }
+        val minP = minOf(prices.min(), target).toFloat()
+        val maxP = maxOf(prices.max(), target).toFloat()
+        val range = (maxP - minP).takeIf { it > 0f } ?: 1f
+        val pad = 4.dp.toPx()
+        fun y(p: Float) = pad + (1f - (p - minP) / range) * (size.height - 2 * pad)
+        val stepX = size.width / (points.size - 1)
+
+        val ty = y(target.toFloat())
+        drawLine(
+            color = targetColor,
+            start = Offset(0f, ty),
+            end = Offset(size.width, ty),
+            strokeWidth = 1.5.dp.toPx(),
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 10f)),
+        )
+        val path = Path()
+        points.forEachIndexed { i, p ->
+            val x = i * stepX
+            val py = y(p.price.toFloat())
+            if (i == 0) path.moveTo(x, py) else path.lineTo(x, py)
+        }
+        drawPath(path, lineColor, style = Stroke(width = 2.5.dp.toPx()))
+    }
+}
+
+// ---------------------------------------------------------------- Szerkesztés
+
+@Composable
+private fun EditScreen(id: String?, onDone: () -> Unit) {
+    val existing = remember(id) { id?.let { i -> Store.watches.value.find { it.id == i } } }
+    val currency = Store.settings.collectAsState().value.currency
+    val appContext = LocalContext.current.applicationContext
+    val today = remember { LocalDate.now() }
+
+    var from by remember { mutableStateOf(existing?.from ?: "BUD") }
+    var to by remember { mutableStateOf(existing?.to ?: "") }
+    var roundTrip by remember { mutableStateOf(existing?.isRoundTrip ?: true) }
+    var outDate by remember {
+        mutableStateOf(existing?.outboundDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: today.plusDays(30))
+    }
+    var retDate by remember {
+        mutableStateOf(existing?.returnDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: outDate.plusDays(7))
+    }
+    var travelClass by remember { mutableStateOf(existing?.travelClass ?: 1) }
+    var adults by remember { mutableStateOf(existing?.adults ?: 1) }
+    var children by remember { mutableStateOf(existing?.children ?: 0) }
+    var infantsInSeat by remember { mutableStateOf(existing?.infantsInSeat ?: 0) }
+    var infantsOnLap by remember { mutableStateOf(existing?.infantsOnLap ?: 0) }
+    var bags by remember { mutableStateOf(existing?.bags ?: 0) }
+    var stops by remember { mutableStateOf(existing?.stops ?: 0) }
+    var target by remember { mutableStateOf(existing?.targetPrice?.toString() ?: "") }
+    var notify by remember { mutableStateOf(existing?.notify ?: true) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    val maxBags = adults + children + infantsInSeat
+    if (bags > maxBags) bags = maxBags
+    if (infantsOnLap > adults) infantsOnLap = adults
+
+    fun save() {
+        val code = Regex("^[A-Z]{3}(,[A-Z]{3})*$")
+        val targetValue = target.toIntOrNull()
+        error = when {
+            !code.matches(from) -> "Az indulási hely 3 betűs repülőtér-kód legyen (pl. BUD)."
+            !code.matches(to) -> "Az érkezési hely 3 betűs repülőtér-kód legyen (pl. LHR)."
+            from == to -> "Az indulási és érkezési hely nem lehet ugyanaz."
+            outDate.isBefore(today) -> "Az indulás dátuma nem lehet a múltban."
+            roundTrip && retDate.isBefore(outDate) -> "A visszaút nem lehet az indulás előtt."
+            adults + children + infantsInSeat + infantsOnLap > 9 -> "Legfeljebb 9 utas adható meg."
+            targetValue == null || targetValue <= 0 -> "Adj meg egy célárat."
+            else -> null
+        }
+        if (error != null || targetValue == null) return
+
+        val fresh = Watch(
+            id = existing?.id ?: UUID.randomUUID().toString(),
+            from = from,
+            to = to,
+            outboundDate = outDate.toString(),
+            returnDate = if (roundTrip) retDate.toString() else null,
+            travelClass = travelClass,
+            adults = adults,
+            children = children,
+            infantsInSeat = infantsInSeat,
+            infantsOnLap = infantsOnLap,
+            bags = bags,
+            stops = stops,
+            targetPrice = targetValue,
+            notify = notify,
+        )
+        val sameSearch = existing != null && existing.searchKey() == fresh.searchKey()
+        val toSave = if (sameSearch) {
+            existing!!.copy(targetPrice = targetValue, notify = notify, lastNotifiedPrice = null)
+        } else {
+            fresh
+        }
+        Store.upsert(toSave)
+        if (!sameSearch && Store.settings.value.apiKey.isNotBlank()) {
+            App.scope.launch { PriceChecker.checkOne(appContext, toSave.id) }
+        }
+        onDone()
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(if (existing == null) "Új figyelés" else "Figyelés szerkesztése") },
+                navigationIcon = {
+                    IconButton(onClick = onDone) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Vissza")
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            SectionTitle("Útvonal")
+            OutlinedTextField(
+                value = from,
+                onValueChange = { v -> from = v.uppercase().filter { it in 'A'..'Z' || it == ',' } },
+                label = { Text("Honnan") },
+                supportingText = { Text("Repülőtér-kód, pl. BUD") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = to,
+                onValueChange = { v -> to = v.uppercase().filter { it in 'A'..'Z' || it == ',' } },
+                label = { Text("Hova") },
+                supportingText = { Text("Több repülőtér vesszővel: LHR,LGW,STN") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            SwitchRow("Oda-vissza út", roundTrip) { roundTrip = it }
+
+            SectionTitle("Dátum")
+            DateField("Indulás", outDate, minDate = today) {
+                outDate = it
+                if (retDate.isBefore(it)) retDate = it
+            }
+            if (roundTrip) {
+                DateField("Visszaút", retDate, minDate = outDate) { retDate = it }
+            }
+
+            SectionTitle("Utasok és osztály")
+            ChoiceField("Osztály", TRAVEL_CLASSES, travelClass) { travelClass = it }
+            Stepper("Felnőtt", "12 év felett", adults, 1..9) { adults = it }
+            Stepper("Gyerek", "2–11 év", children, 0..8) { children = it }
+            Stepper("Csecsemő saját ülésen", "2 év alatt", infantsInSeat, 0..4) { infantsInSeat = it }
+            Stepper("Csecsemő ölben", "2 év alatt, felnőttenként 1", infantsOnLap, 0..adults) { infantsOnLap = it }
+
+            SectionTitle("Poggyász és átszállás")
+            Stepper("Kézipoggyász", "összesen, minden utasra", bags, 0..maxBags) { bags = it }
+            Text(
+                "A feladott poggyász díját a Google Flights-adat nem tartalmazza, ezt foglaláskor nézd meg.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            ChoiceField("Átszállás", STOP_OPTIONS, stops) { stops = it }
+
+            SectionTitle("Riasztás")
+            OutlinedTextField(
+                value = target,
+                onValueChange = { v -> target = v.filter(Char::isDigit).take(9) },
+                label = { Text("Célár (${currencySymbol(currency)})") },
+                supportingText = { Text("Szólunk, ha a teljes ár (minden utassal) eddig vagy ez alá esik") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            SwitchRow("Értesítés küldése", notify) { notify = it }
+
+            error?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+            }
+            Button(onClick = { save() }, modifier = Modifier.fillMaxWidth()) { Text("Mentés") }
+            if (existing != null) {
+                OutlinedButton(
+                    onClick = {
+                        Store.delete(existing.id)
+                        onDone()
+                    },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Figyelés törlése") }
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+// ---------------------------------------------------------------- Beállítások
+
+@Composable
+private fun SettingsScreen(onDone: () -> Unit) {
+    val initial = remember { Store.settings.value }
+    val context = LocalContext.current
+    var apiKey by remember { mutableStateOf(initial.apiKey) }
+    var showKey by remember { mutableStateOf(false) }
+    var currency by remember { mutableStateOf(initial.currency) }
+    var interval by remember { mutableStateOf(initial.intervalHours) }
+
+    val watches by Store.watches.collectAsState()
+    val active = watches.count { !it.isExpired() }
+    val perMonth = active * (24 / interval) * 30
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Beállítások") },
+                navigationIcon = {
+                    IconButton(onClick = onDone) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Vissza")
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            SectionTitle("Árforrás: SerpApi")
+            Text(
+                "Az árakat a SerpApi Google Flights-szolgáltatása adja. Ingyenes regisztrációval " +
+                    "havi 250 keresést kapsz. A kulcs csak ezen a telefonon tárolódik.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            TextButton(onClick = { openUrl(context, "https://serpapi.com/manage-api-key") }) {
+                Text("Kulcs megszerzése: serpapi.com")
+            }
+            OutlinedTextField(
+                value = apiKey,
+                onValueChange = { apiKey = it.trim() },
+                label = { Text("SerpApi API-kulcs") },
+                singleLine = true,
+                visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    TextButton(onClick = { showKey = !showKey }) { Text(if (showKey) "Elrejt" else "Mutat") }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            SectionTitle("Pénznem")
+            ChoiceField("Árak pénzneme", CURRENCIES, currency) { currency = it }
+            if (currency != initial.currency) {
+                Text(
+                    "Pénznemváltáskor az eddigi árelőzmények törlődnek.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            SectionTitle("Ellenőrzés gyakorisága")
+            ChoiceField("Automatikus ellenőrzés", INTERVALS, interval) { interval = it }
+            Text(
+                "Becsült fogyasztás: kb. $perMonth keresés/hó ($active aktív figyelés). " +
+                    "Az ingyenes keret havi 250.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (perMonth > 250) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                "Az Android energiatakarékossága miatt a háttér-ellenőrzés kicsit csúszhat.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Button(
+                onClick = {
+                    if (currency != initial.currency) Store.clearAllResults()
+                    Store.saveSettings(Settings(apiKey, currency, interval))
+                    if (interval != initial.intervalHours) Scheduler.schedule(context.applicationContext)
+                    onDone()
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Mentés") }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- Közös elemek
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+}
+
+@Composable
+private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+@Composable
+private fun Stepper(label: String, hint: String?, value: Int, range: IntRange, onChange: (Int) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            hint?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        FilledTonalIconButton(onClick = { onChange(value - 1) }, enabled = value > range.first) {
+            Text("−", style = MaterialTheme.typography.titleLarge)
+        }
+        Text(
+            "$value",
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.width(36.dp),
+        )
+        FilledTonalIconButton(onClick = { onChange(value + 1) }, enabled = value < range.last) {
+            Icon(Icons.Filled.Add, contentDescription = "Több")
+        }
+    }
+}
+
+@Composable
+private fun <T> ChoiceField(label: String, options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelLarge)
+        Box {
+            OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(options.firstOrNull { it.first == selected }?.second ?: "", modifier = Modifier.weight(1f))
+                Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                options.forEach { (value, text) ->
+                    DropdownMenuItem(
+                        text = { Text(text) },
+                        onClick = {
+                            onSelect(value)
+                            open = false
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DateField(label: String, date: LocalDate, minDate: LocalDate, onPick: (LocalDate) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelLarge)
+        OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Filled.DateRange, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text(date.format(dateFormat), modifier = Modifier.weight(1f))
+        }
+    }
+    if (open) {
+        val minMillis = minDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis >= minMillis
+            },
+        )
+        DatePickerDialog(
+            onDismissRequest = { open = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let {
+                        onPick(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate())
+                    }
+                    open = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { open = false }) { Text("Mégse") } },
+        ) {
+            DatePicker(state = state)
+        }
+    }
+}
