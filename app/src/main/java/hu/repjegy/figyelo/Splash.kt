@@ -69,7 +69,7 @@ fun SplashOverlay(onFinished: () -> Unit) {
                     )
                     loadUrl(
                         "file:///android_asset/splash/splash.html?v=" +
-                            Updater.versionName(Updater.currentBuild)
+                            Updater.currentVersion
                     )
                 }
             },

@@ -1,4 +1,4 @@
-# Repjegy figyelő
+# REFI – repjegy figyelő
 
 Android-app, ami figyeli a repülőjegyárakat, és értesítést küld, ha egy jegy a megadott célár alá esik.
 
@@ -9,7 +9,7 @@ Android-app, ami figyeli a repülőjegyárakat, és értesítést küld, ha egy 
 ## Mit tud
 
 - Repülőtér-kereső gépelés közbeni javaslatokkal (név, város – magyarul is –, vagy kód), több repülőteres városoknál „minden repülőtér” opció
-- Csak oda vagy oda-vissza, dátumválasztóval
+- Csak oda vagy oda-vissza; a dátum begépelhető, vagy a naptár ikonnal kiválasztható
 - Osztály: turista, prémium turista, business, első
 - Utasok: felnőtt, gyerek, csecsemő (saját ülésen vagy ölben)
 - Kézipoggyász, feladott poggyász, átszállások száma
@@ -25,7 +25,7 @@ Android-app, ami figyeli a repülőjegyárakat, és értesítést küld, ha egy 
 
 ## Telepítés
 
-1. A repó **Releases** részében nyisd meg a legfrissebb buildet, és töltsd le a `RepjegyFigyelo.apk` fájlt.
+1. A repó **Releases** részében nyisd meg a legfrissebb (nem „teszt”) kiadást, és töltsd le a `REFI.apk` fájlt.
 2. Nyisd meg a telefonon. Ha kéri, engedélyezd a böngészőnek az „ismeretlen forrásból származó alkalmazások” telepítését.
 3. Kulcs nem kell: a Google Flights, Ryanair és Wizz Air alapból be van kapcsolva. A SerpApi és az Ignav a **Beállításokban** kapcsolható be, ha van kulcsod.
 
@@ -44,4 +44,9 @@ Android-app, ami figyeli a repülőjegyárakat, és értesítést küld, ha egy 
 
 ## Fejlesztés
 
-Kotlin + Jetpack Compose, WorkManager. Minden `main`-re pusholt változás után a GitHub Actions automatikusan új APK-t készít `build-N` kiadásként. Az app verziószáma (versionCode) is N, ebből tudja, hogy van-e újabb kiadás. A repónak nyilvánosnak kell maradnia, hogy a frissítésfigyelő kulcs nélkül elérje.
+Kotlin + Jetpack Compose, WorkManager.
+
+- **Verziószám:** a `version.properties` fájlban (`VERSION_NAME=1.1.0`). Új kiadás előtt ezt kell átírni.
+- **Teszt-build:** minden `main`-re pusholt változásból „teszt” jelölésű (prerelease) kiadás készül. Letölthető kipróbálásra, de a telepített appok **nem** ajánlják fel frissítésként.
+- **Éles kiadás:** csak külön kérésre, egy `v*` címke pusholásával (vagy a workflow kézi indításával, publish=true). Ekkor `v<verzió>-build-<N>` címkéjű kiadás készül, és a telepített appok kötelező frissítést kérnek.
+- A frissítésfigyelő a GitHub „legfrissebb kiadását” nézi (a teszt-buildeket nem), ezért a repónak nyilvánosnak kell maradnia.

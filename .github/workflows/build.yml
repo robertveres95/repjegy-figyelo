@@ -1,9 +1,19 @@
 name: APK build
 
+# - Push a main ágra: TESZT-build ("prerelease"). Letölthető kipróbálásra,
+#   de a telepített appok frissítésfigyelője NEM ajánlja fel (csak éles kiadást néz).
+# - "v*" címke pusholása vagy kézi indítás publish=true-val: ÉLES kiadás.
+#   Ezt csak akkor csináljuk, ha a tulajdonos kifejezetten kéri.
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Éles kiadás (a felhasználók appja felajánlja a frissítést)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -23,6 +33,22 @@ jobs:
         with:
           gradle-version: "8.11.1"
 
+      - name: Verzió és kiadás típusa
+        id: meta
+        shell: bash
+        run: |
+          VERSION=$(grep '^VERSION_NAME=' version.properties | cut -d= -f2 | tr -d '[:space:]')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [[ "${{ github.ref_type }}" == "tag" || "${{ inputs.publish }}" == "true" ]]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "tag=v$VERSION-build-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+            echo "name=REFI $VERSION" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "tag=teszt-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+            echo "name=REFI $VERSION – teszt (${{ github.run_number }})" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: APK fordítása
         shell: bash
         run: |
@@ -38,13 +64,14 @@ jobs:
           done
 
       - name: APK átnevezése
-        run: cp app/build/outputs/apk/debug/app-debug.apk RepjegyFigyelo.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk REFI.apk
 
-      - name: Letölthető kiadás létrehozása
+      - name: Kiadás létrehozása
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: build-${{ github.run_number }}
-          name: Repjegy figyelő 1.0.${{ github.run_number }}
-          body: "Töltsd le a RepjegyFigyelo.apk fájlt a telefonodra, és telepítsd."
-          files: RepjegyFigyelo.apk
-          make_latest: true
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.name }}
+          body: ${{ steps.meta.outputs.publish == 'true' && 'Töltsd le a REFI.apk fájlt a telefonodra, és telepítsd.' || 'Teszt-build, csak kipróbálásra. A telepített appok nem ajánlják fel frissítésként.' }}
+          files: REFI.apk
+          prerelease: ${{ steps.meta.outputs.publish != 'true' }}
+          make_latest: ${{ steps.meta.outputs.publish == 'true' }}

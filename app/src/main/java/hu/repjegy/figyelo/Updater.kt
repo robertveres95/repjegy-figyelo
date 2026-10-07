@@ -24,17 +24,29 @@ object Updater {
     private const val NOTIFICATION_ID = 4242
     private const val DAY_MS = 24 * 60 * 60 * 1000L
 
-    data class Release(val build: Int, val apkUrl: String, val pageUrl: String)
+    /** Egy kiadás: verziószám (pl. "1.1.0") és a build sorszáma. */
+    data class Release(val version: String, val build: Int, val apkUrl: String, val pageUrl: String)
 
     /** Ha nem null, van újabb verzió, és a felület kötelező frissítést kér. */
     val available = MutableStateFlow<Release?>(null)
 
     val currentBuild: Int get() = BuildConfig.VERSION_CODE
+    val currentVersion: String get() = BuildConfig.VERSION_NAME
 
-    /** A felhasználónak mutatott verziószám, pl. 7 → "1.0.7". */
-    fun versionName(build: Int): String = "1.0.$build"
+    private fun parts(v: String) = v.split('.').map { it.toIntOrNull() ?: 0 } + listOf(0, 0, 0)
 
-    /** Lekéri a legfrissebb kiadást. Hálózati hiba esetén csendben null. */
+    /** Újabb-e a kiadás: előbb a verziószám dönt, egyezésnél a build sorszáma. */
+    private fun isNewer(r: Release): Boolean {
+        val a = parts(r.version)
+        val b = parts(currentVersion)
+        for (i in 0 until 3) if (a[i] != b[i]) return a[i] > b[i]
+        return r.build > currentBuild
+    }
+
+    /**
+     * Lekéri a legfrissebb éles kiadást (a teszt-buildek „prerelease”-ként nem számítanak).
+     * A kiadás címkéje: v1.1.0-build-25. Hálózati hiba esetén csendben null.
+     */
     fun check(): Release? = runCatching {
         val res = Http.request(
             "https://api.github.com/repos/$REPO/releases/latest",
@@ -43,8 +55,9 @@ object Updater {
         )
         if (res.code !in 200..299) return@runCatching null
         val json = JSONObject(res.body)
-        val build = Regex("""build-(\d+)""").find(json.optString("tag_name"))?.groupValues?.get(1)?.toInt()
-            ?: return@runCatching null
+        val tag = json.optString("tag_name")
+        val build = Regex("""build-(\d+)""").find(tag)?.groupValues?.get(1)?.toInt() ?: return@runCatching null
+        val version = Regex("""v(\d+\.\d+\.\d+)""").find(tag)?.groupValues?.get(1) ?: "1.0.$build"
         val assets = json.optJSONArray("assets")
         var apkUrl: String? = null
         if (assets != null) {
@@ -54,8 +67,8 @@ object Updater {
             }
         }
         val pageUrl = json.optString("html_url", "https://github.com/$REPO/releases/latest")
-        val release = Release(build, apkUrl ?: pageUrl, pageUrl)
-        if (build > currentBuild) release else null
+        val release = Release(version, build, apkUrl ?: pageUrl, pageUrl)
+        if (isNewer(release)) release else null
     }.getOrNull().also { if (it != null) available.value = it }
 
     /** A háttérellenőrzésből naponta egyszer: ha van új verzió, értesítést is küld. */
@@ -88,7 +101,7 @@ object Updater {
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_flight)
             .setContentTitle("Új verzió érhető el")
-            .setContentText("Megjelent a Repjegy figyelő ${versionName(release.build)}. Koppints a frissítéshez.")
+            .setContentText("Megjelent a REFI ${release.version}. Koppints a frissítéshez.")
             .setContentIntent(pending)
             .setAutoCancel(true)
             .build()

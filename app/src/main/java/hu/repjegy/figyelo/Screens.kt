@@ -123,6 +123,14 @@ private sealed interface Screen {
 }
 
 private val dateFormat = DateTimeFormatter.ofPattern("yyyy. MMM d., EEE", HU)
+private val typedDateFormat = DateTimeFormatter.ofPattern("yyyy.MM.dd")
+
+/** Begépelt dátum: 2026.10.16, 2026-10-16, 2026/10/16, 2026.10.16. vagy 2026. 10. 16. */
+private fun parseTypedDate(raw: String): LocalDate? {
+    val nums = raw.split('.', '-', '/', ' ').filter { it.isNotBlank() }
+    if (nums.size != 3 || nums[0].length != 4) return null
+    return runCatching { LocalDate.of(nums[0].toInt(), nums[1].toInt(), nums[2].toInt()) }.getOrNull()
+}
 private val shortDate = DateTimeFormatter.ofPattern("MMM d.", HU)
 private val timeFormat = DateTimeFormatter.ofPattern("MMM d. HH:mm", HU)
 
@@ -199,7 +207,7 @@ private fun UpdateOverlay(release: Updater.Release) {
             )
             Spacer(Modifier.height(12.dp))
             Text(
-                "Megjelent a Repjegy figyelő ${Updater.versionName(release.build)}.\n" +
+                "Megjelent a REFI ${release.version}.\n" +
                     "A használathoz frissítened kell.",
                 style = MaterialTheme.typography.bodyLarge,
             )
@@ -273,7 +281,7 @@ private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: 
             val spin = rememberInfiniteTransition(label = "spin")
             val angle by spin.animateFloat(0f, 360f, infiniteRepeatable(tween(900, easing = LinearEasing)), label = "a")
             NeonTopBar(
-                title = "REPJEGY//FIGYELŐ",
+                title = "REFI",
                 actions = {
                     IconButton(
                         onClick = { App.scope.launch { PriceChecker.checkAll(appContext) } },
@@ -946,7 +954,7 @@ private fun SettingsScreen(onDone: () -> Unit) {
 
             SectionTitle("Verzió")
             Text(
-                "Telepítve: ${Updater.versionName(Updater.currentBuild)}.",
+                "Telepítve: ${Updater.currentVersion}.",
                 style = MaterialTheme.typography.bodyMedium,
             )
             var updateMsg by remember { mutableStateOf<String?>(null) }
@@ -1141,14 +1149,44 @@ private fun <T> ChoiceField(label: String, options: List<Pair<T, String>>, selec
 @Composable
 private fun DateField(label: String, date: LocalDate, minDate: LocalDate, onPick: (LocalDate) -> Unit) {
     var open by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, style = MaterialTheme.typography.labelLarge)
-        OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Filled.DateRange, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text(date.format(dateFormat), modifier = Modifier.weight(1f))
+    var text by remember { mutableStateOf(date.format(typedDateFormat)) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    // Ha a dátum máshonnan változik (pl. naptárból vagy az indulás eltolja a visszautat), frissüljön a mező
+    LaunchedEffect(date) {
+        if (parseTypedDate(text) != date) {
+            text = date.format(typedDateFormat)
+            error = null
         }
     }
+
+    OutlinedTextField(
+        value = text,
+        onValueChange = { v ->
+            text = v.filter { it.isDigit() || it in ".-/ " }.take(12)
+            val parsed = parseTypedDate(text)
+            error = when {
+                parsed == null -> "Formátum: 2026.10.16"
+                parsed.isBefore(minDate) -> "Legkorábban: ${minDate.format(typedDateFormat)}"
+                else -> null
+            }
+            if (parsed != null && !parsed.isBefore(minDate)) onPick(parsed)
+        },
+        label = { Text(label) },
+        placeholder = { Text("éééé.hh.nn") },
+        supportingText = {
+            Text(error ?: date.format(DateTimeFormatter.ofPattern("EEEE", HU)))
+        },
+        isError = error != null,
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        trailingIcon = {
+            IconButton(onClick = { open = true }) {
+                Icon(Icons.Filled.DateRange, contentDescription = "Naptár megnyitása", tint = Neon.Green)
+            }
+        },
+        modifier = Modifier.fillMaxWidth(),
+    )
     if (open) {
         val minMillis = minDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
         val state = rememberDatePickerState(
