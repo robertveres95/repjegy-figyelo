@@ -42,6 +42,11 @@ import kotlinx.coroutines.launch
 
 // ---------------------------------------------------------------- Kód beillesztése
 
+private val shortDayFormat = java.time.format.DateTimeFormatter.ofPattern("yyyy. MMM d.", HU)
+
+private fun shortDay(iso: String): String =
+    runCatching { java.time.LocalDate.parse(iso).format(shortDayFormat) }.getOrDefault(iso)
+
 /** Egy megosztott figyelés átvétele kódból (vagy a teljes üzenetből, amiben a kód van). */
 @Composable
 internal fun ImportCodeDialog(initial: String, onDismiss: () -> Unit, onImported: (String) -> Unit) {
@@ -67,8 +72,8 @@ internal fun ImportCodeDialog(initial: String, onDismiss: () -> Unit, onImported
                 )
                 when {
                     decoded != null -> Text(
-                        "${decoded.first.routeTitle} · ${decoded.first.outboundDate}" +
-                            (decoded.first.returnDate?.let { " – $it" } ?: "") +
+                        "${decoded.first.routeTitle} · ${shortDay(decoded.first.outboundDate)}" +
+                            (decoded.first.returnDate?.let { " – ${shortDay(it)}" } ?: "") +
                             " · célár ${formatPrice(decoded.first.targetPrice, decoded.second)}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Neon.Green,

@@ -172,7 +172,10 @@ object Discover {
             out += Result(
                 code = code,
                 city = city,
-                country = arr.optString("countryName", ""),
+                // Ország magyarul (a Ryanair angolul adja); ha nincs kód, marad az eredeti
+                country = arr.optJSONObject("city")?.optString("countryCode")?.takeIf { it.length == 2 }
+                    ?.let { java.util.Locale("", it.uppercase()).getDisplayCountry(HU).takeIf { n -> n.isNotBlank() } }
+                    ?: arr.optString("countryName", ""),
                 pricePerPerson = ceil(converted).toInt(),
                 departure = ob.optString("departureDate").takeIf { it.length >= 16 }?.substring(0, 16),
                 returnDeparture = ib?.optString("departureDate")?.takeIf { it.length >= 16 }?.substring(0, 16),

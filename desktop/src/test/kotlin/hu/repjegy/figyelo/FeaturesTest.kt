@@ -230,7 +230,7 @@ class FeaturesTest {
     // ---------------- Felfedezés
     @Test fun discoverParsing() {
         val body = """{"fares":[
-          {"outbound":{"departureAirport":{"iataCode":"BUD"},"arrivalAirport":{"iataCode":"BGY","name":"Milan Bergamo","countryName":"Italy","city":{"name":"Milan"}},
+          {"outbound":{"departureAirport":{"iataCode":"BUD"},"arrivalAirport":{"iataCode":"BGY","name":"Milan Bergamo","countryName":"Italy","city":{"name":"Milan","countryCode":"it"}},
            "departureDate":"2026-11-12T08:35:00","price":{"value":15.99,"currencyCode":"HUF"}}},
           {"outbound":{"departureAirport":{"iataCode":"BUD"},"arrivalAirport":{"iataCode":"ZZZ","name":"Nowhere","countryName":"X"},
            "departureDate":"2026-11-13T10:00:00","price":{"value":0,"currencyCode":"HUF"}}}
@@ -239,6 +239,7 @@ class FeaturesTest {
         assertEquals(1, list.size)
         assertEquals("Milánó", list.first().city)
         assertEquals(16, list.first().pricePerPerson)
+        assertEquals("Olaszország", list.first().country)
         val t = Discover.templateFor(list.first(), 2, "Budapest")
         assertEquals("BGY", t.to)
         assertEquals(32, t.targetPrice)

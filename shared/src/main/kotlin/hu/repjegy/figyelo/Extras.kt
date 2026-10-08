@@ -206,7 +206,8 @@ fun verdictFor(w: Watch, today: LocalDate = LocalDate.now()): Verdict? {
     val daysLeft = depDay?.let { ChronoUnit.DAYS.between(today, it) } ?: 60L
     val lower = prices.count { it < now }
     val share = lower.toDouble() / prices.size
-    val min = prices.min()
+    // Az „eddigi legalacsonyabb” a kártyán látható minimummal egyezzen (az árgörbe csak az utolsó 120 mérést őrzi)
+    val min = minOf(prices.min(), w.lowestPrice ?: Int.MAX_VALUE)
     val soon = daysLeft <= 14
     return when {
         now <= min -> Verdict("Ez az eddigi legalacsonyabb ár – jó alkalom a foglalásra.", Verdict.Tone.GOOD)

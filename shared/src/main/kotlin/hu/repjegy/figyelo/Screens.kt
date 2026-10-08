@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 
 package hu.repjegy.figyelo
 
@@ -659,7 +659,10 @@ private fun WatchCard(
               }
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // Nagy betűméretnél a gombok új sorba törnek (nem a szavak közepén)
+            androidx.compose.foundation.layout.FlowRow(
+                verticalArrangement = Arrangement.Center,
+            ) {
                 if (isChecking) {
                     CircularProgressIndicator(
                         Modifier.padding(12.dp).size(20.dp),
@@ -675,12 +678,11 @@ private fun WatchCard(
                 best?.url?.let { url ->
                     TextButton(onClick = { onOpen(url) }) { Text("Megnyitás") }
                 }
-                Spacer(Modifier.weight(1f))
-                TextButton(onClick = onEdit) { Text("Szerkesztés") }
-            }
-            if (w.offers.size > 1) {
-                TextButton(onClick = { showAll = !showAll }) {
-                    Text(if (showAll) "Kevesebb" else "Mind a ${w.offers.size} ajánlat")
+                TextButton(onClick = onEdit) { Text("Szerkesztés", maxLines = 1) }
+                if (w.offers.size > 1) {
+                    TextButton(onClick = { showAll = !showAll }) {
+                        Text(if (showAll) "Kevesebb" else "Mind a ${w.offers.size} ajánlat", maxLines = 1)
+                    }
                 }
             }
         }

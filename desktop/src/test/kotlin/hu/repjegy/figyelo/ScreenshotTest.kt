@@ -58,7 +58,7 @@ class ScreenshotTest {
             outboundDate = d.toString(), returnDate = d.plusDays(5).toString(), travelClass = 1, adults = 2,
             children = 0, infantsInSeat = 0, infantsOnLap = 0, bags = 2, stops = 0, targetPrice = 60000, notify = true,
             flexDays = 2, depFrom = 7,
-            lastPrice = 54200, lowestPrice = 52100, lastChecked = System.currentTimeMillis(),
+            lastPrice = 54200, lowestPrice = 54200, lastChecked = System.currentTimeMillis(),
             offers = listOf(
                 Offer(54200, "Google Flights", "Wizz Air", "BUD", "LTN", "${d}T12:50", "${d}T14:35", 0,
                     "${d.plusDays(5)}T20:00", "${d.plusDays(5)}T23:30", 0, "https://www.google.com/travel/flights",
