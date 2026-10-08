@@ -24,6 +24,7 @@ object Discover {
         var adults = 1
         var maxPrice = ""
         var fromCodes: String? = null
+        var currency: String? = null
         var results: List<Result>? = null
     }
 
@@ -174,7 +175,7 @@ object Discover {
                 city = city,
                 // Ország magyarul (a Ryanair angolul adja); ha nincs kód, marad az eredeti
                 country = arr.optJSONObject("city")?.optString("countryCode")?.takeIf { it.length == 2 }
-                    ?.let { java.util.Locale("", it.uppercase()).getDisplayCountry(HU).takeIf { n -> n.isNotBlank() } }
+                    ?.let { cc -> java.util.Locale("", cc.uppercase()).getDisplayCountry(HU).takeIf { n -> n.isNotBlank() && !n.equals(cc, true) } }
                     ?: arr.optString("countryName", ""),
                 pricePerPerson = ceil(converted).toInt(),
                 departure = ob.optString("departureDate").takeIf { it.length >= 16 }?.substring(0, 16),

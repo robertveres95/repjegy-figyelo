@@ -660,27 +660,26 @@ private fun WatchCard(
             }
 
             // Nagy betűméretnél a gombok új sorba törnek (nem a szavak közepén)
-            androidx.compose.foundation.layout.FlowRow(
-                verticalArrangement = Arrangement.Center,
-            ) {
+            androidx.compose.foundation.layout.FlowRow {
+                val center = Modifier.align(Alignment.CenterVertically)
                 if (isChecking) {
                     CircularProgressIndicator(
-                        Modifier.padding(12.dp).size(20.dp),
+                        center.padding(12.dp).size(20.dp),
                         strokeWidth = 2.dp,
                         color = Neon.Green,
                     )
-                    Text("KERESÉS…", style = MaterialTheme.typography.labelSmall, color = Neon.Green)
+                    Text("KERESÉS…", style = MaterialTheme.typography.labelSmall, color = Neon.Green, modifier = center)
                 } else {
-                    TextButton(onClick = onCheck, enabled = canCheck && !w.isExpired()) {
-                        Text("Ellenőrzés")
+                    TextButton(onClick = onCheck, enabled = canCheck && !w.isExpired(), modifier = center) {
+                        Text("Ellenőrzés", maxLines = 1)
                     }
                 }
                 best?.url?.let { url ->
-                    TextButton(onClick = { onOpen(url) }) { Text("Megnyitás") }
+                    TextButton(onClick = { onOpen(url) }, modifier = center) { Text("Megnyitás", maxLines = 1) }
                 }
-                TextButton(onClick = onEdit) { Text("Szerkesztés", maxLines = 1) }
+                TextButton(onClick = onEdit, modifier = center) { Text("Szerkesztés", maxLines = 1) }
                 if (w.offers.size > 1) {
-                    TextButton(onClick = { showAll = !showAll }) {
+                    TextButton(onClick = { showAll = !showAll }, modifier = center) {
                         Text(if (showAll) "Kevesebb" else "Mind a ${w.offers.size} ajánlat", maxLines = 1)
                     }
                 }

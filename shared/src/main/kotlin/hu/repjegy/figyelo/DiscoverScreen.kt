@@ -51,7 +51,7 @@ private fun shortDay(iso: String): String =
 @Composable
 internal fun ImportCodeDialog(initial: String, onDismiss: () -> Unit, onImported: (String) -> Unit) {
     var text by remember(initial) { mutableStateOf(initial) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by remember(initial) { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val decoded = remember(text) { ShareCode.decode(text) }
     AlertDialog(
@@ -129,7 +129,8 @@ internal fun DiscoverScreen(
     var maxPrice by remember { mutableStateOf(mem.maxPrice) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var results by remember { mutableStateOf(initialResults ?: mem.results) }
+    // A korábbi találatok csak ugyanabban a pénznemben érvényesek
+    var results by remember { mutableStateOf(initialResults ?: mem.results?.takeIf { mem.currency == currency }) }
 
     fun startSearch() {
         val origin = from
@@ -151,6 +152,7 @@ internal fun DiscoverScreen(
             mem.adults = adults
             mem.maxPrice = maxPrice
             mem.fromCodes = origin.codes
+            mem.currency = currency
             mem.results = r.getOrNull()
         }
     }

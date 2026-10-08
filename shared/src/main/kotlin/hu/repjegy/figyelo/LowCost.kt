@@ -16,9 +16,12 @@ internal const val MAX_PAIRS_FLEX = 4
  * sorra, hogy a korlát minden reptérből adjon párt – a fapadosok bázisai (STN, LTN)
  * gyakran a lista végén vannak, és a sima sorrendnél kimaradnának.
  */
+/** Fapados-bázisok a több repteres városokban: ezek kerüljenek előre, ha kevés párt kérdezünk. */
+private val LOW_COST_BASES = setOf("STN", "LTN", "SEN", "LGW", "BGY", "MXP", "CIA", "TSF", "CRL", "BVA", "WMI", "SAW", "DWC", "DMK")
+
 internal fun pairsOf(w: Watch, max: Int = MAX_PAIRS): List<Pair<String, String>> {
-    val from = w.from.split(',')
-    val to = w.to.split(',')
+    val from = w.from.split(',').sortedBy { if (it in LOW_COST_BASES) 0 else 1 }
+    val to = w.to.split(',').sortedBy { if (it in LOW_COST_BASES) 0 else 1 }
     return from.indices.flatMap { i -> to.indices.map { j -> Triple(i, j, from[i] to to[j]) } }
         .sortedWith(compareBy({ maxOf(it.first, it.second) }, { it.first + it.second }))
         .map { it.third }

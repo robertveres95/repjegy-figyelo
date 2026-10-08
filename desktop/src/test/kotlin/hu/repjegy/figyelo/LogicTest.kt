@@ -44,6 +44,9 @@ class LogicTest {
         assertEquals(pairs.size, pairs.toSet().size, "ismétlődő pár")
         assertTrue(pairs.any { it.first == "STN" && it.second == "BGY" }, "STN→BGY hiányzik: $pairs")
         assertEquals(listOf("BUD" to "STN"), pairsOf(watch()))
+        // Rugalmas dátumnál kevés pár: a fapados-bázisok (STN, LTN) mindenképp benne legyenek
+        val few = pairsOf(watch(from = "BUD", to = "LHR,LGW,STN,LTN,LCY,SEN"), MAX_PAIRS_FLEX).map { it.second }
+        assertTrue("STN" in few && "LTN" in few, few.toString())
     }
 
     @Test fun watchJsonRoundTrip() {

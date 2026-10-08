@@ -22,6 +22,13 @@ Android- és Windows-app, ami figyeli a repülőjegyárakat, és értesítést k
 - Frissítésfigyelő: új kiadásnál az app kötelező frissítést kér, és naponta egyszer értesítést is küld
 - Árgörbe a korábbi ellenőrzésekből, „Megnyitás” gomb a foglalási/kereső oldalhoz
 - Forrásonkénti állapot minden figyelésnél (melyik forrás hány ajánlatot adott, vagy miért hibázott)
+- Rugalmas dátum (±1–3 nap, az út hossza marad), odaút-időablak és légitársaság-szűrő
+- Felfedezés: hova repülhetsz a legolcsóbban egy időszakban (Ryanair „bárhová” keresés), találatból egy koppintással figyelés
+- „Most vegyem vagy várjak?” jelzés az eddig mért árak alapján
+- Figyelés megosztása kóddal (pl. Messengeren), átvétel kódból vagy Androidon a megosztás menüből
+- Mentés fájlba és visszaállítás (telefonváltáskor, vagy a telefon és a Windows-gép között; API-kulcs nélkül)
+- Csendes órák: éjszaka hang és rezgés nélkül érkezik a riasztás (Windowson reggel összefoglaló)
+- Androidos kezdőképernyő-widget a legjobb árakkal
 
 ## Telepítés
 
@@ -54,5 +61,6 @@ Kotlin + Jetpack Compose (Android), Compose Multiplatform Desktop (Windows), Wor
 - **Teszt-build:** minden `main`-re pusholt változásból „teszt” jelölésű (prerelease) kiadás készül. Letölthető kipróbálásra, de a telepített appok **nem** ajánlják fel frissítésként.
 - **Éles kiadás:** csak külön kérésre, egy `v*` címke pusholásával (vagy a workflow kézi indításával, publish=true). Ekkor `v<verzió>-build-<N>` címkéjű kiadás készül, és a telepített appok kötelező frissítést kérnek.
 - **Aláírás:** az APK-t a GitHub Actions írja alá a saját REFI-kulccsal (`app/refi-release.jks`, jelszó a `REFI_KEYSTORE_PASS` titokban), kulcscsere-lánccal a korábbi fejlesztői kulcsról – így a régebbi telepítések újratelepítés nélkül frissülnek. Mindkét kulcsfájlt meg kell őrizni; a jelszó nélkül nem adható ki frissítés.
+- **Heti egészségellenőrzés:** hétfőnként élesben kipróbálja az árforrásokat; ha valamelyik elromlik, hibajegyet nyit (erről a GitHub e-mailt küld). Nyilvános repóban a GitHub 60 nap tétlenség után szünetelteti az ütemezett futást – ilyenkor az Actions lapon újra kell engedélyezni.
 - **Diagnosztika:** a „Diagnosztika” workflow kézzel indítható: egységtesztek, éles árforrás-próba és Android lint; az eredmény a rejtett „diagnostics” vázlat-kiadás `diag.txt` fájljába kerül.
 - A frissítésfigyelő a GitHub „legfrissebb kiadását” nézi (a teszt-buildeket nem), ezért a repónak nyilvánosnak kell maradnia.
