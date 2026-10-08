@@ -209,7 +209,58 @@ object DesktopPlatform : PlatformApi {
 
 // ---------------------------------------------------------------- Indítás
 
+/**
+ * Önteszt a kész, telepíthető appon (a GitHub Windows-gépén fut a build végén):
+ * a beépített futtatókörnyezetben megvan-e minden, ami kell. Az eredményt fájlba írja.
+ */
+private fun selfTest(outFile: String): Int {
+    val lines = mutableListOf<String>()
+    var failed = 0
+    fun check(name: String, block: () -> String) {
+        val r = runCatching(block)
+        if (r.isSuccess) lines += "OK   $name: ${r.getOrNull()}"
+        else { failed++; lines += "FAIL $name: ${r.exceptionOrNull()}" }
+    }
+    Platform.current = DesktopPlatform
+    check("verzió") {
+        val v = DesktopPlatform.versionName
+        require(DesktopPlatform::class.java.getResource("/refi-version.properties") != null) { "nincs refi-version.properties" }
+        "$v (build ${DesktopPlatform.buildNumber})"
+    }
+    check("repülőterek") {
+        val r = Airports.search("buda")
+        require(r.isNotEmpty()) { "nincs találat" }
+        r.first().title
+    }
+    check("betűtípus") {
+        listOf("regular", "medium", "semibold", "bold").forEach {
+            require(DesktopPlatform::class.java.getResource("/jakarta_$it.ttf") != null) { "hiányzik: $it" }
+        }
+        "4 vastagság megvan"
+    }
+    check("magyar dátum") {
+        val s = java.time.LocalDate.of(2026, 10, 16).format(java.time.format.DateTimeFormatter.ofPattern("MMM d., EEEE", HU))
+        require(s.contains("okt") && s.contains("péntek")) { "nem magyar: $s" }
+        s
+    }
+    check("HTTPS") {
+        val res = Http.request("https://api.github.com/repos/robertveres95/repjegy-figyelo", timeoutMs = 20_000)
+        require(res.code == 200) { "HTTP ${res.code}" }
+        "HTTP 200"
+    }
+    check("3D-fájlok kihagyva") {
+        require(DesktopPlatform::class.java.getResource("/splash/three.min.js") == null) { "a three.js bekerült" }
+        "igen"
+    }
+    lines += if (failed == 0) "ÖSSZESEN: minden rendben" else "ÖSSZESEN: $failed hiba"
+    File(outFile).writeText(lines.joinToString("\n"), Charsets.UTF_8)
+    return failed
+}
+
 fun main(args: Array<String>) {
+    args.firstOrNull { it.startsWith("--selftest=") }?.let {
+        kotlin.system.exitProcess(selfTest(it.substringAfter("=")))
+    }
     val startHidden = "--tray" in args
     Platform.current = DesktopPlatform
     Store.init(DesktopPrefs)

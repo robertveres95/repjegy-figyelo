@@ -110,6 +110,18 @@ jobs:
             echo "::error::${line}"
           done
 
+      - name: Önteszt a kész appon
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem desktop/build/compose/binaries/main/app -Recurse -Filter REFI.exe | Select-Object -First 1
+          if (-not $exe) { gradle -p desktop createDistributable --no-daemon; $exe = Get-ChildItem desktop/build/compose/binaries/main/app -Recurse -Filter REFI.exe | Select-Object -First 1 }
+          $out = Join-Path $env:RUNNER_TEMP "selftest.txt"
+          $p = Start-Process -FilePath $exe.FullName -ArgumentList "--selftest=$out" -Wait -PassThru
+          Get-Content $out -Encoding UTF8 | ForEach-Object { Write-Output $_ }
+          Get-Content $out -Encoding UTF8 | Where-Object { $_ -like "FAIL*" } | ForEach-Object { Write-Output "::error::$_" }
+          Get-Content $out -Encoding UTF8 | Where-Object { $_ -like "ÖSSZESEN*" } | ForEach-Object { Write-Output "::notice::$_" }
+          if ($p.ExitCode -ne 0) { exit 1 }
+
       - name: Telepítő átnevezése
         shell: bash
         run: cp desktop/build/compose/binaries/main/msi/*.msi REFI-Setup.msi
