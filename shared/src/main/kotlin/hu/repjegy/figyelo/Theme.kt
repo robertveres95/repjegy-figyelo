@@ -1,18 +1,13 @@
 package hu.repjegy.figyelo
 
-import android.app.Activity
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.core.view.WindowCompat
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -65,7 +60,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -205,15 +199,10 @@ private fun colorSchemeFor(p: AppPalette) = if (p.isLight) {
     )
 }
 
-/** Az app saját betűtípusa (Plus Jakarta Sans, SIL OFL), így minden telefonon ugyanúgy néz ki. */
-val AppFont = FontFamily(
-    Font(R.font.jakarta_regular, FontWeight.Normal),
-    Font(R.font.jakarta_medium, FontWeight.Medium),
-    Font(R.font.jakarta_semibold, FontWeight.SemiBold),
-    Font(R.font.jakarta_bold, FontWeight.Bold),
-)
+/** Az app saját betűtípusa (Plus Jakarta Sans, SIL OFL), így minden eszközön ugyanúgy néz ki. */
+val AppFont: FontFamily get() = Platform.current.appFont
 
-private val NeonTypography = Typography().run {
+private val NeonTypography by lazy { Typography().run {
     fun TextStyle.app(weight: FontWeight? = null) = copy(fontFamily = AppFont, fontWeight = weight ?: fontWeight)
     copy(
         displayLarge = displayLarge.app(), displayMedium = displayMedium.app(), displaySmall = displaySmall.app(),
@@ -228,7 +217,7 @@ private val NeonTypography = Typography().run {
         labelMedium = labelMedium.app(FontWeight.Medium),
         labelSmall = labelSmall.app(FontWeight.Medium),
     )
-}
+} }
 
 @Composable
 fun NeonTheme(mode: String, textScale: Int = 100, content: @Composable () -> Unit) {
@@ -236,18 +225,8 @@ fun NeonTheme(mode: String, textScale: Int = 100, content: @Composable () -> Uni
     if (Neon.palette != palette) Neon.palette = palette
     val colors = remember(palette) { colorSchemeFor(palette) }
 
-    // Állapotsor és navigációs sáv ikonjai: világos témában sötétek
-    val view = LocalView.current
-    if (!view.isInEditMode) {
-        SideEffect {
-            val window = (view.context as? Activity)?.window ?: return@SideEffect
-            WindowCompat.getInsetsController(window, view).apply {
-                isAppearanceLightStatusBars = palette.isLight
-                isAppearanceLightNavigationBars = palette.isLight
-            }
-            window.decorView.setBackgroundColor(palette.background.toArgb())
-        }
-    }
+    // Állapotsor / ablakkeret színe a témához (platformfüggő)
+    Platform.current.SystemBars(palette)
     // Betűméret: a rendszer betűméretére szorzunk rá, így a telefon beállítása is érvényes marad
     val density = LocalDensity.current
     val scaled = remember(density, textScale) {

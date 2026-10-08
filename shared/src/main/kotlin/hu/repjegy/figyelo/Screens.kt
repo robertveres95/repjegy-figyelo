@@ -2,7 +2,6 @@
 
 package hu.repjegy.figyelo
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ContentTransform
@@ -99,7 +98,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -138,10 +136,10 @@ private val timeFormat = DateTimeFormatter.ofPattern("MMM d. HH:mm", HU)
 fun AppRoot() {
     var screen by remember { mutableStateOf<Screen>(Screen.Home) }
     val update by Updater.available.collectAsState()
-    var showSplash by remember { mutableStateOf(App.splashPending) }
-    BackHandler(enabled = screen != Screen.Home) { screen = Screen.Home }
+    var showSplash by remember { mutableStateOf(AppScope.splashPending) }
+    Platform.current.BackHandler(enabled = screen != Screen.Home) { screen = Screen.Home }
 
-    LaunchedEffect(Unit) { App.scope.launch { Updater.check() } }
+    LaunchedEffect(Unit) { AppScope.scope.launch { Updater.check() } }
 
     Box(Modifier.fillMaxSize().background(Neon.Black)) {
         AnimatedContent(
@@ -172,8 +170,8 @@ fun AppRoot() {
         }
 
         if (showSplash) {
-            SplashOverlay(onFinished = {
-                App.splashPending = false
+            Platform.current.Splash(onFinished = {
+                AppScope.splashPending = false
                 showSplash = false
             })
         }
@@ -183,8 +181,7 @@ fun AppRoot() {
 /** Kötelező frissítés: amíg nincs telepítve az új verzió, ez takarja az appot. */
 @Composable
 private fun UpdateOverlay(release: Updater.Release) {
-    val context = LocalContext.current
-    BackHandler(enabled = true) { }
+    Platform.current.BackHandler(enabled = true) { }
     val transition = rememberInfiniteTransition(label = "update")
     // Ugyanaz az ütem, mint a keret lüktetése (NeonCard: 1100 ms), így együtt pulzálnak
     val pulse by transition.animateFloat(
@@ -227,7 +224,7 @@ private fun UpdateOverlay(release: Updater.Release) {
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(18.dp))
-            Button(onClick = { openUrl(context, release.apkUrl) }, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { Platform.current.openUrl(release.apkUrl) }, modifier = Modifier.fillMaxWidth()) {
                 Text("Letöltés és frissítés", fontWeight = FontWeight.Bold)
             }
         }
@@ -273,7 +270,6 @@ private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: 
     val watches by Store.watches.collectAsState()
     val settings by Store.settings.collectAsState()
     val checking by Store.checking.collectAsState()
-    val appContext = LocalContext.current.applicationContext
 
     Scaffold(
         containerColor = Neon.Black,
@@ -284,7 +280,7 @@ private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: 
                 title = "REFI",
                 actions = {
                     IconButton(
-                        onClick = { App.scope.launch { PriceChecker.checkAll(appContext) } },
+                        onClick = { AppScope.scope.launch { PriceChecker.checkAll() } },
                         enabled = checking.isEmpty() && watches.isNotEmpty() && settings.isReady,
                     ) {
                         Icon(
@@ -346,9 +342,9 @@ private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: 
                     currency = settings.currency,
                     isChecking = w.id in checking,
                     canCheck = settings.isReady,
-                    onCheck = { App.scope.launch { PriceChecker.checkOne(appContext, w.id) } },
+                    onCheck = { AppScope.scope.launch { PriceChecker.checkOne(w.id) } },
                     onEdit = { onEdit(w.id) },
-                    onOpen = { url -> openUrl(appContext, url) },
+                    onOpen = { url -> Platform.current.openUrl(url) },
                 )
             }
         }
@@ -651,17 +647,16 @@ private fun Sparkline(points: List<PricePoint>, target: Int, modifier: Modifier)
 private fun EditScreen(id: String?, onDone: () -> Unit) {
     val existing = remember(id) { id?.let { i -> Store.watches.value.find { it.id == i } } }
     val currency = Store.settings.collectAsState().value.currency
-    val appContext = LocalContext.current.applicationContext
     val today = remember { LocalDate.now() }
 
     var fromPlace by remember {
         mutableStateOf<Place?>(
-            if (existing != null) Airports.placeFor(appContext, existing.from, existing.fromLabel)
-            else Airports.placeFor(appContext, "BUD", null)
+            if (existing != null) Airports.placeFor(existing.from, existing.fromLabel)
+            else Airports.placeFor("BUD", null)
         )
     }
     var toPlace by remember {
-        mutableStateOf<Place?>(existing?.let { Airports.placeFor(appContext, it.to, it.toLabel) })
+        mutableStateOf<Place?>(existing?.let { Airports.placeFor(it.to, it.toLabel) })
     }
     var roundTrip by remember { mutableStateOf(existing?.isRoundTrip ?: true) }
     var outDate by remember {
@@ -736,7 +731,7 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
         }
         Store.upsert(toSave)
         if (!sameSearch && Store.settings.value.isReady) {
-            App.scope.launch { PriceChecker.checkOne(appContext, toSave.id) }
+            AppScope.scope.launch { PriceChecker.checkOne(toSave.id) }
         }
         onDone()
     }
@@ -824,7 +819,6 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
 @Composable
 private fun SettingsScreen(onDone: () -> Unit) {
     val initial = remember { Store.settings.value }
-    val context = LocalContext.current
     var googleOn by remember { mutableStateOf(initial.googleOn) }
     var ryanairOn by remember { mutableStateOf(initial.ryanairOn) }
     var wizzOn by remember { mutableStateOf(initial.wizzOn) }
@@ -891,21 +885,21 @@ private fun SettingsScreen(onDone: () -> Unit) {
             SectionTitle("Opcionális tartalékok – kulccsal")
             SwitchRow("SerpApi (Google Flights)", serpOn) { serpOn = it }
             if (serpOn) {
-                TextButton(onClick = { openUrl(context, "https://serpapi.com/manage-api-key") }) {
+                TextButton(onClick = { Platform.current.openUrl("https://serpapi.com/manage-api-key") }) {
                     Text("Kulcs: serpapi.com (havi 250 ingyenes)")
                 }
                 SecretField("SerpApi API-kulcs", apiKey) { apiKey = it }
             }
             SwitchRow("Ignav", ignavOn) { ignavOn = it }
             if (ignavOn) {
-                TextButton(onClick = { openUrl(context, "https://ignav.com") }) {
+                TextButton(onClick = { Platform.current.openUrl("https://ignav.com") }) {
                     Text("Kulcs: ignav.com (1000 ingyenes kérés)")
                 }
                 SecretField("Ignav API-kulcs", ignavKey) { ignavKey = it }
             }
             if (serpOn || ignavOn) {
                 Text(
-                    "A kulcsok csak ezen a telefonon tárolódnak.",
+                    "A kulcsok csak ezen a ${Platform.current.deviceWord} tárolódnak.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -946,8 +940,7 @@ private fun SettingsScreen(onDone: () -> Unit) {
             }
             Text(
                 "A kulcs nélküli forrásoknál nincs keret, de túl gyakori lekérdezésnél ideiglenesen " +
-                    "letilthatnak. A 6 óránkénti ellenőrzés biztonságos. Az Android energiatakarékossága " +
-                    "miatt a háttér-ellenőrzés kicsit csúszhat.",
+                    "letilthatnak. A 6 óránkénti ellenőrzés biztonságos. " + Platform.current.backgroundHint,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -960,7 +953,7 @@ private fun SettingsScreen(onDone: () -> Unit) {
             var updateMsg by remember { mutableStateOf<String?>(null) }
             OutlinedButton(onClick = {
                 updateMsg = "Keresés…"
-                App.scope.launch {
+                AppScope.scope.launch {
                     val found = Updater.check()
                     updateMsg = if (found == null) "Ez a legfrissebb verzió (vagy nem érhető el a GitHub)." else null
                 }
@@ -971,7 +964,7 @@ private fun SettingsScreen(onDone: () -> Unit) {
                 onClick = {
                     if (currency != initial.currency) Store.clearAllResults()
                     Store.saveSettings(draft)
-                    if (interval != initial.intervalHours) Scheduler.schedule(context.applicationContext)
+                    if (interval != initial.intervalHours) Platform.current.reschedule()
                     onDone()
                 },
                 enabled = draft.isReady,
@@ -1001,13 +994,12 @@ private fun SecretField(label: String, value: String, onChange: (String) -> Unit
 
 @Composable
 private fun AirportField(label: String, selected: Place?, onSelect: (Place?) -> Unit) {
-    val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     var text by remember { mutableStateOf(selected?.fieldText ?: "") }
     var expanded by remember { mutableStateOf(false) }
     val results = remember(text, selected) {
         if (selected != null && text == selected.fieldText) emptyList()
-        else Airports.search(context, text)
+        else Airports.search(text)
     }
     val showMenu = expanded && results.isNotEmpty()
 

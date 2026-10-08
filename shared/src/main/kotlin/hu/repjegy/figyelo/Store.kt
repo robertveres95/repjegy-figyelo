@@ -1,14 +1,13 @@
 package hu.repjegy.figyelo
 
-import android.content.Context
-import android.content.SharedPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.json.JSONArray
 
-/** A figyelések és beállítások tárolása a telefonon (SharedPreferences, JSON). */
+/** A figyelések és beállítások tárolása (Androidon SharedPreferences, Windowson fájl; JSON). */
 object Store {
-    private lateinit var prefs: SharedPreferences
+    lateinit var prefs: Prefs
+        private set
     private var initialized = false
 
     private val _watches = MutableStateFlow<List<Watch>>(emptyList())
@@ -21,9 +20,9 @@ object Store {
     val checking = MutableStateFlow<Set<String>>(emptySet())
 
     @Synchronized
-    fun init(context: Context) {
+    fun init(storage: Prefs) {
         if (initialized) return
-        prefs = context.applicationContext.getSharedPreferences("repjegy", Context.MODE_PRIVATE)
+        prefs = storage
         val oldSource = prefs.getString("source", null)
         val serpKey = prefs.getString("apiKey", "") ?: ""
         val ignavKey = prefs.getString("ignavKey", "") ?: ""
@@ -76,26 +75,26 @@ object Store {
 
     @Synchronized
     fun saveSettings(settings: Settings) {
-        prefs.edit()
-            .putBoolean("googleOn", settings.googleOn)
-            .putBoolean("ryanairOn", settings.ryanairOn)
-            .putBoolean("wizzOn", settings.wizzOn)
-            .putBoolean("serpOn", settings.serpOn)
-            .putBoolean("ignavOn", settings.ignavOn)
-            .putString("apiKey", settings.apiKey)
-            .putString("ignavKey", settings.ignavKey)
-            .putString("currency", settings.currency)
-            .putInt("intervalHours", settings.intervalHours)
-            .putString("themeMode", settings.themeMode)
-            .putInt("textScale", settings.textScale)
-            .apply()
+        prefs.edit {
+            putBoolean("googleOn", settings.googleOn)
+            putBoolean("ryanairOn", settings.ryanairOn)
+            putBoolean("wizzOn", settings.wizzOn)
+            putBoolean("serpOn", settings.serpOn)
+            putBoolean("ignavOn", settings.ignavOn)
+            putString("apiKey", settings.apiKey)
+            putString("ignavKey", settings.ignavKey)
+            putString("currency", settings.currency)
+            putInt("intervalHours", settings.intervalHours)
+            putString("themeMode", settings.themeMode)
+            putInt("textScale", settings.textScale)
+        }
         _settings.value = settings
     }
 
     private fun persist(list: List<Watch>) {
         val arr = JSONArray()
         list.forEach { arr.put(it.toJson()) }
-        prefs.edit().putString("watches", arr.toString()).apply()
+        prefs.edit { putString("watches", arr.toString()) }
         _watches.value = list
     }
 }

@@ -1,6 +1,5 @@
 package hu.repjegy.figyelo
 
-import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -15,13 +14,13 @@ object PriceChecker {
 
     private class SourceRun(val name: String, val search: () -> List<Offer>)
 
-    suspend fun checkAll(context: Context) {
+    suspend fun checkAll() {
         Store.watches.value
             .filter { !it.isExpired() }
-            .forEach { checkOne(context, it.id) }
+            .forEach { checkOne(it.id) }
     }
 
-    suspend fun checkOne(context: Context, id: String) = withContext(Dispatchers.IO) {
+    suspend fun checkOne(id: String) = withContext(Dispatchers.IO) {
         val watch = Store.watches.value.find { it.id == id } ?: return@withContext
         val settings = Store.settings.value
         val currency = settings.currency
@@ -107,7 +106,7 @@ object PriceChecker {
                 if (shouldNotify) toNotify = next
                 next
             }
-            toNotify?.let { Notifier.priceDrop(context, it, currency) }
+            toNotify?.let { Platform.current.notifyPriceDrop(it, currency) }
         } finally {
             Store.checking.update { it - id }
         }

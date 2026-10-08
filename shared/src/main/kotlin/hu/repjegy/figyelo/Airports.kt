@@ -1,6 +1,5 @@
 package hu.repjegy.figyelo
 
-import android.content.Context
 import java.text.Normalizer
 import java.util.Locale
 
@@ -75,15 +74,15 @@ object Airports {
         Triple("Chicago", "US", "ORD,MDW"),
     )
 
-    fun preload(context: Context) {
-        load(context)
+    fun preload() {
+        load()
     }
 
-    fun search(context: Context, query: String, limit: Int = 8): List<Place> {
+    fun search(query: String, limit: Int = 8): List<Place> {
         val q = normalize(query)
         if (q.isEmpty()) return emptyList()
         val upper = query.trim().uppercase(Locale.ROOT)
-        return load(context)
+        return load()
             .mapNotNull { e ->
                 val score = when {
                     e.place.codes == upper -> 0
@@ -100,18 +99,18 @@ object Airports {
     }
 
     /** Mentett kód(ok) visszaalakítása választott hellyé (szerkesztéshez). */
-    fun placeFor(context: Context, codes: String, label: String?): Place {
-        load(context).firstOrNull { it.place.codes == codes }?.let { return it.place }
+    fun placeFor(codes: String, label: String?): Place {
+        load().firstOrNull { it.place.codes == codes }?.let { return it.place }
         return Place(codes, label ?: codes, codes, codes, if (label != null) "$label ($codes)" else codes)
     }
 
     @Synchronized
-    private fun load(context: Context): List<Entry> {
+    private fun load(): List<Entry> {
         entries?.let { return it }
         val hu = Locale.forLanguageTag("hu")
         val countryName = { cc: String -> Locale("", cc).getDisplayCountry(hu).ifBlank { cc } }
 
-        val airports = context.assets.open("airports.tsv").bufferedReader().useLines { lines ->
+        val airports = Platform.current.openAsset("airports.tsv").bufferedReader().useLines { lines ->
             lines.mapNotNull { line ->
                 val p = line.split('\t')
                 if (p.size < 5) return@mapNotNull null

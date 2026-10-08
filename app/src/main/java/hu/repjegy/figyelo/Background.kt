@@ -1,19 +1,29 @@
 package hu.repjegy.figyelo
 
 import android.Manifest
+import android.app.Activity
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.SharedPreferences
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -21,36 +31,106 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.io.InputStream
 import java.util.concurrent.TimeUnit
 
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
-        Store.init(this)
-        scope.launch { Airports.preload(this@App) }
+        AndroidPlatform.ensure(this)
+        AppScope.scope.launch { Airports.preload() }
         Notifier.createChannel(this)
         Scheduler.schedule(this)
     }
+}
+
+/** SharedPreferences a közös [Prefs] felület mögött. */
+class AndroidPrefs(context: Context) : Prefs {
+    private val sp: SharedPreferences =
+        context.applicationContext.getSharedPreferences("repjegy", Context.MODE_PRIVATE)
+
+    override fun getString(key: String, default: String?) = sp.getString(key, default)
+    override fun getBoolean(key: String, default: Boolean) = sp.getBoolean(key, default)
+    override fun getInt(key: String, default: Int) = sp.getInt(key, default)
+    override fun getLong(key: String, default: Long) = sp.getLong(key, default)
+    override fun edit(block: PrefsEditor.() -> Unit) {
+        val e = sp.edit()
+        object : PrefsEditor {
+            override fun putString(key: String, value: String) { e.putString(key, value) }
+            override fun putBoolean(key: String, value: Boolean) { e.putBoolean(key, value) }
+            override fun putInt(key: String, value: Int) { e.putInt(key, value) }
+            override fun putLong(key: String, value: Long) { e.putLong(key, value) }
+        }.block()
+        e.apply()
+    }
+}
+
+/** Az androidos megvalósítás a közös kód platform-igényeihez. */
+class AndroidPlatform private constructor(private val context: Context) : PlatformApi {
+    override val versionName: String get() = BuildConfig.VERSION_NAME
+    override val buildNumber: Int get() = BuildConfig.VERSION_CODE
+    override val installerSuffix = ".apk"
+    override val deviceWord = "telefonon"
+    override val backgroundHint = "Az Android energiatakarékossága miatt a háttér-ellenőrzés kicsit csúszhat."
+    override val appFont = FontFamily(
+        Font(R.font.jakarta_regular, FontWeight.Normal),
+        Font(R.font.jakarta_medium, FontWeight.Medium),
+        Font(R.font.jakarta_semibold, FontWeight.SemiBold),
+        Font(R.font.jakarta_bold, FontWeight.Bold),
+    )
+
+    override fun openUrl(url: String) = openUrl(context, url)
+    override fun openAsset(name: String): InputStream = context.assets.open(name)
+    override fun notifyPriceDrop(w: Watch, currency: String) = Notifier.priceDrop(context, w, currency)
+    override fun notifyUpdate(release: Updater.Release) = Notifier.update(context, release)
+    override fun reschedule() = Scheduler.schedule(context)
+
+    @Composable
+    override fun BackHandler(enabled: Boolean, onBack: () -> Unit) {
+        androidx.activity.compose.BackHandler(enabled = enabled, onBack = onBack)
+    }
+
+    @Composable
+    override fun SystemBars(palette: AppPalette) {
+        // Állapotsor és navigációs sáv ikonjai: világos témában sötétek
+        val view = LocalView.current
+        if (view.isInEditMode) return
+        SideEffect {
+            val window = (view.context as? Activity)?.window ?: return@SideEffect
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = palette.isLight
+                isAppearanceLightNavigationBars = palette.isLight
+            }
+            window.decorView.setBackgroundColor(palette.background.toArgb())
+        }
+    }
+
+    @Composable
+    override fun Splash(onFinished: () -> Unit) = SplashOverlay(onFinished)
 
     companion object {
-        /** Hidegindításkor igaz: ilyenkor egyszer lefut a nyitóanimáció. */
-        var splashPending = true
+        /** Platform és tároló beállítása; többször is hívható (App, Activity, háttérmunka). */
+        @Synchronized
+        fun ensure(context: Context) {
+            val app = context.applicationContext
+            if (!platformReady) {
+                Platform.current = AndroidPlatform(app)
+                platformReady = true
+            }
+            Store.init(AndroidPrefs(app))
+        }
 
-        /** Alkalmazásszintű scope: a kézi ellenőrzés akkor is lefut, ha közben képernyőt váltasz. */
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        private var platformReady = false
     }
 }
 
 /** Háttérben, rendszeresen lefutó árellenőrzés. */
 class CheckWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        Store.init(applicationContext)
-        if (Store.settings.value.intervalHours > 0) PriceChecker.checkAll(applicationContext)
-        Updater.dailyCheck(applicationContext)
+        AndroidPlatform.ensure(applicationContext)
+        if (Store.settings.value.intervalHours > 0) PriceChecker.checkAll()
+        Updater.dailyCheck()
         return Result.success()
     }
 }
@@ -103,6 +183,37 @@ object Notifier {
             vibrationPattern = VIBRATION
         }
         manager.createNotificationChannel(channel)
+    }
+
+    private const val UPDATE_CHANNEL_ID = "app_updates"
+    private const val UPDATE_NOTIFICATION_ID = 4242
+
+    fun update(context: Context, release: Updater.Release) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) return
+        val manager = context.getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(
+            NotificationChannel(UPDATE_CHANNEL_ID, "Frissítések", NotificationManager.IMPORTANCE_DEFAULT)
+                .apply { description = "Értesítés, ha az appból új verzió jelent meg" }
+        )
+        val intent = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val pending = PendingIntent.getActivity(
+            context, UPDATE_NOTIFICATION_ID, intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val notification = NotificationCompat.Builder(context, UPDATE_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_flight)
+            .setContentTitle("Új verzió érhető el")
+            .setContentText("Megjelent a REFI ${release.version}. Koppints a frissítéshez.")
+            .setContentIntent(pending)
+            .setAutoCancel(true)
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(UPDATE_NOTIFICATION_ID, notification)
+        } catch (_: SecurityException) {
+        }
     }
 
     fun priceDrop(context: Context, w: Watch, currency: String) {
