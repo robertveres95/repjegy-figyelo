@@ -716,20 +716,23 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
             notify = notify,
         )
         val sameSearch = existing != null && existing.searchKey() == fresh.searchKey()
-        val toSave = if (sameSearch) {
-            existing!!.copy(
-                targetPrice = targetValue,
-                notify = notify,
-                lastNotifiedPrice = null,
-                fromLabel = from.city,
-                toLabel = to.city,
-            )
+        if (sameSearch) {
+            // A tárolt, legfrissebb állapotból: ha közben lefutott egy ellenőrzés,
+            // annak eredményét nem írjuk felül a szerkesztő megnyitásakori példánnyal
+            Store.update(existing!!.id) {
+                it.copy(
+                    targetPrice = targetValue,
+                    notify = notify,
+                    lastNotifiedPrice = null,
+                    fromLabel = from.city,
+                    toLabel = to.city,
+                )
+            }
         } else {
-            fresh
-        }
-        Store.upsert(toSave)
-        if (!sameSearch && Store.settings.value.isReady) {
-            AppScope.scope.launch { PriceChecker.checkOne(toSave.id) }
+            Store.upsert(fresh)
+            if (Store.settings.value.isReady) {
+                AppScope.scope.launch { PriceChecker.checkOne(fresh.id) }
+            }
         }
         onDone()
     }

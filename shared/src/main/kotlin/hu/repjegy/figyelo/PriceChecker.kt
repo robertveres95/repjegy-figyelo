@@ -20,23 +20,34 @@ object PriceChecker {
             .forEach { checkOne(it.id) }
     }
 
-    suspend fun checkOne(id: String) = withContext(Dispatchers.IO) {
-        val watch = Store.watches.value.find { it.id == id } ?: return@withContext
+    suspend fun checkOne(id: String) {
+        val rerun = checkOnce(id)
+        // Ha futás közben megváltozott a keresés (pl. más dátum), az újat is lefuttatjuk;
+        // különben a régi eredményt eldobnánk, az újat pedig ki se próbálnánk.
+        if (rerun) checkOnce(id)
+    }
+
+    /** Igazzal tér vissza, ha az ellenőrzés közben a figyelés keresése megváltozott. */
+    private suspend fun checkOnce(id: String): Boolean = withContext(Dispatchers.IO) {
+        val watch = Store.watches.value.find { it.id == id } ?: return@withContext false
         val settings = Store.settings.value
         val currency = settings.currency
         val now = System.currentTimeMillis()
 
         if (!settings.isReady) {
             Store.update(id) { it.copy(lastError = "Nincs bekapcsolt árforrás (Beállítások)") }
-            return@withContext
+            return@withContext false
         }
         if (watch.isExpired()) {
             Store.update(id) { it.copy(lastError = "Az indulás dátuma már elmúlt") }
-            return@withContext
+            return@withContext false
         }
-        if (id in Store.checking.value) return@withContext
-
-        Store.checking.update { it + id }
+        // Atomi foglalás: két egyszerre induló ellenőrzés (pl. kézi + háttér) ne fusson kétszer
+        while (true) {
+            val cur = Store.checking.value
+            if (id in cur) return@withContext false
+            if (Store.checking.compareAndSet(cur, cur + id)) break
+        }
         try {
             val runs = buildList {
                 if (settings.googleOn) add(SourceRun(GoogleFlights.NAME) { GoogleFlights.search(watch, currency) })
@@ -72,13 +83,14 @@ object PriceChecker {
             if (offers.isEmpty()) {
                 val anyWorked = statuses.any { it.ok }
                 Store.update(id) {
+                    if (it.searchKey() != watch.searchKey()) return@update it
                     it.copy(
                         lastChecked = now,
                         sourceStatus = statuses,
                         lastError = if (anyWorked) "Nincs találat ezekkel a beállításokkal" else "Egyik forrás sem válaszolt",
                     )
                 }
-                return@withContext
+                return@withContext changedSince(id, watch)
             }
 
             val best = offers.first()
@@ -107,9 +119,15 @@ object PriceChecker {
                 next
             }
             toNotify?.let { Platform.current.notifyPriceDrop(it, currency) }
+            changedSince(id, watch)
         } finally {
             Store.checking.update { it - id }
         }
+    }
+
+    private fun changedSince(id: String, watch: Watch): Boolean {
+        val cur = Store.watches.value.find { it.id == id } ?: return false
+        return cur.searchKey() != watch.searchKey()
     }
 
     /**

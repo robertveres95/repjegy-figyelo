@@ -196,8 +196,9 @@ object WizzAir {
         val res = Http.request("$base/search/timetableV2", method = "POST", headers = apiHeaders(), body = body.toString())
         if (res.code == 429) throw FatalSourceException("a Wizz Air bot-védelme blokkolta")
         if (res.code == 400 || res.code == 401 || res.code == 403) {
+            // Nincs ilyen útvonal: ezt nem érdemes új munkamenettel újrapróbálni
+            if (res.code == 400 && res.body.contains("validationCodes")) return emptyList()
             if (retry) return searchPair(w, origin, destination, currency, retry = false)
-            if (res.code == 400 && res.body.contains("validationCodes")) return emptyList() // nincs ilyen útvonal
             throw FatalSourceException("a Wizz Air elutasította a kérést (HTTP ${res.code})")
         }
         if (res.code !in 200..299) throw IOException("HTTP ${res.code}")

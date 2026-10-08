@@ -54,8 +54,11 @@ object Updater {
                 if (a.optString("name").endsWith(Platform.current.installerSuffix)) apkUrl = a.optString("browser_download_url")
             }
         }
+        // Ha ebben a kiadásban (még) nincs telepítő ehhez a platformhoz (pl. a Windows-build
+        // később végez), ne kérjünk kötelező frissítést: az ablak nem lenne bezárható.
+        if (apkUrl.isNullOrBlank()) return@runCatching null
         val pageUrl = json.optString("html_url", "https://github.com/$REPO/releases/latest")
-        val release = Release(version, build, apkUrl ?: pageUrl, pageUrl)
+        val release = Release(version, build, apkUrl, pageUrl)
         if (isNewer(release)) release else null
     }.getOrNull().also { if (it != null) available.value = it }
 

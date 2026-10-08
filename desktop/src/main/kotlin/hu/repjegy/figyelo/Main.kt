@@ -32,6 +32,11 @@ import java.awt.Desktop
 import java.io.File
 import java.io.InputStream
 import java.net.URI
+import java.nio.channels.FileChannel
+import java.nio.channels.FileLock
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
 import java.util.Properties
 import javax.swing.SwingUtilities
 
@@ -72,11 +77,49 @@ object DesktopPrefs : Prefs {
         // Előbb ideiglenes fájlba, aztán csere: áramszünetnél se sérüljön
         val tmp = File(file.parentFile, file.name + ".tmp")
         tmp.writer(Charsets.UTF_8).use { props.store(it, "REFI") }
-        if (!tmp.renameTo(file)) {
-            file.delete()
-            tmp.renameTo(file)
+        // Windowson a renameTo nem ír felül létező fájlt, ezért Files.move kell
+        val src = tmp.toPath()
+        val dst = file.toPath()
+        try {
+            Files.move(src, dst, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        } catch (_: Exception) {
+            runCatching { Files.move(src, dst, StandardCopyOption.REPLACE_EXISTING) }
         }
     }
+
+    /** Az app adatmappája (%APPDATA%\REFI). */
+    val dir: File get() = file.parentFile
+}
+
+// ---------------------------------------------------------------- Egyetlen példány
+
+/**
+ * Egyszerre csak egy REFI fusson (különben a bejelentkezéskori indítás és egy kézi
+ * megnyitás két tálcaikont, két háttér-ellenőrzést és ütköző mentéseket adna).
+ * A második példány jelez az elsőnek, hogy mutassa az ablakát, majd kilép.
+ */
+object SingleInstance {
+    private var channel: FileChannel? = null
+    private var lock: FileLock? = null
+    private val showFile: File get() = File(DesktopPrefs.dir, "refi.show")
+
+    fun acquire(): Boolean {
+        return runCatching {
+            val ch = FileChannel.open(
+                File(DesktopPrefs.dir, "refi.lock").toPath(),
+                StandardOpenOption.CREATE, StandardOpenOption.WRITE,
+            )
+            val l = ch.tryLock()
+            if (l == null) { ch.close(); false } else { channel = ch; lock = l; true }
+        }.getOrDefault(true) // ha a zárolás nem működik, inkább induljon el
+    }
+
+    fun requestShow() {
+        runCatching { showFile.writeText(System.currentTimeMillis().toString()) }
+    }
+
+    /** Igaz, ha egy másik indítás az ablak megjelenítését kérte (és törli a kérést). */
+    fun consumeShowRequest(): Boolean = showFile.exists() && showFile.delete()
 }
 
 // ---------------------------------------------------------------- Értesítés a tálcáról
@@ -129,7 +172,9 @@ object Autostart {
         runCatching {
             ProcessBuilder(
                 "reg", "add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-                "/v", "REFI", "/t", "REG_SZ", "/d", "\"$exe\" --tray", "/f",
+                // A reg.exe-nek az idézőjeleket \"-ként kell átadni, különben szóközös útvonalnál
+                // (pl. C:\Users\Kiss Anna\...) elvesznek, és az automatikus indítás nem működik
+                "/v", "REFI", "/t", "REG_SZ", "/d", "\\\"$exe\\\" --tray", "/f",
             ).redirectErrorStream(true).start().waitFor()
         }
     }
@@ -274,6 +319,12 @@ fun main(args: Array<String>) {
         kotlin.system.exitProcess(selfTest(it.substringAfter("=")))
     }
     val startHidden = "--tray" in args
+    if (!SingleInstance.acquire()) {
+        // Már fut egy REFI: kézi indításnál az mutassa az ablakát
+        if (!startHidden) SingleInstance.requestShow()
+        kotlin.system.exitProcess(0)
+    }
+    SingleInstance.consumeShowRequest() // régi, beragadt kérés törlése
     Platform.current = DesktopPlatform
     Store.init(DesktopPrefs)
     AppScope.splashPending = !startHidden
@@ -307,6 +358,15 @@ fun main(args: Array<String>) {
             height = 820.dp,
             position = WindowPosition(Alignment.Center),
         )
+        LaunchedEffect(Unit) {
+            while (true) {
+                delay(700)
+                if (SingleInstance.consumeShowRequest()) {
+                    windowState.isMinimized = false
+                    visible = true
+                }
+            }
+        }
         Window(
             onCloseRequest = {
                 visible = false

@@ -341,7 +341,10 @@ fun Modifier.enterAnimation(delayMs: Int = 0): Modifier {
 @Composable
 fun BellToggle(on: Boolean, onToggle: () -> Unit) {
     val shake = remember { Animatable(0f) }
+    // Csak átkapcsoláskor rázkódjon, a lista első megjelenésekor ne
+    var first by remember { mutableStateOf(true) }
     LaunchedEffect(on) {
+        if (first) { first = false; return@LaunchedEffect }
         shake.snapTo(0f)
         for (angle in listOf(18f, -16f, 12f, -8f, 4f, 0f)) {
             shake.animateTo(angle, tween(55))
