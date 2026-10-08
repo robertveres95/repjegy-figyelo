@@ -24,7 +24,8 @@ object SerpApi {
             "children" to w.children.toString(),
             "infants_in_seat" to w.infantsInSeat.toString(),
             "infants_on_lap" to w.infantsOnLap.toString(),
-            "bags" to w.bags.toString(),
+            // A poggyászdíjat a Google-alapú ár csak részben tartalmazza: becsléssel adjuk hozzá (Fees)
+            "bags" to "0",
             "stops" to w.stops.toString(),
             "sort_by" to "2",
             "currency" to currency,
@@ -62,7 +63,7 @@ object SerpApi {
                 val airlines = (0 until flights.length())
                     .mapNotNull { flights.optJSONObject(it)?.optString("airline")?.takeIf(String::isNotBlank) }
                     .distinct()
-                offers += Offer(
+                offers += Fees.apply(Offer(
                     price = price,
                     source = NAME,
                     airline = airlines.takeIf { it.isNotEmpty() }?.joinToString(", "),
@@ -72,9 +73,7 @@ object SerpApi {
                     arrival = toIso(last?.optJSONObject("arrival_airport")?.optString("time")),
                     stops = if (flights.length() > 0) flights.length() - 1 else null,
                     url = flightsUrl,
-                    bagsIncluded = !w.checkedBag,
-                    note = if (w.checkedBag) "feladott poggyász nélkül" else null,
-                )
+                ), w, currency, includeInfants = false)
             }
         }
         return offers

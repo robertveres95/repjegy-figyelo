@@ -34,6 +34,7 @@ Android- és Windows-app, ami figyeli a repülőjegyárakat, és értesítést k
 
 - A kulcs nélküli források nem hivatalos felületek: bármikor megváltozhatnak, és az oldalak feltételei többnyire tiltják az automatizált lekérdezést. Túl gyakori ellenőrzésnél ideiglenesen letilthatnak.
 - A Ryanair és a Wizz Air egy főre adja az alapárat poggyász nélkül; az összárat az utasszámmal becsüljük.
+- A fapadosoknál (Ryanair, Wizz Air, easyJet stb.) a kért poggyász és az ölben utazó csecsemő díját becsült összeggel adjuk hozzá (a megjegyzésben „becsült … díjjal” jelzi). A Google ezeket csak részben számolja bele, ezért minden forrásnál egységesen becsülünk.
 - Oda-vissza útnál a Google Flights csak az odaút időpontját adja meg; a visszaút a megnyitott oldalon választható.
 - Az ingyenes SerpApi-keret havi 250 keresés.
 - A nem forintos árakat az EKB napi árfolyamával (frankfurter.dev) váltjuk át.

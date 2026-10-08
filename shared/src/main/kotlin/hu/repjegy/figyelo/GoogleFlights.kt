@@ -67,7 +67,7 @@ object GoogleFlights {
             for (i in 0 until group.length()) {
                 val item = group.optJSONArray(i) ?: continue
                 seen++
-                val r = runCatching { parseItem(item, url) }
+                val r = runCatching { parseItem(item, url, w, currency) }
                 if (r.isFailure) failed++
                 r.getOrNull()?.let(offers::add)
             }
@@ -81,7 +81,7 @@ object GoogleFlights {
         return offers to seen
     }
 
-    private fun parseItem(item: JSONArray, url: String): Offer? {
+    private fun parseItem(item: JSONArray, url: String, w: Watch, currency: String): Offer? {
         val flight = item.getJSONArray(0)
         val raw = (item.optJSONArray(1)?.optJSONArray(0)?.opt(1) as? Number)?.toDouble() ?: return null
         if (!raw.isFinite() || raw <= 0 || raw > 1e9) return null
@@ -93,7 +93,7 @@ object GoogleFlights {
         if (segments.length() == 0) return null
         val first = segments.getJSONArray(0)
         val last = segments.getJSONArray(segments.length() - 1)
-        return Offer(
+        return Fees.apply(Offer(
             price = price,
             source = NAME,
             airline = airlines,
@@ -103,8 +103,7 @@ object GoogleFlights {
             arrival = dateTime(last.optJSONArray(21), last.optJSONArray(10)),
             stops = segments.length() - 1,
             url = url,
-            bagsIncluded = true, // a kért poggyász becsült díját a Google beleszámolja
-        )
+        ), w, currency, includeInfants = false)
     }
 
     /** [2026, 11, 5] + [6, 25] → "2026-11-05T06:25". A Google a nulla értékeket elhagyja. */
@@ -149,12 +148,8 @@ object GoogleFlights {
             }
             bytesField(8, passengers)
             int(9, w.travelClass.coerceIn(1, 4))
-            if (w.bags > 0 || w.checkedBag) {
-                message(13) {
-                    if (w.bags > 0) int(2, w.bags)
-                    if (w.checkedBag) int(3, 1)
-                }
-            }
+            // Poggyászt itt NEM kérünk: a Google csak részben számolja bele a díjat
+            // (élő próba: Ryanair-kézipoggyász igen, feladott és Wizz nem) – lásd Fees
             int(19, if (w.isRoundTrip) 1 else 2)
         }.bytes()
         return Base64.getEncoder().encodeToString(info)

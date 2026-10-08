@@ -102,7 +102,7 @@ object Ignav {
             val price = itin.optJSONObject("price") ?: continue
             val amount = price.optDouble("amount", Double.NaN)
             if (amount.isNaN() || amount <= 0) continue
-            val inTarget = Rates.convert(amount, price.optString("currency", currency), currency)
+            val inTarget = runCatching { Rates.convert(amount, price.optString("currency", currency), currency) }.getOrNull() ?: continue
             val outbound = itin.optJSONObject("outbound")
             val inbound = itin.optJSONObject("inbound")
             val outSegs = outbound?.optJSONArray("segments")

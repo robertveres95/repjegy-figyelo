@@ -79,7 +79,7 @@ class LogicTest {
         val ranked = PriceChecker.rank(w, listOf(
             Offer(10000, "Ryanair", bagsIncluded = false, departure = "2026-11-05T06:25", fromCode = "BUD", toCode = "STN", airline = "Ryanair"),
             Offer(20000, "Google Flights", bagsIncluded = true, departure = "2026-11-05T09:00", fromCode = "BUD", toCode = "LTN", airline = "Wizz Air"),
-        ))
+        ), java.time.LocalDateTime.of(2026, 1, 1, 0, 0))
         assertEquals(20000, ranked.first().price)
     }
 
@@ -87,7 +87,7 @@ class LogicTest {
         val w = watch()
         val a = Offer(15000, "Google Flights", "Ryanair", "BUD", "STN", "2026-11-05T06:25")
         val b = Offer(14000, "Ryanair", "Ryanair", "BUD", "STN", "2026-11-05T06:25")
-        val ranked = PriceChecker.rank(w, listOf(a, b))
+        val ranked = PriceChecker.rank(w, listOf(a, b), java.time.LocalDateTime.of(2026, 1, 1, 0, 0))
         assertEquals(1, ranked.size)
         assertEquals(14000, ranked.first().price)
     }
@@ -114,6 +114,7 @@ class LogicTest {
     @Test fun prices() {
         val huf = formatPrice(1234567, "HUF")
         assertTrue(huf.filter(Char::isDigit) == "1234567", huf)
+        assertFalse(huf.contains(' '), "sima szóköz (sortörés) van benne: '$huf'")
         assertTrue(formatPrice(99, "EUR").contains("99"))
     }
 
@@ -126,8 +127,49 @@ class LogicTest {
         assertTrue(codes("LTN").any { it == "LTN" })
         assertTrue(Airports.search("").size <= 50)
         assertTrue(Airports.search("zzzzqqq").isEmpty())
+        assertTrue(codes("lodz").any { "LCJ" in it }, "Łódź: ${codes("lodz")}")
         val place = assertNotNull(Airports.placeFor("LHR,LGW,STN,LTN,LCY,SEN", null))
         assertEquals("London", place.city)
+    }
+
+    @Test fun bagFeeEstimates() {
+        val rt = watch(ret = LocalDate.now().plusDays(37).toString(), bags = 1, checked = true)
+        assertEquals(2 * (25.0 + 35.0), Fees.extraEur(rt, "Ryanair", includeInfants = false))
+        assertEquals(0.0, Fees.extraEur(rt, "Lufthansa", includeInfants = false))
+        assertEquals(0.0, Fees.extraEur(watch(), "Wizz Air", includeInfants = true))
+        val o = Fees.apply(Offer(100, "Ryanair", "Ryanair"), rt, "EUR", includeInfants = false)
+        assertEquals(220, o.price)
+        assertTrue(o.bagsIncluded && o.note!!.contains("becsült"), o.toString())
+        val infant = watch().copy(infantsOnLap = 1)
+        assertEquals(30.0, Fees.extraEur(infant, "Ryanair", includeInfants = true))
+        assertEquals(0.0, Fees.extraEur(infant, "Ryanair", includeInfants = false))
+    }
+
+    @Test fun pastDeparturesAreDropped() {
+        val w = watch()
+        val now = java.time.LocalDateTime.of(2026, 11, 5, 12, 0)
+        val ranked = PriceChecker.rank(w, listOf(
+            Offer(100, "x", "A", "BUD", "STN", "2026-11-05T06:00"),
+            Offer(200, "x", "B", "BUD", "STN", "2026-11-05T18:00"),
+        ), now)
+        assertEquals(listOf(200), ranked.map { it.price })
+    }
+
+    @Test fun safeUrls() {
+        assertTrue(isSafeWebUrl("https://www.ryanair.com/hu/hu"))
+        assertFalse(isSafeWebUrl("file:///C:/Windows/System32/calc.exe"))
+        assertFalse(isSafeWebUrl("http://example.com"))
+        assertFalse(isSafeWebUrl("intent://scan/#Intent;scheme=zxing;end"))
+        assertFalse(isSafeWebUrl("javascript:alert(1)"))
+        assertFalse(isSafeWebUrl(null))
+    }
+
+    @Test fun alertRuleMatchesCard() {
+        val w = watch(bags = 1)
+        assertFalse(w.alertable(Offer(1000, "x", bagsIncluded = false)))
+        assertTrue(w.alertable(Offer(1000, "x", bagsIncluded = true)))
+        assertFalse(w.alertable(Offer(1000, "x", partial = true)))
+        assertFalse(w.alertable(Offer(w.targetPrice + 1, "x")))
     }
 
     @Test fun searchKeyIgnoresResultFields() {

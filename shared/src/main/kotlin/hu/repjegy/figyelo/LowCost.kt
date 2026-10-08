@@ -33,8 +33,6 @@ private fun trimTime(raw: String?): String? =
 private fun lowCostNote(w: Watch): String? {
     val parts = mutableListOf<String>()
     if (w.seatedPassengers > 1) parts += "becsült: ${w.seatedPassengers} × egy fő ára"
-    if (w.infantsOnLap > 0) parts += "csecsemődíj nélkül"
-    if (w.wantsBags) parts += "poggyász nélkül"
     return parts.takeIf { it.isNotEmpty() }?.joinToString(", ")
 }
 
@@ -103,8 +101,9 @@ object Ryanair {
             val perPerson = priceObj.optDouble("value", Double.NaN)
             if (perPerson.isNaN() || perPerson <= 0) continue
             val cur = priceObj.optString("currencyCode", currency)
-            val total = Rates.convert(perPerson, cur, currency) * w.seatedPassengers
-            offers += Offer(
+            // Egy furcsa ajánlat (pl. ismeretlen pénznem) ne vigye el a többit
+            val total = runCatching { Rates.convert(perPerson, cur, currency) * w.seatedPassengers }.getOrNull() ?: continue
+            offers += Fees.apply(Offer(
                 price = ceil(total).toInt(),
                 source = NAME,
                 airline = "Ryanair",
@@ -117,11 +116,8 @@ object Ryanair {
                 returnArrival = trimTime(inb?.optString("arrivalDate")),
                 returnStops = if (inb != null) 0 else null,
                 url = bookingUrl(w, origin, destination),
-                bagsIncluded = !w.wantsBags,
                 note = lowCostNote(w),
-                // Az ölben utazó csecsemő díja nincs benne: nem riaszthat és nem nyerhet tévesen
-                partial = w.infantsOnLap > 0,
-            )
+            ), w, currency, includeInfants = true)
         }
         return offers
     }
@@ -228,7 +224,7 @@ object WizzAir {
         val perPerson = Rates.convert(outbound.amount, outbound.currency, currency) +
             (inbound?.let { Rates.convert(it.amount, it.currency, currency) } ?: 0.0)
         return listOf(
-            Offer(
+            Fees.apply(Offer(
                 price = ceil(perPerson * w.seatedPassengers).toInt(),
                 source = NAME,
                 airline = "Wizz Air",
@@ -243,11 +239,8 @@ object WizzAir {
                 url = "https://wizzair.com/hu-hu/booking/select-flight/${outbound.from ?: origin}/${outbound.to ?: destination}/" +
                     "${w.outboundDate}/${w.returnDate ?: "null"}/${w.adults}/" +
                     "${w.children + w.infantsInSeat}/${w.infantsOnLap}/null",
-                bagsIncluded = !w.wantsBags,
                 note = lowCostNote(w),
-                // Az ölben utazó csecsemő díja nincs benne: nem riaszthat és nem nyerhet tévesen
-                partial = w.infantsOnLap > 0,
-            )
+            ), w, currency, includeInfants = true)
         )
     }
 
