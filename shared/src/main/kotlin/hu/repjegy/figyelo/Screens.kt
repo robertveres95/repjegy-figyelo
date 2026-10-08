@@ -381,6 +381,12 @@ internal fun HomeScreen(
                                         }
                                         AppScope.scope.launch {
                                             val (added, updated) = Store.importWatches(parsed.watches, parsed.currency)
+                                            val before = Store.settings.value
+                                            val restored = Backup.applySettings(parsed.settings, before)
+                                            if (restored != before) {
+                                                Store.saveSettings(restored)
+                                                if (restored.intervalHours != before.intervalHours) Platform.current.reschedule()
+                                            }
                                             toast = "Visszaállítva: $added új, $updated frissített figyelés" +
                                                 (if (parsed.skipped > 0) " (${parsed.skipped} hibás kihagyva)." else ".")
                                             if (Store.settings.value.isReady) PriceChecker.checkAll()
@@ -857,7 +863,8 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
             to == null -> "Válaszd ki az érkezési repülőteret a listából."
             from.codes.split(',').any { it in to.codes.split(',') } ->
                 "Az indulási és érkezési hely nem lehet ugyanaz."
-            outDate.isBefore(today) -> "Az indulás dátuma nem lehet a múltban."
+            // Rugalmas dátumnál elég, ha a tartomány még nem múlt el
+            outDate.plusDays(flexDays.toLong()).isBefore(today) -> "Az indulás dátuma nem lehet a múltban."
             roundTrip && retDate.isBefore(outDate) -> "A visszaút nem lehet az indulás előtt."
             adults + children + infantsInSeat + infantsOnLap > 9 -> "Legfeljebb 9 utas adható meg."
             targetValue == null || targetValue <= 0 -> "Adj meg egy célárat."
@@ -933,7 +940,7 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
             SwitchRow("Oda-vissza út", roundTrip) { roundTrip = it }
 
             SectionTitle("Dátum")
-            DateField("Indulás", outDate, minDate = today, onValidChange = { outValid = it }) {
+            DateField("Indulás", outDate, minDate = today.minusDays(flexDays.toLong()), onValidChange = { outValid = it }) {
                 // Az út hossza marad: ha az indulás eltolódik, a visszaút vele mozog
                 // (gépelés közbeni részleges dátumnál sem vész el az eredeti hossz)
                 val days = java.time.temporal.ChronoUnit.DAYS.between(outDate, retDate).coerceAtLeast(0)
@@ -1164,6 +1171,13 @@ internal fun SettingsScreen(onDone: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(Modifier.weight(1f)) { ChoiceField("Ettől", QUIET_HOURS, quietFrom) { quietFrom = it } }
                     Box(Modifier.weight(1f)) { ChoiceField("Eddig", QUIET_HOURS, quietTo) { quietTo = it } }
+                }
+                if (quietFrom == quietTo) {
+                    Text(
+                        "A kezdő és a záró óra azonos: így a csendes órák nem működnek.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
                 Text(
                     Platform.current.quietHint,

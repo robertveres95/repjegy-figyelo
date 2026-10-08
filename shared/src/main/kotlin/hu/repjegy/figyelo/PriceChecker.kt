@@ -5,6 +5,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 
@@ -14,7 +15,7 @@ object PriceChecker {
     private const val MAX_OFFERS = 10
     const val CURRENCY_HINT_PREFIX = "Pénznemet váltottál"
 
-    private class SourceRun(val name: String, val search: () -> List<Offer>)
+    private class SourceRun(val name: String, val search: suspend () -> List<Offer>)
 
     suspend fun checkAll() {
         Store.watches.value
@@ -57,17 +58,26 @@ object PriceChecker {
             val runs = buildList {
                 // Rugalmas dátumnál a kulcs nélküli források minden dátumpárt lekérdeznek
                 // (a kulcsos SerpApi/Ignav csak a pontos dátumot – azok keretét ne égessük el)
-                if (settings.googleOn) add(SourceRun(GoogleFlights.NAME) { flexSearch(watch) { GoogleFlights.search(it, currency) } })
+                // Rugalmas dátumnál a kérések száma gyorsan nő (dátumok × reptérpárok), ezért
+                // ilyenkor kevesebb reptérpárt kérdezünk, és a Google repterenkénti tartaléka sem fut
+                val flex = watch.flexDays > 0
+                val pairsCap = if (flex) MAX_PAIRS_FLEX else MAX_PAIRS
+                if (settings.googleOn) add(SourceRun(GoogleFlights.NAME) {
+                    flexSearch(watch) { GoogleFlights.search(it, currency, allowFallback = !flex) }
+                })
                 if (settings.ryanairOn) add(SourceRun(Ryanair.NAME) {
-                    airlineAllowed(watch, "ryanair")
-                    flexSearch(watch) { Ryanair.search(it, currency) }
+                    airlineAllowed(watch, "Ryanair")
+                    flexSearch(watch) { Ryanair.search(it, currency, pairsCap) }
                 })
                 if (settings.wizzOn) add(SourceRun(WizzAir.NAME) {
-                    airlineAllowed(watch, "wizz")
-                    flexSearch(watch) { WizzAir.search(it, currency) }
+                    airlineAllowed(watch, "Wizz Air")
+                    flexSearch(watch) { WizzAir.search(it, currency, pairsCap) }
                 })
-                if (settings.useSerpApi) add(SourceRun(SerpApi.NAME) { SerpApi.search(watch, settings.apiKey, currency) })
-                if (settings.useIgnav) add(SourceRun(Ignav.NAME) { Ignav.search(watch, settings.ignavKey, currency) })
+                // A kulcsos források csak egy dátumot kérdeznek: a rugalmas tartomány első
+                // érvényes (nem múltbeli) napját – így a keretük nem fogy el
+                val single = watch.datePairs().first().let { (o, r) -> watch.copy(outboundDate = o, returnDate = r, flexDays = 0) }
+                if (settings.useSerpApi) add(SourceRun(SerpApi.NAME) { SerpApi.search(single, settings.apiKey, currency) })
+                if (settings.useIgnav) add(SourceRun(Ignav.NAME) { Ignav.search(single, settings.ignavKey, currency) })
             }
 
             // Minden forrás párhuzamosan fut; egyik hibája sem akasztja meg a többit.
@@ -153,24 +163,23 @@ object PriceChecker {
 
     /** Ha a légitársaság-szűrő kizárja ezt a fapadost, a lekérdezést meg sem kezdjük. */
     private fun airlineAllowed(w: Watch, name: String) {
-        val tokens = w.airlineTokens
-        if (tokens.isNotEmpty() && tokens.none { name.contains(it) || it.contains(name) }) {
-            throw SkipSourceException("kizárva a légitársaság-szűrővel")
-        }
+        if (!w.airlineMatches(name)) throw SkipSourceException("kizárva a légitársaság-szűrővel")
     }
 
     /**
      * Rugalmas dátum: minden dátumpárra lefuttatja a keresést és összefésüli. Ha egy-egy
      * dátum hibázik, a többi eredménye megmarad; ha mind hibázik, az első hibát adja tovább.
      */
-    internal fun flexSearch(w: Watch, search: (Watch) -> List<Offer>): List<Offer> {
+    internal suspend fun flexSearch(w: Watch, search: (Watch) -> List<Offer>): List<Offer> {
         val pairs = w.datePairs()
         if (pairs.size <= 1 && w.flexDays == 0) return search(w)
         val results = mutableListOf<Offer>()
         var firstError: Exception? = null
         var anyOk = false
         for ((index, pair) in pairs.withIndex()) {
-            if (index > 0) Thread.sleep(400) // ne zúdítsunk egyszerre sok kérést a forrásra
+            // ne zúdítsunk egyszerre sok kérést a forrásra; leállításkor (pl. háttérmunka vége) itt megáll
+            if (index > 0) kotlinx.coroutines.delay(400)
+            kotlin.coroutines.coroutineContext.ensureActive()
             try {
                 results += search(w.copy(outboundDate = pair.first, returnDate = pair.second, flexDays = 0))
                 anyOk = true

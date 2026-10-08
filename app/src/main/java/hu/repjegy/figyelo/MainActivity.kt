@@ -68,6 +68,11 @@ class MainActivity : ComponentActivity() {
         AppScope.incomingText.value = text.take(20_000)
     }
 
+    override fun onDestroy() {
+        FileBridge.unregister(this)
+        super.onDestroy()
+    }
+
     override fun onResume() {
         super.onResume()
         AppScope.resumeCount.value++

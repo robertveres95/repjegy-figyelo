@@ -45,7 +45,7 @@ import kotlinx.coroutines.launch
 /** Egy megosztott figyelés átvétele kódból (vagy a teljes üzenetből, amiben a kód van). */
 @Composable
 internal fun ImportCodeDialog(initial: String, onDismiss: () -> Unit, onImported: (String) -> Unit) {
-    var text by remember { mutableStateOf(initial) }
+    var text by remember(initial) { mutableStateOf(initial) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val decoded = remember(text) { ShareCode.decode(text) }
@@ -115,15 +115,16 @@ internal fun DiscoverScreen(
     initialResults: List<Discover.Result>? = null,
 ) {
     val currency = Store.settings.collectAsState().value.currency
-    var from by remember { mutableStateOf<Place?>(Airports.placeFor("BUD", null)) }
-    var period by remember { mutableStateOf(0) }
-    var tripType by remember { mutableStateOf(1) }
-    var adults by remember { mutableStateOf(1) }
-    var maxPrice by remember { mutableStateOf("") }
+    val mem = Discover.Memory
+    var from by remember { mutableStateOf<Place?>(Airports.placeFor(mem.fromCodes ?: "BUD", null)) }
+    val periods = remember { Discover.periods() }
+    var period by remember { mutableStateOf(mem.period.takeIf { p -> periods.any { it.first == p } } ?: 0) }
+    var tripType by remember { mutableStateOf(mem.tripType) }
+    var adults by remember { mutableStateOf(mem.adults) }
+    var maxPrice by remember { mutableStateOf(mem.maxPrice) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var results by remember { mutableStateOf(initialResults) }
-    val periods = remember { Discover.periods() }
+    var results by remember { mutableStateOf(initialResults ?: mem.results) }
 
     fun startSearch() {
         val origin = from
@@ -140,6 +141,12 @@ internal fun DiscoverScreen(
             results = r.getOrNull()
             error = r.exceptionOrNull()?.let { "Nem sikerült a keresés: ${it.message?.take(120)}" }
             loading = false
+            mem.period = period
+            mem.tripType = tripType
+            mem.adults = adults
+            mem.maxPrice = maxPrice
+            mem.fromCodes = origin.codes
+            mem.results = r.getOrNull()
         }
     }
 

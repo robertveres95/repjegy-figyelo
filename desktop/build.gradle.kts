@@ -54,7 +54,10 @@ dependencies {
 // Automata tesztek; -Drefi.live=true esetén az éles árforrás-próba is lefut
 tasks.test {
     useJUnitPlatform()
-    systemProperty("refi.live", System.getProperty("refi.live") ?: "false")
+    // A -D kapcsolók csak így jutnak el a tesztekig
+    for (p in listOf("refi.live", "refi.health", "refi.screens")) {
+        systemProperty(p, System.getProperty(p) ?: "false")
+    }
     workingDir = projectDir
     outputs.upToDateWhen { false }
     testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }

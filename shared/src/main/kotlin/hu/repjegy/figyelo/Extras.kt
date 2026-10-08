@@ -51,10 +51,7 @@ object ShareCode {
             val bytes = inflate(Base64.getUrlDecoder().decode(code))
             val json = JSONObject(String(bytes, Charsets.UTF_8))
             val cur = json.optString("cur", "HUF").takeIf { c -> CURRENCIES.any { it.first == c } } ?: "HUF"
-            val w = Watch.fromJson(json.getJSONObject("w"))
-            require(w.from.isNotBlank() && w.to.isNotBlank()) { "üres útvonal" }
-            require(w.from.split(',').all { it.matches(Regex("[A-Z]{3}")) } && w.to.split(',').all { it.matches(Regex("[A-Z]{3}")) })
-            require(w.adults in 1..9 && w.targetPrice > 0)
+            val w = Watch.fromJson(json.getJSONObject("w")).sanitized() ?: error("érvénytelen figyelés")
             // Új azonosító: a saját figyeléseket sosem írja felül egy kapott kód
             searchOnly(w).copy(id = UUID.randomUUID().toString(), notify = true) to cur
         }.getOrNull()
@@ -90,6 +87,44 @@ object ShareCode {
     }
 }
 
+/**
+ * Kívülről érkező (megosztott vagy mentett) figyelés ellenőrzése: csak értelmes értékek
+ * maradhatnak (pl. 1–9 felnőtt, létező kódformátum, rövid szövegek). Null, ha használhatatlan.
+ */
+internal fun Watch.sanitized(): Watch? {
+    val code = Regex("[A-Z]{3}")
+    val fromCodes = from.split(',').map { it.trim() }
+    val toCodes = to.split(',').map { it.trim() }
+    if (fromCodes.isEmpty() || toCodes.isEmpty() || fromCodes.size > 8 || toCodes.size > 8) return null
+    if (!(fromCodes + toCodes).all { it.matches(code) }) return null
+    if (fromCodes.any { it in toCodes }) return null
+    val out = runCatching { LocalDate.parse(outboundDate) }.getOrNull() ?: return null
+    val ret = returnDate?.let { r -> runCatching { LocalDate.parse(r) }.getOrNull() ?: return null }
+    if (ret != null && ret.isBefore(out)) return null
+    if (adults !in 1..9 || targetPrice <= 0 || id.isBlank() || id.length > 64) return null
+    val ch = children.coerceIn(0, 8)
+    val seat = infantsInSeat.coerceIn(0, 4)
+    val lap = infantsOnLap.coerceIn(0, adults)
+    if (adults + ch + seat + lap > 9) return null
+    return copy(
+        from = fromCodes.joinToString(","),
+        to = toCodes.joinToString(","),
+        fromLabel = fromLabel?.take(60),
+        toLabel = toLabel?.take(60),
+        travelClass = travelClass.coerceIn(1, 4),
+        children = ch,
+        infantsInSeat = seat,
+        infantsOnLap = lap,
+        bags = bags.coerceIn(0, adults + ch + seat),
+        stops = stops.coerceIn(0, 3),
+        flexDays = flexDays.coerceIn(0, 3),
+        depFrom = depFrom?.coerceIn(0, 23),
+        depTo = depTo?.coerceIn(1, 24),
+        airlines = airlines.take(80),
+        lastError = lastError?.take(300),
+    )
+}
+
 // ---------------------------------------------------------------- Mentés és visszaállítás
 
 /**
@@ -117,7 +152,7 @@ object Backup {
         .put("watches", JSONArray().apply { watches.forEach { put(it.toJson()) } })
         .toString(2)
 
-    class Parsed(val watches: List<Watch>, val currency: String, val skipped: Int)
+    class Parsed(val watches: List<Watch>, val currency: String, val skipped: Int, val settings: JSONObject? = null)
 
     /** Egy mentésfájl beolvasása; null, ha nem REFI-mentés. A hibás figyeléseket kihagyja. */
     fun parse(text: String): Parsed? {
@@ -125,10 +160,23 @@ object Backup {
         if (json.optString("format") != FORMAT) return null
         val arr = json.optJSONArray("watches") ?: return null
         val list = (0 until arr.length()).mapNotNull { i ->
-            arr.optJSONObject(i)?.let { o -> runCatching { Watch.fromJson(o) }.getOrNull() }
+            arr.optJSONObject(i)?.let { o -> runCatching { Watch.fromJson(o).sanitized() }.getOrNull() }
         }
         val cur = json.optString("currency", "HUF").takeIf { c -> CURRENCIES.any { it.first == c } } ?: "HUF"
-        return Parsed(list, cur, arr.length() - list.size)
+        return Parsed(list, cur, arr.length() - list.size, json.optJSONObject("settings"))
+    }
+
+    /** A mentett beállítások (téma, betűméret, csendes órák, gyakoriság) alkalmazása; a kulcsok és a pénznem maradnak. */
+    fun applySettings(saved: JSONObject?, current: Settings): Settings {
+        saved ?: return current
+        return current.copy(
+            intervalHours = saved.optInt("intervalHours", current.intervalHours).takeIf { h -> INTERVALS.any { it.first == h } } ?: current.intervalHours,
+            themeMode = saved.optString("themeMode", current.themeMode).takeIf { t -> THEMES.any { it.first == t } } ?: current.themeMode,
+            textScale = saved.optInt("textScale", current.textScale).takeIf { t -> TEXT_SCALES.any { it.first == t } } ?: current.textScale,
+            quietOn = saved.optBoolean("quietOn", current.quietOn),
+            quietFrom = saved.optInt("quietFrom", current.quietFrom).coerceIn(0, 23),
+            quietTo = saved.optInt("quietTo", current.quietTo).coerceIn(0, 23),
+        )
     }
 }
 
@@ -147,9 +195,15 @@ fun verdictFor(w: Watch, today: LocalDate = LocalDate.now()): Verdict? {
     val best = w.bestOffer ?: return null
     if (!w.comparable(best)) return null
     val prices = w.history.map { it.price }
-    if (prices.size < 4) return null
+    // Legalább 4 mérés, és ne legyen mind ugyanaz (pl. pár perc alatti kézi ellenőrzések)
+    if (prices.size < 4 || prices.distinct().size < 2) return null
+    val span = w.history.maxOf { it.time } - w.history.minOf { it.time }
+    if (span in 1 until 12 * 3_600_000L) return null
     val now = best.price
-    val daysLeft = runCatching { ChronoUnit.DAYS.between(today, LocalDate.parse(w.outboundDate)) }.getOrDefault(60L)
+    // Rugalmas dátumnál a legjobb ajánlat napja számít
+    val depDay = best.departure?.take(10)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        ?: runCatching { LocalDate.parse(w.outboundDate) }.getOrNull()
+    val daysLeft = depDay?.let { ChronoUnit.DAYS.between(today, it) } ?: 60L
     val lower = prices.count { it < now }
     val share = lower.toDouble() / prices.size
     val min = prices.min()

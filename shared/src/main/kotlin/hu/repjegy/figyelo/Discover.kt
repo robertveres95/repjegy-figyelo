@@ -17,6 +17,16 @@ import kotlin.math.ceil
  */
 object Discover {
 
+    /** Az utolsó keresés (a képernyő elhagyása után visszatérve is látszik). */
+    internal object Memory {
+        var period = 0
+        var tripType = 1
+        var adults = 1
+        var maxPrice = ""
+        var fromCodes: String? = null
+        var results: List<Result>? = null
+    }
+
     /** Út típusa: csak oda, hosszú hétvége (2–4 éj), egy hét (5–9 éj). */
     val TRIP_TYPES = listOf(
         0 to "Csak oda",
@@ -34,7 +44,10 @@ object Discover {
 
     /** Időszakok: a következő 30 nap, majd a következő 6 hónap. */
     fun periods(today: LocalDate = LocalDate.now()): List<Pair<Int, String>> =
-        listOf(0 to "A következő 30 nap") + (0..5).map { i ->
+        listOf(0 to "A következő 30 nap") + (0..5).mapNotNull { i ->
+            // A hónap utolsó napján a folyó hónapból már nem maradt keresendő nap
+            val (start, end) = periodRange(i + 1, today)
+            if (start.isAfter(end)) return@mapNotNull null
             val m = YearMonth.from(today).plusMonths(i.toLong())
             (i + 1) to m.format(monthFormat).replaceFirstChar { it.uppercase() }
         }
@@ -73,8 +86,10 @@ object Discover {
         today: LocalDate = LocalDate.now(),
     ): List<Result> {
         val (start, end) = periodRange(period, today)
+        if (start.isAfter(end)) return emptyList()
         val nights = nightsFor(tripType)
-        val origins = from.split(',').map { it.trim() }.filter { it.length == 3 }.take(3)
+        // Több repteres városnál (pl. London) mindegyiket megkérdezzük: a Ryanair-bázis gyakran a lista végén van
+        val origins = from.split(',').map { it.trim() }.filter { it.length == 3 }.take(6)
         if (origins.isEmpty()) throw IOException("Válassz indulási repteret")
         val all = mutableListOf<Result>()
         var lastError: Exception? = null

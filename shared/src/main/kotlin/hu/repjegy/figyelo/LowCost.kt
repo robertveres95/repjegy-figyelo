@@ -6,20 +6,23 @@ import java.io.IOException
 import java.net.URLEncoder
 import kotlin.math.ceil
 
-private const val MAX_PAIRS = 12
+internal const val MAX_PAIRS = 12
+
+/** Rugalmas dátumnál dátumonként ennyi reptérpárt kérdezünk (különben túl sok kérés lenne). */
+internal const val MAX_PAIRS_FLEX = 4
 
 /**
  * Több repteres városoknál (pl. London: LHR, LGW, STN, LTN…) a párokat „átlósan” vesszük
  * sorra, hogy a korlát minden reptérből adjon párt – a fapadosok bázisai (STN, LTN)
  * gyakran a lista végén vannak, és a sima sorrendnél kimaradnának.
  */
-internal fun pairsOf(w: Watch): List<Pair<String, String>> {
+internal fun pairsOf(w: Watch, max: Int = MAX_PAIRS): List<Pair<String, String>> {
     val from = w.from.split(',')
     val to = w.to.split(',')
     return from.indices.flatMap { i -> to.indices.map { j -> Triple(i, j, from[i] to to[j]) } }
         .sortedWith(compareBy({ maxOf(it.first, it.second) }, { it.first + it.second }))
         .map { it.third }
-        .take(MAX_PAIRS)
+        .take(max)
 }
 
 /** "2026-11-05T06:25:00.000" → "2026-11-05T06:25" */
@@ -36,11 +39,11 @@ private fun lowCostNote(w: Watch): String? {
     return parts.takeIf { it.isNotEmpty() }?.joinToString(", ")
 }
 
-private fun <T> searchPairs(w: Watch, block: (String, String) -> List<T>): List<T> {
+private fun <T> searchPairs(w: Watch, maxPairs: Int, block: (String, String) -> List<T>): List<T> {
     val results = mutableListOf<T>()
     var lastError: Exception? = null
     var anySuccess = false
-    for ((origin, destination) in pairsOf(w)) {
+    for ((origin, destination) in pairsOf(w, maxPairs)) {
         try {
             results += block(origin, destination)
             anySuccess = true
@@ -60,9 +63,9 @@ private fun <T> searchPairs(w: Watch, block: (String, String) -> List<T>): List<
 object Ryanair {
     const val NAME = "Ryanair"
 
-    fun search(w: Watch, currency: String): List<Offer> {
+    fun search(w: Watch, currency: String, maxPairs: Int = MAX_PAIRS): List<Offer> {
         if (w.travelClass != 1) throw SkipSourceException("csak turista osztály")
-        return searchPairs(w) { o, d -> searchPair(w, o, d, currency) }
+        return searchPairs(w, maxPairs) { o, d -> searchPair(w, o, d, currency) }
     }
 
     private fun searchPair(w: Watch, origin: String, destination: String, currency: String): List<Offer> {
@@ -149,9 +152,9 @@ object WizzAir {
     private var apiBase: String? = null
     private var sessionAt = 0L
 
-    fun search(w: Watch, currency: String): List<Offer> {
+    fun search(w: Watch, currency: String, maxPairs: Int = MAX_PAIRS): List<Offer> {
         if (w.travelClass != 1) throw SkipSourceException("csak turista osztály")
-        return searchPairs(w) { o, d -> searchPair(w, o, d, currency, retry = true) }
+        return searchPairs(w, maxPairs) { o, d -> searchPair(w, o, d, currency, retry = true) }
     }
 
     @Synchronized

@@ -27,7 +27,7 @@ object GoogleFlights {
 
     private class Fetched(val offers: List<Offer>, val seen: Int, val errorStatus: Boolean)
 
-    fun search(w: Watch, currency: String): List<Offer> {
+    fun search(w: Watch, currency: String, allowFallback: Boolean = true): List<Offer> {
         // Élő próbák: a Google néha hibajelzést („errorHasStatus”) ad, főleg több repteres
         // oda-vissza keresésre. Ilyenkor egyszer újrapróbáljuk, majd repterenként kérdezünk.
         val first = fetch(w, currency)
@@ -36,7 +36,7 @@ object GoogleFlights {
         val again = fetch(w, currency)
         if (!again.errorStatus) return again.offers
         val pairs = pairsOf(w)
-        if (pairs.size > 1) {
+        if (pairs.size > 1 && allowFallback) {
             val results = pairs.take(6).map { (o, d) ->
                 Thread.sleep(700)
                 runCatching { fetch(w.copy(from = o, to = d), currency) }.getOrNull()

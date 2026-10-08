@@ -51,11 +51,11 @@ class FeaturesTest {
 
     @Test fun flexSearchMergesAndToleratesPartialFailure() {
         var calls = 0
-        val res = PriceChecker.flexSearch(watch(out = LocalDate.now().plusDays(20).toString(), ret = null, flex = 1)) { w ->
+        val res = kotlinx.coroutines.runBlocking { PriceChecker.flexSearch(watch(out = LocalDate.now().plusDays(20).toString(), ret = null, flex = 1)) { w ->
             calls++
             if (calls == 2) throw java.io.IOException("egy nap hibázott")
             listOf(Offer(1000 + calls, "x", departure = w.outboundDate + "T10:00"))
-        }
+        } }
         assertEquals(3, calls)
         assertEquals(2, res.size)
     }
@@ -74,6 +74,57 @@ class FeaturesTest {
             Offer(200, "x", "Wizz Air", "BUD", "LTN", "2026-11-12T10:00"),
         ), java.time.LocalDateTime.of(2026, 1, 1, 0, 0))
         assertEquals(listOf(200), ranked.map { it.price })
+    }
+
+    @Test fun airlineFilterNormalisation() {
+        val w = watch().copy(airlines = "wizzair, ryan air")
+        assertTrue(w.airlineMatches("Wizz Air"))
+        assertTrue(w.airlineMatches("Ryanair"))
+        assertTrue(w.airlineMatches("Lufthansa, Ryanair"))
+        assertFalse(w.airlineMatches("Lufthansa"))
+        assertTrue(watch().copy(airlines = "").airlineMatches("Bármi"))
+    }
+
+    @Test fun sanitizeRejectsNonsense() {
+        val ok = watch()
+        assertNotNull(ok.sanitized())
+        assertNull(ok.copy(adults = 0).sanitized())
+        assertNull(ok.copy(from = "BUD;DROP").sanitized())
+        assertNull(ok.copy(to = "BUD").sanitized(), "honnan = hova")
+        assertNull(ok.copy(returnDate = "2026-11-01").sanitized(), "visszaút az indulás előtt")
+        val clamped = ok.copy(flexDays = 99, stops = 9, bags = 50, toLabel = "x".repeat(500)).sanitized()!!
+        assertEquals(3, clamped.flexDays)
+        assertEquals(3, clamped.stops)
+        assertTrue(clamped.bags <= 3)
+        assertEquals(60, clamped.toLabel!!.length)
+    }
+
+    @Test fun backupRestoresSettingsButNotKeys() {
+        val text = Backup.export(listOf(watch()), Settings(themeMode = THEME_DAY, textScale = 130, quietOn = true, quietFrom = 23, apiKey = "K"))
+        val parsed = Backup.parse(text)!!
+        val restored = Backup.applySettings(parsed.settings, Settings(apiKey = "SAJAT", currency = "EUR"))
+        assertEquals(THEME_DAY, restored.themeMode)
+        assertEquals(130, restored.textScale)
+        assertTrue(restored.quietOn)
+        assertEquals(23, restored.quietFrom)
+        assertEquals("SAJAT", restored.apiKey)
+        assertEquals("EUR", restored.currency)
+    }
+
+    @Test fun verdictNeedsVariedHistory() {
+        val w = Watch(
+            id = "v", from = "BUD", to = "STN", outboundDate = "2026-12-20", returnDate = null, travelClass = 1, adults = 1,
+            children = 0, infantsInSeat = 0, infantsOnLap = 0, bags = 0, stops = 0, targetPrice = 1, notify = true,
+            offers = listOf(Offer(100, "x")), history = List(5) { PricePoint(it * 1000L, 100) },
+        )
+        assertNull(verdictFor(w, today), "mind ugyanaz → nincs „legalacsonyabb ár” állítás")
+    }
+
+    @Test fun discoverLastDayOfMonth() {
+        val lastDay = LocalDate.of(2026, 10, 31)
+        val periods = Discover.periods(lastDay)
+        assertFalse(periods.any { it.second.contains("október", ignoreCase = true) }, periods.toString())
+        assertEquals(6, periods.size)
     }
 
     @Test fun searchKeyIncludesNewFields() {
@@ -144,7 +195,7 @@ class FeaturesTest {
         fun w(now: Int, hist: List<Int>, out: String = "2026-12-20") = Watch(
             id = "v", from = "BUD", to = "STN", outboundDate = out, returnDate = null, travelClass = 1, adults = 1,
             children = 0, infantsInSeat = 0, infantsOnLap = 0, bags = 0, stops = 0, targetPrice = 1, notify = true,
-            offers = listOf(Offer(now, "x")), history = hist.mapIndexed { i, p -> PricePoint(i.toLong(), p) },
+            offers = listOf(Offer(now, "x")), history = hist.mapIndexed { i, p -> PricePoint(i * 21_600_000L, p) },
         )
         assertNull(verdictFor(w(100, listOf(100, 120)), today), "kevés mérésnél nincs vélemény")
         assertEquals(Verdict.Tone.GOOD, verdictFor(w(90, listOf(120, 110, 100, 90)), today)!!.tone)

@@ -140,9 +140,20 @@ data class Watch(
             .ifEmpty { listOf(outboundDate to returnDate) }
     }
 
-    /** A légitársaság-szűrő elemei kisbetűvel (pl. ["wizz", "ryanair"]). */
+    /** A légitársaság-szűrő elemei kisbetűvel, szóközök nélkül (pl. ["wizz", "ryanair"]). */
     val airlineTokens: List<String>
-        get() = airlines.split(',', ';').map { it.trim().lowercase() }.filter { it.length >= 2 }
+        get() = airlines.split(',', ';').map { normalizeAirline(it) }.filter { it.length >= 2 }
+
+    /**
+     * Átengedi-e a légitársaság-szűrő ezt a légitársaságot (vagy egy több légitársaságos
+     * ajánlat bármelyik tagját). Szóköz és kis-nagybetű nem számít: „wizzair” = „Wizz Air”.
+     */
+    fun airlineMatches(airline: String?): Boolean {
+        val tokens = airlineTokens
+        if (tokens.isEmpty() || airline == null) return true
+        val name = normalizeAirline(airline)
+        return tokens.any { name.contains(it) || (it.length >= 4 && it.contains(name)) }
+    }
 
     /**
      * Megfelel-e az ajánlat az időablaknak és a légitársaság-szűrőnek. Ha a forrás nem adta
@@ -157,12 +168,7 @@ data class Watch(
                 if (depTo != null && minutes > depTo * 60) return false
             }
         }
-        val tokens = airlineTokens
-        if (tokens.isNotEmpty() && o.airline != null) {
-            val a = o.airline.lowercase()
-            if (tokens.none { a.contains(it) }) return false
-        }
-        return true
+        return airlineMatches(o.airline)
     }
 
     /** Ha ez változik, a korábbi árak már nem összehasonlíthatók. */
@@ -329,6 +335,8 @@ val INTERVALS = listOf(
     12 to "12 óránként",
     24 to "Naponta egyszer",
 )
+
+internal fun normalizeAirline(s: String): String = s.lowercase().filter { it.isLetterOrDigit() }
 
 val FLEX_OPTIONS = listOf(
     0 to "Pontos dátum",

@@ -18,6 +18,19 @@ object FileBridge {
     private var pendingExport: ((Boolean) -> Unit)? = null
     private var pendingImport: ((String?) -> Unit)? = null
 
+    /** Az Activity onDestroy-ából: ha még ez az Activity a gazdája, elengedjük. */
+    fun unregister(a: ComponentActivity) {
+        if (activity?.get() !== a) return
+        activity = null
+        createLauncher = null
+        openLauncher = null
+        pendingExport?.invoke(false)
+        pendingImport?.invoke(null)
+        pendingExport = null
+        pendingImport = null
+        pendingContent = null
+    }
+
     /** Az Activity onCreate-jéből hívandó (a regisztrációnak a STARTED előtt kell megtörténnie). */
     fun register(a: ComponentActivity) {
         activity = WeakReference(a)

@@ -2,6 +2,8 @@ package hu.repjegy.figyelo
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,22 +37,27 @@ class RefiWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         AndroidPlatform.ensure(context)
-        val currency = Store.settings.value.currency
-        val rows = Store.watches.value
-            .filter { !it.isExpired() }
-            .sortedByDescending { w -> w.bestOffer?.let { w.alertable(it) } == true }
-            .take(4)
-            .map { w ->
-                val best = w.bestOffer
-                Row4(
-                    title = w.routeTitle,
-                    price = best?.let { formatPrice(it.price, currency) } ?: "—",
-                    good = best != null && w.alertable(best),
-                    sub = "célár ${formatPrice(w.targetPrice, currency)}",
-                )
-            }
-        provideContent { Content(rows) }
+        provideContent {
+            // Élő adat: ha a munkamenet még fut, egy újabb frissítés is a friss árakat mutatja
+            val watches by Store.watches.collectAsState()
+            val settings by Store.settings.collectAsState()
+            Content(rowsFor(watches, settings.currency))
+        }
     }
+
+    private fun rowsFor(watches: List<Watch>, currency: String): List<Row4> = watches
+        .filter { !it.isExpired() }
+        .sortedByDescending { w -> w.bestOffer?.let { w.alertable(it) } == true }
+        .take(4)
+        .map { w ->
+            val best = w.bestOffer
+            Row4(
+                title = w.routeTitle,
+                price = best?.let { formatPrice(it.price, currency) } ?: "—",
+                good = best != null && w.alertable(best),
+                sub = "célár ${formatPrice(w.targetPrice, currency)}",
+            )
+        }
 
     @Composable
     private fun Content(rows: List<Row4>) {
