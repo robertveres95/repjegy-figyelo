@@ -41,6 +41,12 @@ interface PlatformApi {
     /** Az automatikus ellenőrzés újraütemezése (gyakoriság változásakor). */
     fun reschedule()
 
+    /** Igaz, ha a rendszer letiltotta az app értesítéseit (ilyenkor egy riasztás sem jut el). */
+    fun notificationsBlocked(): Boolean = false
+
+    /** Az app értesítési beállításainak megnyitása a rendszerben. */
+    fun openNotificationSettings() {}
+
     @Composable
     fun BackHandler(enabled: Boolean, onBack: () -> Unit)
 

@@ -40,11 +40,17 @@ object Store {
             themeMode = prefs.getString("themeMode", THEME_AUTO) ?: THEME_AUTO,
             textScale = prefs.getInt("textScale", 100),
         )
-        val arr = runCatching { JSONArray(prefs.getString("watches", "[]") ?: "[]") }
-            .getOrDefault(JSONArray())
-        _watches.value = (0 until arr.length()).mapNotNull { i ->
-            runCatching { Watch.fromJson(arr.getJSONObject(i)) }.getOrNull()
+        val raw = prefs.getString("watches", "[]") ?: "[]"
+        val arr = runCatching { JSONArray(raw) }.getOrNull()
+        val parsed = arr?.let { a ->
+            (0 until a.length()).mapNotNull { i -> runCatching { Watch.fromJson(a.getJSONObject(i)) }.getOrNull() }
+        }.orEmpty()
+        // Ha valami nem olvasható be, a nyers adatot félretesszük, mielőtt a következő
+        // mentés felülírná – így nem vész el végleg egy figyelés sem.
+        if (arr == null || parsed.size < arr.length()) {
+            prefs.edit { putString("watches_backup_${System.currentTimeMillis()}", raw) }
         }
+        _watches.value = parsed
         initialized = true
     }
 
@@ -71,6 +77,27 @@ object Store {
     @Synchronized
     fun clearAllResults() {
         persist(_watches.value.map { it.clearResults() })
+    }
+
+    /**
+     * Pénznemváltás: a célárakat is átváltjuk ([factor] = 1 régi egység hány új egység).
+     * Ha az árfolyam nem érhető el (factor == null), a célár marad, de az értesítést
+     * kikapcsoljuk, és kérjük az új célárat – különben a régi szám (pl. 30 000 Ft → 30 000 €)
+     * azonnal téves riasztást adna.
+     */
+    @Synchronized
+    fun changeCurrency(to: String, factor: Double?) {
+        persist(_watches.value.map { w ->
+            val cleared = w.clearResults()
+            if (factor != null) {
+                val raw = w.targetPrice * factor
+                val target = if (to == "HUF") (Math.round(raw / 100.0) * 100).toInt() else Math.round(raw).toInt()
+                cleared.copy(targetPrice = target.coerceAtLeast(1))
+            } else {
+                cleared.copy(notify = false, lastError = "Pénznemet váltottál: add meg újra a célárat, és kapcsold vissza az értesítést.")
+            }
+        })
+        saveSettings(_settings.value.copy(currency = to))
     }
 
     @Synchronized

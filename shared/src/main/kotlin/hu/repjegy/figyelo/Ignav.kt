@@ -182,7 +182,9 @@ object Rates {
         conn.connectTimeout = 20_000
         conn.readTimeout = 30_000
         try {
-            if (conn.responseCode !in 200..299) {
+            // Hálózati hiba esetén is jó a korábbi (kicsit régebbi) árfolyam
+            val code = try { conn.responseCode } catch (e: IOException) { cache?.let { return it }; throw e }
+            if (code !in 200..299) {
                 cache?.let { return it }
                 throw IOException("Nem sikerült lekérni az árfolyamot")
             }

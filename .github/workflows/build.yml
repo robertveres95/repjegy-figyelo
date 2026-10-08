@@ -18,6 +18,11 @@ on:
 permissions:
   contents: write
 
+# Két kiadás ne fusson egymásba (különben a „legfrissebb” jelölés felcserélődhet)
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -78,7 +83,9 @@ jobs:
           body: ${{ steps.meta.outputs.publish == 'true' && 'Töltsd le a REFI.apk fájlt a telefonodra, és telepítsd.' || 'Teszt-build, csak kipróbálásra. A telepített appok nem ajánlják fel frissítésként.' }}
           files: REFI.apk
           prerelease: ${{ steps.meta.outputs.publish != 'true' }}
-          make_latest: ${{ steps.meta.outputs.publish == 'true' }}
+          # Csak akkor lesz „legfrissebb”, ha a Windows-telepítő is felkerült (lásd lent):
+          # így egyik platform sem kap félkész kiadást
+          make_latest: false
 
   # Windows-változat: ugyanabba a kiadásba kerül a REFI-Setup.msi
   windows:
@@ -134,3 +141,12 @@ jobs:
           files: REFI-Setup.msi
           prerelease: ${{ needs.build.outputs.publish != 'true' }}
           make_latest: ${{ needs.build.outputs.publish == 'true' }}
+
+      - name: Kiadás megjelölése legfrissebbként
+        if: needs.build.outputs.publish == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id=$(gh api "repos/${{ github.repository }}/releases/tags/${{ needs.build.outputs.tag }}" --jq .id)
+          gh api -X PATCH "repos/${{ github.repository }}/releases/$id" -f make_latest=true --jq '.tag_name'

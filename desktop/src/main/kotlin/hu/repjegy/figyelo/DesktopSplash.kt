@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -22,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asSkiaBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.text.font.FontWeight
@@ -30,6 +32,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -52,12 +56,27 @@ fun DesktopSplash(onFinished: () -> Unit) {
         label = "splash",
         finishedListener = { if (done) onFinished() },
     )
-    val frames = remember { loadFrames() }
+    // A képkockák kibontása (~59 nagy kép) a háttérben fut, hogy az ablak azonnal megjelenjen
+    var frames by remember { mutableStateOf<List<ImageBitmap>?>(null) }
+    LaunchedEffect(Unit) {
+        frames = withContext(Dispatchers.Default) { runCatching { loadFrames() }.getOrDefault(emptyList()) }
+    }
+    // A kibontott képek sok memóriát foglalnak: a nyitókép után azonnal felszabadítjuk
+    DisposableEffect(Unit) {
+        onDispose {
+            frames?.forEach { runCatching { it.asSkiaBitmap().close() } }
+        }
+    }
 
     LaunchedEffect(Unit) {
-        val start = withFrameNanos { it }
+        var last = withFrameNanos { it }
         while (t < 3.2f) {
-            withFrameNanos { now -> t = (now - start) / 1_000_000_000f }
+            withFrameNanos { now ->
+                val dt = (now - last) / 1_000_000_000f
+                last = now
+                // Ha a repülő jönne, de a képkockák még töltődnek, megvárjuk őket
+                if (t < PLANE_START || frames != null) t += dt
+            }
             if (t >= 2.8f && !done) done = true
         }
     }
@@ -101,9 +120,10 @@ fun DesktopSplash(onFinished: () -> Unit) {
 
         // A repülő a szöveg fölött halad el
         Canvas(Modifier.fillMaxSize()) {
-            if (frames.isEmpty() || t < PLANE_START || t >= PLANE_END) return@Canvas
-            val index = ((t - PLANE_START) * FPS).toInt().coerceIn(0, frames.size - 1)
-            val img = frames[index]
+            val list = frames
+            if (list.isNullOrEmpty() || t < PLANE_START || t >= PLANE_END) return@Canvas
+            val index = ((t - PLANE_START) * FPS).toInt().coerceIn(0, list.size - 1)
+            val img = list[index]
             // Kitöltés középre igazítva (mint a „crop”): bármilyen ablakméretnél teljes képernyős
             val scale = max(size.width / img.width, size.height / img.height)
             val w = (img.width * scale).roundToInt()

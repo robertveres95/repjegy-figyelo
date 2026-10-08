@@ -42,6 +42,7 @@ object Updater {
             timeoutMs = 20_000,
         )
         if (res.code !in 200..299) return@runCatching null
+        lastFetchOk = true
         val json = JSONObject(res.body)
         val tag = json.optString("tag_name")
         val build = Regex("""build-(\d+)""").find(tag)?.groupValues?.get(1)?.toInt() ?: return@runCatching null
@@ -63,12 +64,18 @@ object Updater {
     }.getOrNull().also { if (it != null) available.value = it }
 
     /** A háttérellenőrzésből naponta egyszer: ha van új verzió, értesítést is küld. */
+    @Volatile
+    private var lastFetchOk = false
+
     fun dailyCheck() {
         val prefs = Store.prefs
         val now = System.currentTimeMillis()
         if (now - prefs.getLong("lastUpdateCheck", 0L) < DAY_MS) return
-        prefs.edit { putLong("lastUpdateCheck", now) }
-        val release = check() ?: return
+        lastFetchOk = false
+        val release = check()
+        // Csak sikeres lekérés után várunk egy napot; hálózati hibánál a következő körben újra próbálja
+        if (lastFetchOk) prefs.edit { putLong("lastUpdateCheck", now) }
+        if (release == null) return
         if (prefs.getInt("notifiedBuild", 0) >= release.build) return
         prefs.edit { putInt("notifiedBuild", release.build) }
         Platform.current.notifyUpdate(release)

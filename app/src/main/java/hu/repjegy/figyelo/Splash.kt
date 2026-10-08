@@ -73,6 +73,12 @@ fun SplashOverlay(onFinished: () -> Unit) {
                     )
                 }
             },
+            // A 3D-s WebView (WebGL, three.js) a nyitóképernyő után ne maradjon a memóriában
+            onRelease = { web ->
+                web.stopLoading()
+                web.removeJavascriptInterface("Splash")
+                web.destroy()
+            },
         )
     }
 }

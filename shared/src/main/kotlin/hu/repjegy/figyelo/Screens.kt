@@ -268,6 +268,15 @@ private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: 
     val watches by Store.watches.collectAsState()
     val settings by Store.settings.collectAsState()
     val checking by Store.checking.collectAsState()
+    // A rendszerben letiltott értesítés esetén a csengők hiába „bekapcsoltak”: figyelmeztetünk.
+    // Időnként újranézzük, mert a felhasználó a rendszerbeállításokban visszakapcsolhatja.
+    var notifyBlocked by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            notifyBlocked = runCatching { Platform.current.notificationsBlocked() }.getOrDefault(false)
+            kotlinx.coroutines.delay(2000)
+        }
+    }
 
     Scaffold(
         containerColor = Neon.Black,
@@ -320,6 +329,9 @@ private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: 
             if (!settings.isReady) {
                 item { SetupCard(onSettings) }
             }
+            if (notifyBlocked && watches.any { it.notify }) {
+                item { BlockedNotificationsCard() }
+            }
             if (watches.isEmpty()) {
                 item {
                     Text(
@@ -332,7 +344,7 @@ private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: 
             }
             itemsIndexed(watches, key = { _, item -> item.id }) { index, w ->
                 WatchCard(
-                    modifier = Modifier.animateItem().enterAnimation(delayMs = index * 70),
+                    modifier = Modifier.animateItem().enterAnimation(delayMs = index * 70, key = w.id),
                     onToggleNotify = {
                         Store.update(w.id) { it.copy(notify = !it.notify, lastNotifiedPrice = null) }
                     },
@@ -360,6 +372,21 @@ private fun SetupCard(onSettings: () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium,
             )
             Button(onClick = onSettings) { Text("Beállítások") }
+        }
+    }
+}
+
+@Composable
+private fun BlockedNotificationsCard() {
+    NeonCard(color = Neon.Amber, modifier = Modifier.fillMaxWidth().enterAnimation()) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Az értesítések le vannak tiltva", style = MaterialTheme.typography.titleMedium, color = Neon.Amber)
+            Text(
+                "Így árriasztás sem érkezik, akkor sem, ha a csengő be van kapcsolva. " +
+                    "Engedélyezd az értesítéseket a REFI-nek.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Button(onClick = { Platform.current.openNotificationSettings() }) { Text("Értesítések engedélyezése") }
         }
     }
 }
@@ -674,6 +701,8 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
     var notify by remember { mutableStateOf(existing?.notify ?: true) }
     var checkedBag by remember { mutableStateOf(existing?.checkedBag ?: false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var outValid by remember { mutableStateOf(true) }
+    var retValid by remember { mutableStateOf(true) }
 
     val maxBags = adults + children + infantsInSeat
     if (bags > maxBags) bags = maxBags
@@ -684,6 +713,7 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
         val from = fromPlace
         val to = toPlace
         error = when {
+            !outValid || (roundTrip && !retValid) -> "Javítsd a hibás dátumot (formátum: 2026.10.16)."
             from == null -> "Válaszd ki az indulási repülőteret a listából."
             to == null -> "Válaszd ki az érkezési repülőteret a listából."
             from.codes.split(',').any { it in to.codes.split(',') } ->
@@ -723,7 +753,8 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
                 it.copy(
                     targetPrice = targetValue,
                     notify = notify,
-                    lastNotifiedPrice = null,
+                    // Csak akkor szólunk újra ugyanarról az árról, ha a célár vagy az értesítés változott
+                    lastNotifiedPrice = if (it.targetPrice != targetValue || it.notify != notify) null else it.lastNotifiedPrice,
                     fromLabel = from.city,
                     toLabel = to.city,
                 )
@@ -758,12 +789,15 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
             SwitchRow("Oda-vissza út", roundTrip) { roundTrip = it }
 
             SectionTitle("Dátum")
-            DateField("Indulás", outDate, minDate = today) {
+            DateField("Indulás", outDate, minDate = today, onValidChange = { outValid = it }) {
+                // Az út hossza marad: ha az indulás eltolódik, a visszaút vele mozog
+                // (gépelés közbeni részleges dátumnál sem vész el az eredeti hossz)
+                val days = java.time.temporal.ChronoUnit.DAYS.between(outDate, retDate).coerceAtLeast(0)
                 outDate = it
-                if (retDate.isBefore(it)) retDate = it
+                retDate = it.plusDays(days)
             }
             if (roundTrip) {
-                DateField("Visszaút", retDate, minDate = outDate) { retDate = it }
+                DateField("Visszaút", retDate, minDate = outDate, onValidChange = { retValid = it }) { retDate = it }
             }
 
             SectionTitle("Utasok és osztály")
@@ -787,7 +821,11 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
             SectionTitle("Riasztás")
             OutlinedTextField(
                 value = target,
-                onValueChange = { v -> target = v.filter(Char::isDigit).take(9) },
+                onValueChange = { v ->
+                    // Tizedesrész (pl. beillesztett „89,99”) ne szorozza százzal az árat
+                    val whole = v.trim().replace(Regex("[.,]\\d{1,2}$"), "")
+                    target = whole.filter(Char::isDigit).take(9)
+                },
                 label = { Text("Célár (${currencySymbol(currency)})") },
                 supportingText = { Text("Szólunk, ha a teljes ár (minden utassal) eddig vagy ez alá esik") },
                 singleLine = true,
@@ -963,8 +1001,18 @@ private fun SettingsScreen(onDone: () -> Unit) {
 
             Button(
                 onClick = {
-                    if (currency != initial.currency) Store.clearAllResults()
-                    Store.saveSettings(draft)
+                    if (currency != initial.currency) {
+                        // A pénznem a célárak átváltásával együtt, a háttérben vált
+                        Store.saveSettings(draft.copy(currency = initial.currency))
+                        val from = initial.currency
+                        val to = currency
+                        AppScope.scope.launch {
+                            val factor = runCatching { Rates.convert(1.0, from, to) }.getOrNull()
+                            Store.changeCurrency(to, factor)
+                        }
+                    } else {
+                        Store.saveSettings(draft)
+                    }
                     if (interval != initial.intervalHours) Platform.current.reschedule()
                     onDone()
                 },
@@ -1140,10 +1188,18 @@ private fun <T> ChoiceField(label: String, options: List<Pair<T, String>>, selec
 }
 
 @Composable
-private fun DateField(label: String, date: LocalDate, minDate: LocalDate, onPick: (LocalDate) -> Unit) {
+private fun DateField(
+    label: String,
+    date: LocalDate,
+    minDate: LocalDate,
+    onValidChange: (Boolean) -> Unit = {},
+    onPick: (LocalDate) -> Unit,
+) {
     var open by remember { mutableStateOf(false) }
     var text by remember { mutableStateOf(date.format(typedDateFormat)) }
     var error by remember { mutableStateOf<String?>(null) }
+    // A hibás beírást a Mentés is lássa (különben csendben a korábbi dátum mentődne)
+    LaunchedEffect(error) { onValidChange(error == null) }
 
     // Ha a dátum máshonnan változik (pl. naptárból vagy az indulás eltolja a visszautat), frissüljön a mező
     LaunchedEffect(date) {

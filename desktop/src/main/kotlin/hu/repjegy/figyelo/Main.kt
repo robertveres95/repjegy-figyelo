@@ -97,11 +97,17 @@ object DesktopPrefs : Prefs {
  * Egyszerre csak egy REFI fusson (különben a bejelentkezéskori indítás és egy kézi
  * megnyitás két tálcaikont, két háttér-ellenőrzést és ütköző mentéseket adna).
  * A második példány jelez az elsőnek, hogy mutassa az ablakát, majd kilép.
+ *
+ * Frissítés után a régi verzió még futhat a tálcán: ha az újonnan indított példány
+ * újabb buildből van, a régi kilép, és átadja a helyét (különben a régi verzió maradna
+ * előtérben, a bezárhatatlan „új verzió” ablakkal).
  */
 object SingleInstance {
     private var channel: FileChannel? = null
     private var lock: FileLock? = null
-    private val showFile: File get() = File(DesktopPrefs.dir, "refi.show")
+    private val requestFile: File get() = File(DesktopPrefs.dir, "refi.show")
+
+    class Request(val build: Int, val show: Boolean)
 
     fun acquire(): Boolean {
         return runCatching {
@@ -109,17 +115,24 @@ object SingleInstance {
                 File(DesktopPrefs.dir, "refi.lock").toPath(),
                 StandardOpenOption.CREATE, StandardOpenOption.WRITE,
             )
-            val l = ch.tryLock()
+            val l = try { ch.tryLock() } catch (e: Exception) { ch.close(); throw e }
             if (l == null) { ch.close(); false } else { channel = ch; lock = l; true }
         }.getOrDefault(true) // ha a zárolás nem működik, inkább induljon el
     }
 
-    fun requestShow() {
-        runCatching { showFile.writeText(System.currentTimeMillis().toString()) }
+    fun request(build: Int, show: Boolean) {
+        runCatching { requestFile.writeText("$build;$show") }
     }
 
-    /** Igaz, ha egy másik indítás az ablak megjelenítését kérte (és törli a kérést). */
-    fun consumeShowRequest(): Boolean = showFile.exists() && showFile.delete()
+    /** Egy másik indítás kérése (és törli), vagy null. */
+    fun consumeRequest(): Request? {
+        val f = requestFile
+        if (!f.exists()) return null
+        val text = runCatching { f.readText() }.getOrDefault("")
+        if (!f.delete()) return null
+        val parts = text.split(';')
+        return Request(parts.getOrNull(0)?.trim()?.toIntOrNull() ?: 0, parts.getOrNull(1)?.trim() != "false")
+    }
 }
 
 // ---------------------------------------------------------------- Értesítés a tálcáról
@@ -320,11 +333,19 @@ fun main(args: Array<String>) {
     }
     val startHidden = "--tray" in args
     if (!SingleInstance.acquire()) {
-        // Már fut egy REFI: kézi indításnál az mutassa az ablakát
-        if (!startHidden) SingleInstance.requestShow()
-        kotlin.system.exitProcess(0)
+        // Már fut egy REFI: kézi indításnál az mutassa az ablakát. Ha mi vagyunk az újabb
+        // verzió (frissítés után), a régi kilép, és mi indulunk el helyette.
+        SingleInstance.request(DesktopPlatform.buildNumber, show = !startHidden)
+        var got = false
+        repeat(40) {
+            if (!got) {
+                Thread.sleep(250)
+                got = SingleInstance.acquire()
+            }
+        }
+        if (!got) kotlin.system.exitProcess(0)
     }
-    SingleInstance.consumeShowRequest() // régi, beragadt kérés törlése
+    SingleInstance.consumeRequest() // régi, beragadt kérés törlése
     Platform.current = DesktopPlatform
     Store.init(DesktopPrefs)
     AppScope.splashPending = !startHidden
@@ -340,33 +361,55 @@ fun main(args: Array<String>) {
         @Suppress("DEPRECATION")
         val icon = painterResource("refi_icon.png")
 
+        // Laptopon (pl. 1080p, 150%-os nagyítás) a 820 dp magasabb lehet a képernyőnél:
+        // ilyenkor a címsor a képernyő fölé kerülne, és az ablak nem lenne mozgatható
+        val usableHeight = remember {
+            runCatching {
+                java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds.height
+            }.getOrDefault(900)
+        }
+        val windowState = rememberWindowState(
+            width = 460.dp,
+            height = minOf(820, usableHeight - 24).coerceAtLeast(480).dp,
+            position = WindowPosition(Alignment.Center),
+        )
+        var awtWindow by remember { mutableStateOf<java.awt.Window?>(null) }
+        fun show() {
+            visible = true
+            windowState.isMinimized = false
+            awtWindow?.let { w ->
+                // A Windows a háttérből nem engedi előtérbe hozni az ablakot; ez a szokásos kerülőút
+                w.toFront()
+                w.isAlwaysOnTop = true
+                w.isAlwaysOnTop = false
+                w.requestFocus()
+            }
+        }
+        LaunchedEffect(Unit) {
+            while (true) {
+                delay(700)
+                val req = SingleInstance.consumeRequest() ?: continue
+                if (req.build > DesktopPlatform.buildNumber) {
+                    // Újabb verzió indult el: átadjuk neki a helyet
+                    kotlin.system.exitProcess(0)
+                }
+                if (req.show) show()
+            }
+        }
+
         Tray(
             state = trayState,
             icon = icon,
             tooltip = "REFI – repjegy figyelő",
-            onAction = { visible = true },
+            onAction = { show() },
             menu = {
-                Item("Megnyitás", onClick = { visible = true })
+                Item("Megnyitás", onClick = { show() })
                 Item("Összes ellenőrzése most", onClick = { AppScope.scope.launch { PriceChecker.checkAll() } })
                 Separator()
                 Item("Kilépés", onClick = ::exitApplication)
             },
         )
 
-        val windowState = rememberWindowState(
-            width = 460.dp,
-            height = 820.dp,
-            position = WindowPosition(Alignment.Center),
-        )
-        LaunchedEffect(Unit) {
-            while (true) {
-                delay(700)
-                if (SingleInstance.consumeShowRequest()) {
-                    windowState.isMinimized = false
-                    visible = true
-                }
-            }
-        }
         Window(
             onCloseRequest = {
                 visible = false
@@ -384,6 +427,7 @@ fun main(args: Array<String>) {
             title = "REFI",
             icon = icon,
         ) {
+            LaunchedEffect(window) { awtWindow = window }
             val settings by Store.settings.collectAsState()
             NeonTheme(mode = settings.themeMode, textScale = settings.textScale) {
                 Surface(Modifier.fillMaxSize(), color = Neon.Black) {

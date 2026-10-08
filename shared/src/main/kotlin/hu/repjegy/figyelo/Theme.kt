@@ -229,8 +229,10 @@ fun NeonTheme(mode: String, textScale: Int = 100, content: @Composable () -> Uni
     Platform.current.SystemBars(palette)
     // Betűméret: a rendszer betűméretére szorzunk rá, így a telefon beállítása is érvényes marad
     val density = LocalDensity.current
+    // Normál méretnél a rendszer saját sűrűségét hagyjuk érintetlenül: így megmarad az
+    // Android 14+ nem lineáris betűskálázása is (nagyon nagy rendszerbetűnél nem „szétfolyó” címek)
     val scaled = remember(density, textScale) {
-        Density(density.density, density.fontScale * textScale / 100f)
+        if (textScale == 100) density else Density(density.density, density.fontScale * textScale / 100f)
     }
     CompositionLocalProvider(LocalDensity provides scaled) {
         MaterialTheme(colorScheme = colors, typography = NeonTypography, content = content)
@@ -319,12 +321,21 @@ fun NeonCard(
     }
 }
 
-/** Belépő animáció: a kártya alulról, halványan érkezik. */
+/** Már beúszott elemek: görgetéskor visszatérve ne animáljanak (és ne tűnjenek el) újra. */
+private val enteredKeys = java.util.Collections.synchronizedSet(HashSet<Any>())
+
+/**
+ * Belépő animáció: a kártya alulról, halványan érkezik. [key] megadásakor elemenként
+ * csak egyszer játszódik le; a késleltetés felülről korlátos, hogy hosszú listában se várjon.
+ */
 @Composable
-fun Modifier.enterAnimation(delayMs: Int = 0): Modifier {
-    val progress = remember { Animatable(0f) }
+fun Modifier.enterAnimation(delayMs: Int = 0, key: Any? = null): Modifier {
+    val already = key != null && key in enteredKeys
+    val progress = remember { Animatable(if (already) 1f else 0f) }
     LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(delayMs.toLong())
+        if (already) return@LaunchedEffect
+        kotlinx.coroutines.delay(delayMs.coerceAtMost(420).toLong())
+        if (key != null) enteredKeys += key
         progress.animateTo(1f, spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessLow))
     }
     return graphicsLayer {

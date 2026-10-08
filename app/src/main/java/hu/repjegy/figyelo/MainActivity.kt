@@ -36,7 +36,8 @@ class MainActivity : ComponentActivity() {
         )
         AndroidPlatform.ensure(this)
 
-        if (Build.VERSION.SDK_INT >= 33 &&
+        // Csak az első indításkor kérdezünk (újralétrehozáskor ne kérje újra)
+        if (savedInstanceState == null && Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) {

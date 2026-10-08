@@ -6,10 +6,21 @@ import java.io.IOException
 import java.net.URLEncoder
 import kotlin.math.ceil
 
-private const val MAX_PAIRS = 6
+private const val MAX_PAIRS = 12
 
-private fun pairsOf(w: Watch): List<Pair<String, String>> =
-    w.from.split(',').flatMap { o -> w.to.split(',').map { d -> o to d } }.take(MAX_PAIRS)
+/**
+ * Több repteres városoknál (pl. London: LHR, LGW, STN, LTN…) a párokat „átlósan” vesszük
+ * sorra, hogy a korlát minden reptérből adjon párt – a fapadosok bázisai (STN, LTN)
+ * gyakran a lista végén vannak, és a sima sorrendnél kimaradnának.
+ */
+private fun pairsOf(w: Watch): List<Pair<String, String>> {
+    val from = w.from.split(',')
+    val to = w.to.split(',')
+    return from.indices.flatMap { i -> to.indices.map { j -> Triple(i, j, from[i] to to[j]) } }
+        .sortedWith(compareBy({ maxOf(it.first, it.second) }, { it.first + it.second }))
+        .map { it.third }
+        .take(MAX_PAIRS)
+}
 
 /** "2026-11-05T06:25:00.000" → "2026-11-05T06:25" */
 private fun trimTime(raw: String?): String? =

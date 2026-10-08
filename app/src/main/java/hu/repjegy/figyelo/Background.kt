@@ -90,6 +90,24 @@ class AndroidPlatform private constructor(private val context: Context) : Platfo
     override fun notifyUpdate(release: Updater.Release) = Notifier.update(context, release)
     override fun reschedule() = Scheduler.schedule(context)
 
+    override fun notificationsBlocked(): Boolean {
+        val nm = NotificationManagerCompat.from(context)
+        if (!nm.areNotificationsEnabled()) return true
+        val channel = nm.getNotificationChannel(Notifier.PRICE_CHANNEL_ID)
+        return channel != null && channel.importance == NotificationManager.IMPORTANCE_NONE
+    }
+
+    override fun openNotificationSettings() {
+        try {
+            context.startActivity(
+                Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        } catch (_: ActivityNotFoundException) {
+        }
+    }
+
     @Composable
     override fun BackHandler(enabled: Boolean, onBack: () -> Unit) {
         androidx.activity.compose.BackHandler(enabled = enabled, onBack = onBack)
@@ -168,7 +186,8 @@ object Scheduler {
 
 object Notifier {
     // Új csatorna kell, mert a meglévő csatorna rezgését az Android nem engedi utólag módosítani
-    private const val CHANNEL_ID = "price_alerts_v2"
+    const val PRICE_CHANNEL_ID = "price_alerts_v2"
+    private const val CHANNEL_ID = PRICE_CHANNEL_ID
     private const val OLD_CHANNEL_ID = "price_alerts"
 
     /** Két rövid rezgés: várakozás, rezgés, szünet, rezgés (ms). */

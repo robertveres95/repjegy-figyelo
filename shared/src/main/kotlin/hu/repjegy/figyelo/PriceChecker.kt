@@ -83,10 +83,13 @@ object PriceChecker {
             if (offers.isEmpty()) {
                 val anyWorked = statuses.any { it.ok }
                 Store.update(id) {
-                    if (it.searchKey() != watch.searchKey()) return@update it
+                    if (stale(it, watch, currency)) return@update it
                     it.copy(
                         lastChecked = now,
                         sourceStatus = statuses,
+                        // Ha volt válasz, de nincs járat, a régi ár ne látsszon frissnek
+                        offers = if (anyWorked) emptyList() else it.offers,
+                        lastPrice = if (anyWorked) null else it.lastPrice,
                         lastError = if (anyWorked) "Nincs találat ezekkel a beállításokkal" else "Egyik forrás sem válaszolt",
                     )
                 }
@@ -96,22 +99,25 @@ object PriceChecker {
             val best = offers.first()
             var toNotify: Watch? = null
             Store.update(id) { cur ->
-                // Közben módosított keresést nem keverünk régi eredménnyel
-                if (cur.searchKey() != watch.searchKey()) return@update cur
-                val shouldNotify = cur.notify && best.price <= cur.targetPrice &&
-                    (cur.lastNotifiedPrice == null || best.price < cur.lastNotifiedPrice)
+                // Közben módosított keresést / pénznemet nem keverünk régi eredménnyel
+                if (stale(cur, watch, currency)) return@update cur
+                // Poggyászt kértél, de csak poggyász nélküli fapados alapár jött: ez nem
+                // összevethető a célárral, ezért nem riaszt és nem kerül az árgörbére
+                val comparable = !(cur.wantsBags && !best.bagsIncluded)
+                val shouldNotify = comparable && cur.notify && best.price <= cur.targetPrice &&
+                    (cur.lastNotifiedPrice == null || best.price.toLong() * 100 <= cur.lastNotifiedPrice.toLong() * 98)
                 val next = cur.copy(
                     lastPrice = best.price,
-                    lowestPrice = minOf(cur.lowestPrice ?: best.price, best.price),
+                    lowestPrice = if (comparable) minOf(cur.lowestPrice ?: best.price, best.price) else cur.lowestPrice,
                     lastChecked = now,
                     lastError = null,
                     offers = offers,
                     sourceStatus = statuses,
-                    history = (cur.history + PricePoint(now, best.price)).takeLast(MAX_HISTORY),
+                    history = if (comparable) (cur.history + PricePoint(now, best.price)).takeLast(MAX_HISTORY) else cur.history,
                     lastNotifiedPrice = when {
                         shouldNotify -> best.price
                         // Ha visszament a célár fölé, a következő eséskor újra szólunk
-                        best.price > cur.targetPrice -> null
+                        comparable && best.price > cur.targetPrice -> null
                         else -> cur.lastNotifiedPrice
                     },
                 )
@@ -124,6 +130,9 @@ object PriceChecker {
             Store.checking.update { it - id }
         }
     }
+
+    private fun stale(cur: Watch, started: Watch, currency: String) =
+        cur.searchKey() != started.searchKey() || Store.settings.value.currency != currency
 
     private fun changedSince(id: String, watch: Watch): Boolean {
         val cur = Store.watches.value.find { it.id == id } ?: return false
