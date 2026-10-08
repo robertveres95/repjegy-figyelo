@@ -53,4 +53,6 @@ Kotlin + Jetpack Compose (Android), Compose Multiplatform Desktop (Windows), Wor
 - **Verziószám:** a `version.properties` fájlban (`VERSION_NAME=1.2.0`). Új kiadás előtt ezt kell átírni.
 - **Teszt-build:** minden `main`-re pusholt változásból „teszt” jelölésű (prerelease) kiadás készül. Letölthető kipróbálásra, de a telepített appok **nem** ajánlják fel frissítésként.
 - **Éles kiadás:** csak külön kérésre, egy `v*` címke pusholásával (vagy a workflow kézi indításával, publish=true). Ekkor `v<verzió>-build-<N>` címkéjű kiadás készül, és a telepített appok kötelező frissítést kérnek.
+- **Aláírás:** az APK-t a GitHub Actions írja alá a saját REFI-kulccsal (`app/refi-release.jks`, jelszó a `REFI_KEYSTORE_PASS` titokban), kulcscsere-lánccal a korábbi fejlesztői kulcsról – így a régebbi telepítések újratelepítés nélkül frissülnek. Mindkét kulcsfájlt meg kell őrizni; a jelszó nélkül nem adható ki frissítés.
+- **Diagnosztika:** a „Diagnosztika” workflow kézzel indítható: egységtesztek, éles árforrás-próba és Android lint; az eredmény a rejtett „diagnostics” vázlat-kiadás `diag.txt` fájljába kerül.
 - A frissítésfigyelő a GitHub „legfrissebb kiadását” nézi (a teszt-buildeket nem), ezért a repónak nyilvánosnak kell maradnia.
