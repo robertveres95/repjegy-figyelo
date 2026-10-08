@@ -144,6 +144,9 @@ fun AppRoot() {
     Platform.current.BackHandler(enabled = screen != Screen.Home) { screen = Screen.Home }
 
     LaunchedEffect(Unit) { AppScope.scope.launch { Updater.check() } }
+    // Szinkronizálás induláskor és minden visszatéréskor (a másik eszköz módosításai)
+    val resumes by AppScope.resumeCount.collectAsState()
+    LaunchedEffect(resumes) { AppScope.scope.launch { Sync.syncNow() } }
 
     Box(Modifier.fillMaxSize().background(Neon.Black)) {
         AnimatedContent(
@@ -450,7 +453,7 @@ internal fun HomeScreen(
                 WatchCard(
                     modifier = Modifier.animateItem().enterAnimation(delayMs = index * 70, key = w.id),
                     onToggleNotify = {
-                        Store.update(w.id) { it.copy(notify = !it.notify, lastNotifiedPrice = null) }
+                        Store.userUpdate(w.id) { it.copy(notify = !it.notify, lastNotifiedPrice = null) }
                     },
                     w = w,
                     currency = settings.currency,
@@ -901,7 +904,7 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
         if (sameSearch) {
             // A tárolt, legfrissebb állapotból: ha közben lefutott egy ellenőrzés,
             // annak eredményét nem írjuk felül a szerkesztő megnyitásakori példánnyal
-            Store.update(existing!!.id) {
+            Store.userUpdate(existing!!.id) {
                 it.copy(
                     targetPrice = targetValue,
                     notify = notify,
@@ -912,7 +915,7 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
                 )
             }
         } else {
-            Store.upsert(fresh)
+            Store.userUpsert(fresh)
             if (Store.settings.value.isReady) {
                 AppScope.scope.launch { PriceChecker.checkOne(fresh.id) }
             }
@@ -1165,6 +1168,9 @@ internal fun SettingsScreen(onDone: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            SectionTitle("Szinkronizálás")
+            SyncSection()
 
             SectionTitle("Csendes órák")
             SwitchRow("Éjszaka ne szóljon és ne rezegjen", quietOn) { quietOn = it }

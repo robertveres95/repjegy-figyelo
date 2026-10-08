@@ -124,6 +124,16 @@ class AndroidPlatform private constructor(private val context: Context) : Platfo
 
     override fun importFile(onResult: (String?) -> Unit) = FileBridge.import(onResult)
 
+    override suspend fun googleAccessToken(interactive: Boolean): String? =
+        GoogleAuthAndroid.token(context, interactive)
+
+    override fun googleInvalidateToken() {
+        // A clearToken hálózatot/IPC-t használhat: háttérszálon
+        AppScope.scope.launch { GoogleAuthAndroid.invalidate(context) }
+    }
+
+    override fun googleSignOut() = googleInvalidateToken()
+
     private var widgetJob: kotlinx.coroutines.Job? = null
 
     /** A widget frissítése; gyors egymásutáni változásoknál csak egyszer. */
@@ -190,7 +200,10 @@ class AndroidPlatform private constructor(private val context: Context) : Platfo
 class CheckWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         AndroidPlatform.ensure(applicationContext)
+        // Előbb a másik eszköz módosításai, utána ellenőrzés, végül a friss árak vissza a felhőbe
+        runCatching { Sync.syncNow() }
         if (Store.settings.value.intervalHours > 0) PriceChecker.checkAll()
+        runCatching { Sync.syncNow() }
         Updater.dailyCheck()
         // A widget frissítése még a háttérmunka vége előtt (utána a folyamat leállhat)
         runCatching { RefiWidget().updateAll(applicationContext) }

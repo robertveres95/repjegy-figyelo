@@ -65,6 +65,18 @@ interface PlatformApi {
     /** A figyelések megváltoztak (pl. a kezdőképernyő-widget frissítéséhez). */
     fun watchesChanged() {}
 
+    /**
+     * Google-hozzáférési token a Drive alkalmazásadat-területéhez (szinkronizálás).
+     * [interactive] = true esetén bejelentkezést / engedélyt kérhet; különben csak csendben próbálja.
+     */
+    suspend fun googleAccessToken(interactive: Boolean): String? = null
+
+    /** A tárolt token elvetése (pl. 401 után). */
+    fun googleInvalidateToken() {}
+
+    /** Kijelentkezés a szinkronizálásból (a tárolt hozzáférés törlése). */
+    fun googleSignOut() {}
+
     @Composable
     fun BackHandler(enabled: Boolean, onBack: () -> Unit)
 

@@ -36,6 +36,7 @@ class MainActivity : ComponentActivity() {
         )
         AndroidPlatform.ensure(this)
         FileBridge.register(this)
+        GoogleAuthAndroid.register(this)
         handleShare(intent)
 
         // Csak az első indításkor kérdezünk (újralétrehozáskor ne kérje újra)
@@ -70,6 +71,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         FileBridge.unregister(this)
+        GoogleAuthAndroid.unregister(this)
         super.onDestroy()
     }
 

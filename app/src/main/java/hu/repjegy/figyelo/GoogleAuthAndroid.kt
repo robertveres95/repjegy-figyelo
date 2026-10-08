@@ -1,0 +1,87 @@
+package hu.repjegy.figyelo
+
+import android.content.Context
+import androidx.activity.ComponentActivity
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import com.google.android.gms.auth.GoogleAuthUtil
+import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.AuthorizationResult
+import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.common.api.Scope
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import java.lang.ref.WeakReference
+import kotlin.coroutines.resume
+
+/**
+ * Google-bejelentkezés Androidon (Google Identity Services, AuthorizationClient).
+ * Csak a Drive rejtett alkalmazásadat-területéhez kér hozzáférést. A Google a csomagnév és
+ * az aláíró kulcs ujjlenyomata alapján azonosítja az appot (a Google Cloud „REFI” projektben
+ * regisztrálva), ezért kliensazonosító nem kell a kódba.
+ */
+object GoogleAuthAndroid {
+    private const val SCOPE = "https://www.googleapis.com/auth/drive.appdata"
+
+    private var activity: WeakReference<ComponentActivity>? = null
+    private var launcher: ActivityResultLauncher<IntentSenderRequest>? = null
+    private var pending: CompletableDeferred<String?>? = null
+    @Volatile private var lastToken: String? = null
+
+    private fun request() = AuthorizationRequest.builder()
+        .setRequestedScopes(listOf(Scope(SCOPE)))
+        .build()
+
+    /** Az Activity onCreate-jéből: a Google engedélykérő ablakának indítója. */
+    fun register(a: ComponentActivity) {
+        activity = WeakReference(a)
+        launcher = a.registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
+            val token = runCatching {
+                Identity.getAuthorizationClient(a).getAuthorizationResultFromIntent(res.data).accessToken
+            }.getOrNull()
+            if (token != null) lastToken = token
+            pending?.complete(token)
+            pending = null
+        }
+    }
+
+    fun unregister(a: ComponentActivity) {
+        if (activity?.get() !== a) return
+        activity = null
+        launcher = null
+        pending?.complete(null)
+        pending = null
+    }
+
+    suspend fun token(context: Context, interactive: Boolean): String? {
+        val result: AuthorizationResult = suspendCancellableCoroutine<AuthorizationResult?> { cont ->
+            Identity.getAuthorizationClient(context).authorize(request())
+                .addOnSuccessListener { cont.resume(it) }
+                .addOnFailureListener { cont.resume(null) }
+        } ?: return null
+        result.accessToken?.let { if (!result.hasResolution()) { lastToken = it; return it } }
+        if (!result.hasResolution() || !interactive) return null
+        // Engedélykérés: a Google saját ablaka (fiókválasztás + hozzájárulás)
+        val pi = result.pendingIntent ?: return null
+        val l = launcher ?: return null
+        val deferred = CompletableDeferred<String?>()
+        pending?.complete(null)
+        pending = deferred
+        withContext(Dispatchers.Main) {
+            runCatching { l.launch(IntentSenderRequest.Builder(pi.intentSender).build()) }
+                .onFailure { deferred.complete(null) }
+        }
+        return withTimeoutOrNull(5 * 60_000L) { deferred.await() }
+    }
+
+    /** Lejárt / visszavont token törlése a Google Play-szolgáltatások gyorsítótárából. */
+    fun invalidate(context: Context) {
+        val t = lastToken ?: return
+        lastToken = null
+        runCatching { GoogleAuthUtil.clearToken(context, t) }
+    }
+}

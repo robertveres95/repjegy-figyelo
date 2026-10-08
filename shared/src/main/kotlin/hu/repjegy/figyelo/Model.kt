@@ -91,6 +91,7 @@ data class Watch(
     val depFrom: Int? = null,          // odaút indulása legkorábban (óra, 0–23)
     val depTo: Int? = null,            // odaút indulása legkésőbb (óra, 1–24; az óra vége)
     val airlines: String = "",         // csak ezek a légitársaságok (vesszővel), üres = bármelyik
+    val editedAt: Long = 0,            // utolsó felhasználói módosítás (szinkronizáláshoz)
     // Eredmények
     val lastPrice: Int? = null,
     val lowestPrice: Int? = null,
@@ -204,6 +205,7 @@ data class Watch(
         putOpt("depFrom", depFrom)
         putOpt("depTo", depTo)
         if (airlines.isNotBlank()) put("airlines", airlines)
+        if (editedAt != 0L) put("editedAt", editedAt)
         putOpt("lastPrice", lastPrice)
         putOpt("lowestPrice", lowestPrice)
         putOpt("lastChecked", lastChecked)
@@ -258,6 +260,7 @@ data class Watch(
                 depFrom = o.intOrNull("depFrom")?.coerceIn(0, 23),
                 depTo = o.intOrNull("depTo")?.coerceIn(1, 24),
                 airlines = o.optString("airlines", ""),
+                editedAt = o.optLong("editedAt", 0L),
                 lastPrice = o.intOrNull("lastPrice"),
                 lowestPrice = o.intOrNull("lowestPrice"),
                 lastChecked = o.longOrNull("lastChecked"),

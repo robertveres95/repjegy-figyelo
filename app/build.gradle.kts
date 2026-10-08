@@ -76,4 +76,6 @@ dependencies {
     implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("androidx.glance:glance-appwidget:1.1.1")
+    // Google-bejelentkezés a szinkronizáláshoz (csak a Drive alkalmazásadat-területe)
+    implementation("com.google.android.gms:play-services-auth:21.3.0")
 }

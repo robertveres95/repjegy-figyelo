@@ -57,6 +57,7 @@ object Store {
         }
         _watches.value = parsed
         initialized = true
+        Sync.load()
     }
 
     @Synchronized
@@ -77,6 +78,45 @@ object Store {
     @Synchronized
     fun delete(id: String) {
         persist(_watches.value.filterNot { it.id == id })
+        // Törlésjel: a szinkronizálás így a másik eszközön is törli
+        val t = tombstones().toMutableMap()
+        t[id] = System.currentTimeMillis()
+        saveTombstones(t)
+        Sync.scheduleSoon()
+    }
+
+    /** Felhasználói módosítás (szerkesztés, csengő): megjelöljük az időpontját a szinkronizáláshoz. */
+    fun userUpdate(id: String, transform: (Watch) -> Watch) {
+        update(id) { transform(it).copy(editedAt = System.currentTimeMillis()) }
+        Sync.scheduleSoon()
+    }
+
+    fun userUpsert(watch: Watch) {
+        upsert(watch.copy(editedAt = System.currentTimeMillis()))
+        Sync.scheduleSoon()
+    }
+
+    /** Törölt figyelések azonosítója → törlés ideje (a szinkronizáláshoz). */
+    @Synchronized
+    fun tombstones(): Map<String, Long> {
+        val obj = runCatching { org.json.JSONObject(prefs.getString("tombstones", "{}") ?: "{}") }.getOrNull()
+            ?: return emptyMap()
+        return obj.keys().asSequence().associateWith { obj.optLong(it, 0L) }
+    }
+
+    @Synchronized
+    internal fun saveTombstones(t: Map<String, Long>) {
+        val cutoff = System.currentTimeMillis() - 120L * 24 * 3_600_000L
+        val obj = org.json.JSONObject()
+        t.filterValues { it > cutoff }.forEach { (k, v) -> obj.put(k, v) }
+        prefs.edit { putString("tombstones", obj.toString()) }
+    }
+
+    /** A szinkronizálás eredményének mentése (felhasználói időbélyeg változtatása nélkül). */
+    @Synchronized
+    internal fun replaceFromSync(list: List<Watch>, tombstones: Map<String, Long>) {
+        if (list != _watches.value) persist(list)
+        saveTombstones(tombstones)
     }
 
     @Synchronized
@@ -150,7 +190,9 @@ object Store {
             val list = _watches.value.toMutableList()
             var added = 0
             var updated = 0
-            for (w in converted) {
+            val now = System.currentTimeMillis()
+            for (w0 in converted) {
+                val w = w0.copy(editedAt = now)
                 val i = list.indexOfFirst { it.id == w.id }
                 if (i >= 0) {
                     // A meglévő eredmények maradnak, ha a keresés ugyanaz
@@ -167,7 +209,7 @@ object Store {
             }
             persist(list)
             added to updated
-        }
+        }.also { Sync.scheduleSoon() }
     }
 
     /** Célárak átváltása egyik pénznemről a másikra (árfolyamhiba esetén értesítés ki + figyelmeztetés). */

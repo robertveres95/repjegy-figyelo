@@ -196,6 +196,8 @@ object BackgroundLoop {
                 }
                 runCatching { Updater.dailyCheck() }
                 runCatching { QuietQueue.flushIfAwake() }
+                // A telefonon végzett módosítások átvétele, a friss árak feltöltése
+                runCatching { Sync.syncNow() }
                 delay(10 * 60_000L)
             }
         }
@@ -275,6 +277,12 @@ object DesktopPlatform : PlatformApi {
         val title = "${w.routeTitle}: ${formatPrice(best.price, currency)}"
         // Csendes órákban nem ugrik fel; a csendes idő végén összefoglalót küldünk
         if (Store.settings.value.isQuiet()) QuietQueue.add(title) else TrayNotifier.send(title, text)
+    }
+
+    override suspend fun googleAccessToken(interactive: Boolean): String? = GoogleAuthDesktop.token(interactive)
+    override fun googleInvalidateToken() = GoogleAuthDesktop.invalidate()
+    override fun googleSignOut() {
+        Thread { GoogleAuthDesktop.signOut() }.start()
     }
 
     override val quietHint =
