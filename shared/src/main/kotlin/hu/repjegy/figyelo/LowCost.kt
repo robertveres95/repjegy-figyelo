@@ -79,6 +79,10 @@ object Ryanair {
             params["inboundDepartureDateFrom"] = it
             params["inboundDepartureDateTo"] = it
         }
+        // Időablak: a Ryanair a legolcsóbb járatot adja, ezért az ablakot neki is meg kell adni
+        // (különben egy ablakon kívüli olcsó járat elrejtené a megfelelőt)
+        w.depFrom?.let { params["outboundDepartureTimeFrom"] = "%02d:00".format(it) }
+        w.depTo?.let { params["outboundDepartureTimeTo"] = if (it >= 24) "23:59" else "%02d:00".format(it) }
         val endpoint = if (w.isRoundTrip) "roundTripFares" else "oneWayFares"
         val query = params.entries.joinToString("&") { (k, v) -> "$k=${URLEncoder.encode(v, "UTF-8")}" }
         val res = Http.request(
@@ -218,8 +222,8 @@ object WizzAir {
         if (!json.has("outboundFlights") && !json.has("returnFlights")) {
             throw IOException("Váratlan Wizz Air-válasz (változhatott a formátum)")
         }
-        val outbound = cheapest(json.optJSONArray("outboundFlights"), w.outboundDate) ?: return emptyList()
-        val inbound = w.returnDate?.let { cheapest(json.optJSONArray("returnFlights"), it) ?: return emptyList() }
+        val outbound = cheapest(json.optJSONArray("outboundFlights"), w.outboundDate, w.depFrom, w.depTo) ?: return emptyList()
+        val inbound = w.returnDate?.let { cheapest(json.optJSONArray("returnFlights"), it, null, null) ?: return emptyList() }
 
         val perPerson = Rates.convert(outbound.amount, outbound.currency, currency) +
             (inbound?.let { Rates.convert(it.amount, it.currency, currency) } ?: 0.0)
@@ -244,7 +248,7 @@ object WizzAir {
         )
     }
 
-    private class DayFare(
+    internal class DayFare(
         val amount: Double,
         val currency: String,
         val departure: String?,
@@ -252,7 +256,12 @@ object WizzAir {
         val to: String? = null,
     )
 
-    private fun cheapest(flights: JSONArray?, date: String): DayFare? {
+    /**
+     * A nap legolcsóbb járata. A Wizz a napi legolcsóbb árat adja, mellette a nap összes
+     * indulási idejét; időablaknál csak akkor használható az ár, ha épp a legolcsóbb járat
+     * esik az ablakba (a többi járat árát nem ismerjük).
+     */
+    internal fun cheapest(flights: JSONArray?, date: String, depFrom: Int?, depTo: Int?): DayFare? {
         flights ?: return null
         var best: DayFare? = null
         for (i in 0 until flights.length()) {
@@ -267,6 +276,12 @@ object WizzAir {
                 val d = dates.optJSONObject(j) ?: continue
                 if (time == null || d.optBoolean("isCheapestOfTheDay")) time = trimTime(d.optString("date"))
                 if (d.optBoolean("isCheapestOfTheDay")) break
+            }
+            if (depFrom != null || depTo != null) {
+                val minutes = time?.let { t -> runCatching { java.time.LocalDateTime.parse(t) }.getOrNull() }
+                    ?.let { it.hour * 60 + it.minute } ?: continue
+                if (depFrom != null && minutes < depFrom * 60) continue
+                if (depTo != null && minutes > depTo * 60) continue
             }
             if (best == null || amount < best.amount) {
                 best = DayFare(

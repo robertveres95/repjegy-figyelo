@@ -33,6 +33,9 @@ interface PlatformApi {
     /** Rövid megjegyzés a háttér-ellenőrzésről a Beállításokban. */
     val backgroundHint: String
 
+    /** Mit jelentenek a csendes órák ezen a platformon. */
+    val quietHint: String get() = "Ilyenkor a riasztás hang és rezgés nélkül érkezik; reggel ott vár az értesítések között."
+
     fun openUrl(url: String)
     fun openAsset(name: String): InputStream
     fun notifyPriceDrop(w: Watch, currency: String)
@@ -46,6 +49,21 @@ interface PlatformApi {
 
     /** Az app értesítési beállításainak megnyitása a rendszerben. */
     fun openNotificationSettings() {}
+
+    /** Szöveg megosztása (Androidon a megosztás menü, Windowson vágólapra másolás). Igaz, ha vágólapra került. */
+    fun shareText(text: String): Boolean
+
+    /** A vágólap szövege (kód beillesztéséhez), ha van. */
+    fun readClipboard(): String?
+
+    /** Fájl mentése a felhasználó által választott helyre; a végén [onDone] (siker). */
+    fun exportFile(suggestedName: String, content: String, onDone: (Boolean) -> Unit)
+
+    /** Fájl kiválasztása és beolvasása; null, ha a felhasználó megszakította vagy hiba volt. */
+    fun importFile(onResult: (String?) -> Unit)
+
+    /** A figyelések megváltoztak (pl. a kezdőképernyő-widget frissítéséhez). */
+    fun watchesChanged() {}
 
     @Composable
     fun BackHandler(enabled: Boolean, onBack: () -> Unit)
@@ -72,6 +90,13 @@ object AppScope {
 
     /** Nő, valahányszor az app előtérbe kerül (Androidon onResume). */
     val resumeCount = kotlinx.coroutines.flow.MutableStateFlow(0)
+
+    /** Egy másik appból (pl. Messenger → Megosztás → REFI) érkezett szöveg, amit még nem dolgoztunk fel. */
+    val incomingText = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+
+    /** Képernyőképekhez és tesztekhez: belépő animációk nélkül. */
+    @Volatile
+    var reduceMotion = false
 }
 
 /** Egyszerű kulcs–érték tároló (Androidon SharedPreferences, Windowson fájl). */

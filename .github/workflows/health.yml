@@ -1,0 +1,51 @@
+name: Heti egészségellenőrzés
+
+# Hetente lefut, és élesben kipróbálja az árforrásokat. Ha valamelyik elromlott
+# (pl. megváltozott egy oldal), hibajegyet nyit – erről a GitHub e-mailt küld.
+on:
+  schedule:
+    - cron: "17 5 * * 1"   # hétfőnként 05:17 UTC (7:17 magyar idő)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Árforrások élő próbája
+        id: run
+        continue-on-error: true
+        run: gradle -p desktop test --no-daemon -Drefi.health=true --tests '*HealthTest*'
+
+      - name: Eredmény
+        if: always()
+        run: cat desktop/build/diag/health.txt 2>/dev/null || echo "(nincs jelentés)"
+
+      - name: Hibajegy nyitása, ha valami elromlott
+        if: steps.run.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          body="A heti ellenőrzés hibát talált ($(date -u +%Y-%m-%d)):"$'\n\n```\n'"$(cat desktop/build/diag/health.txt 2>/dev/null || echo 'nincs jelentés')"$'\n```\n\n'"Futás: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          open=$(gh api "repos/${{ github.repository }}/issues?state=open&labels=egeszseg" --jq 'length' 2>/dev/null || echo 0)
+          if [ "$open" = "0" ]; then
+            gh api -X POST "repos/${{ github.repository }}/labels" -f name=egeszseg -f color=d93f0b >/dev/null 2>&1 || true
+            gh api -X POST "repos/${{ github.repository }}/issues" -f title="REFI: egy árforrás nem működik" -f body="$body" -f "labels[]=egeszseg" --jq .html_url
+          else
+            num=$(gh api "repos/${{ github.repository }}/issues?state=open&labels=egeszseg" --jq '.[0].number')
+            gh api -X POST "repos/${{ github.repository }}/issues/$num/comments" -f body="$body" --jq .html_url
+          fi
+          exit 1

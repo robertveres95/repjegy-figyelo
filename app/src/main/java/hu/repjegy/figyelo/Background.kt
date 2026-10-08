@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.glance.appwidget.updateAll
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -97,6 +98,44 @@ class AndroidPlatform private constructor(private val context: Context) : Platfo
         return channel != null && channel.importance == NotificationManager.IMPORTANCE_NONE
     }
 
+    override fun shareText(text: String): Boolean {
+        val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+        return try {
+            context.startActivity(
+                Intent.createChooser(send, "Figyelés megosztása").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            false
+        } catch (_: RuntimeException) {
+            // Nincs megosztásra alkalmas app: vágólapra tesszük
+            runCatching {
+                val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("REFI", text))
+            }.isSuccess
+        }
+    }
+
+    override fun readClipboard(): String? = runCatching {
+        val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+        cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
+    }.getOrNull()
+
+    override fun exportFile(suggestedName: String, content: String, onDone: (Boolean) -> Unit) =
+        FileBridge.export(suggestedName, content, onDone)
+
+    override fun importFile(onResult: (String?) -> Unit) = FileBridge.import(onResult)
+
+    private var widgetJob: kotlinx.coroutines.Job? = null
+
+    /** A widget frissítése; gyors egymásutáni változásoknál csak egyszer. */
+    @Synchronized
+    override fun watchesChanged() {
+        widgetJob?.cancel()
+        widgetJob = AppScope.scope.launch {
+            kotlinx.coroutines.delay(1500)
+            runCatching { RefiWidget().updateAll(context) }
+        }
+    }
+
     override fun openNotificationSettings() {
         try {
             context.startActivity(
@@ -153,6 +192,8 @@ class CheckWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
         AndroidPlatform.ensure(applicationContext)
         if (Store.settings.value.intervalHours > 0) PriceChecker.checkAll()
         Updater.dailyCheck()
+        // A widget frissítése még a háttérmunka vége előtt (utána a folyamat leállhat)
+        runCatching { RefiWidget().updateAll(applicationContext) }
         return Result.success()
     }
 }
@@ -193,9 +234,19 @@ object Notifier {
     /** Két rövid rezgés: várakozás, rezgés, szünet, rezgés (ms). */
     private val VIBRATION = longArrayOf(0, 180, 140, 180)
 
+    /** Csendes órákban: hang és rezgés nélkül (reggel ott vár az értesítések között). */
+    private const val QUIET_CHANNEL_ID = "price_alerts_quiet"
+
     fun createChannel(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.deleteNotificationChannel(OLD_CHANNEL_ID)
+        manager.createNotificationChannel(
+            NotificationChannel(QUIET_CHANNEL_ID, "Árriasztások (csendes órák)", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "Csendes órákban érkező árriasztások, hang és rezgés nélkül"
+                enableVibration(false)
+                setSound(null, null)
+            }
+        )
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Árriasztások",
@@ -264,13 +315,14 @@ object Notifier {
             append(listOfNotNull(best.airline, best.source).distinct().joinToString(" · "))
             best.note?.let { append(" ($it)") }
         }
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+        val quiet = Store.settings.value.isQuiet()
+        val notification = NotificationCompat.Builder(context, if (quiet) QUIET_CHANNEL_ID else CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_flight)
             .setContentTitle("${w.routeTitle}: ${formatPrice(price, currency)}")
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setVibrate(VIBRATION)
+            .setPriority(if (quiet) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_HIGH)
+            .apply { if (!quiet) setVibrate(VIBRATION) else setSilent(true) }
             .setContentIntent(pending)
             .setAutoCancel(true)
             .build()

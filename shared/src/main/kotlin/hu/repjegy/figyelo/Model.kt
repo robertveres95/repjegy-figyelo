@@ -87,6 +87,10 @@ data class Watch(
     val stops: Int,                    // 0 mindegy, 1 közvetlen, 2 max 1, 3 max 2 átszállás
     val targetPrice: Int,
     val notify: Boolean,
+    val flexDays: Int = 0,             // rugalmas dátum: ±ennyi nap (0 = pontos dátum)
+    val depFrom: Int? = null,          // odaút indulása legkorábban (óra, 0–23)
+    val depTo: Int? = null,            // odaút indulása legkésőbb (óra, 1–24; az óra vége)
+    val airlines: String = "",         // csak ezek a légitársaságok (vesszővel), üres = bármelyik
     // Eredmények
     val lastPrice: Int? = null,
     val lowestPrice: Int? = null,
@@ -117,13 +121,54 @@ data class Watch(
 
     fun alertable(o: Offer): Boolean = comparable(o) && o.price <= targetPrice
 
+    /** Lejárt, ha már a rugalmas tartomány utolsó napja is elmúlt. */
     fun isExpired(today: LocalDate = LocalDate.now()): Boolean =
-        runCatching { LocalDate.parse(outboundDate).isBefore(today) }.getOrDefault(false)
+        runCatching { LocalDate.parse(outboundDate).plusDays(flexDays.toLong()).isBefore(today) }.getOrDefault(false)
+
+    /**
+     * A keresendő dátumpárok rugalmas dátumnál: az út hossza marad, és csak a mai vagy
+     * későbbi indulások számítanak (pl. ±2 nap → 5 dátumpár). Pontos dátumnál egy elem.
+     */
+    fun datePairs(today: LocalDate = LocalDate.now()): List<Pair<String, String?>> {
+        val out = runCatching { LocalDate.parse(outboundDate) }.getOrNull() ?: return listOf(outboundDate to returnDate)
+        val ret = returnDate?.let { r -> runCatching { LocalDate.parse(r) }.getOrNull() }
+        return (-flexDays..flexDays)
+            .map { k -> out.plusDays(k.toLong()) to ret?.plusDays(k.toLong()) }
+            .filter { !it.first.isBefore(today) }
+            .sortedBy { kotlin.math.abs(java.time.temporal.ChronoUnit.DAYS.between(out, it.first)) }
+            .map { (o, r) -> o.toString() to r?.toString() }
+            .ifEmpty { listOf(outboundDate to returnDate) }
+    }
+
+    /** A légitársaság-szűrő elemei kisbetűvel (pl. ["wizz", "ryanair"]). */
+    val airlineTokens: List<String>
+        get() = airlines.split(',', ';').map { it.trim().lowercase() }.filter { it.length >= 2 }
+
+    /**
+     * Megfelel-e az ajánlat az időablaknak és a légitársaság-szűrőnek. Ha a forrás nem adta
+     * meg az indulási időt vagy a légitársaságot, nem dobjuk el (nem tudjuk, hogy rossz).
+     */
+    fun matchesFilters(o: Offer): Boolean {
+        if (depFrom != null || depTo != null) {
+            val dep = o.departure?.let { runCatching { java.time.LocalDateTime.parse(it) }.getOrNull() }
+            if (dep != null) {
+                val minutes = dep.hour * 60 + dep.minute
+                if (depFrom != null && minutes < depFrom * 60) return false
+                if (depTo != null && minutes > depTo * 60) return false
+            }
+        }
+        val tokens = airlineTokens
+        if (tokens.isNotEmpty() && o.airline != null) {
+            val a = o.airline.lowercase()
+            if (tokens.none { a.contains(it) }) return false
+        }
+        return true
+    }
 
     /** Ha ez változik, a korábbi árak már nem összehasonlíthatók. */
     fun searchKey(): String = listOf(
         from, to, outboundDate, returnDate, travelClass, adults, children,
-        infantsInSeat, infantsOnLap, bags, stops, checkedBag,
+        infantsInSeat, infantsOnLap, bags, stops, checkedBag, flexDays, depFrom, depTo, airlines.trim().lowercase(),
     ).joinToString("|")
 
     fun clearResults(): Watch = copy(
@@ -149,6 +194,10 @@ data class Watch(
         put("stops", stops)
         put("targetPrice", targetPrice)
         put("notify", notify)
+        if (flexDays != 0) put("flexDays", flexDays)
+        putOpt("depFrom", depFrom)
+        putOpt("depTo", depTo)
+        if (airlines.isNotBlank()) put("airlines", airlines)
         putOpt("lastPrice", lastPrice)
         putOpt("lowestPrice", lowestPrice)
         putOpt("lastChecked", lastChecked)
@@ -199,6 +248,10 @@ data class Watch(
                 stops = o.optInt("stops", 0),
                 targetPrice = o.optInt("targetPrice", 0),
                 notify = o.optBoolean("notify", true),
+                flexDays = o.optInt("flexDays", 0).coerceIn(0, 3),
+                depFrom = o.intOrNull("depFrom")?.coerceIn(0, 23),
+                depTo = o.intOrNull("depTo")?.coerceIn(1, 24),
+                airlines = o.optString("airlines", ""),
                 lastPrice = o.intOrNull("lastPrice"),
                 lowestPrice = o.intOrNull("lowestPrice"),
                 lastChecked = o.longOrNull("lastChecked"),
@@ -224,7 +277,17 @@ data class Settings(
     val intervalHours: Int = 6,
     val themeMode: String = THEME_AUTO,
     val textScale: Int = 100,          // betűméret százalékban
+    val quietOn: Boolean = false,      // csendes órák: éjszaka nem szól/rezeg
+    val quietFrom: Int = 22,
+    val quietTo: Int = 7,
 ) {
+    /** Most csendes óra van-e (az éjfélen átnyúló tartományt is kezeli, pl. 22–7). */
+    fun isQuiet(now: java.time.LocalTime = java.time.LocalTime.now()): Boolean {
+        if (!quietOn || quietFrom == quietTo) return false
+        val h = now.hour
+        return if (quietFrom < quietTo) h in quietFrom until quietTo else h >= quietFrom || h < quietTo
+    }
+
     val useSerpApi: Boolean get() = serpOn && apiKey.isNotBlank()
     val useIgnav: Boolean get() = ignavOn && ignavKey.isNotBlank()
 
@@ -266,6 +329,21 @@ val INTERVALS = listOf(
     12 to "12 óránként",
     24 to "Naponta egyszer",
 )
+
+val FLEX_OPTIONS = listOf(
+    0 to "Pontos dátum",
+    1 to "±1 nap",
+    2 to "±2 nap",
+    3 to "±3 nap",
+)
+
+val HOUR_FROM_OPTIONS: List<Pair<Int?, String>> =
+    listOf<Pair<Int?, String>>(null to "Bármikor") + listOf(5, 6, 7, 8, 9, 10, 12, 14, 16, 18).map { it to "%02d:00-tól".format(it) }
+
+val HOUR_TO_OPTIONS: List<Pair<Int?, String>> =
+    listOf<Pair<Int?, String>>(null to "Bármikor") + listOf(9, 10, 12, 14, 16, 18, 20, 22).map { it to "%02d:00-ig".format(it) }
+
+val QUIET_HOURS = (0..23).map { it to "%02d:00".format(it) }
 
 val HU: Locale = Locale.forLanguageTag("hu-HU")
 

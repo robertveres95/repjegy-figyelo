@@ -155,6 +155,26 @@ object TrayNotifier {
     }
 }
 
+// ---------------------------------------------------------------- Csendes órák
+
+/** Csendes órákban gyűjtött riasztások; a csendes idő végén egyben jelezzük őket. */
+object QuietQueue {
+    private val items = mutableListOf<String>()
+
+    @Synchronized
+    fun add(title: String) {
+        items += title
+    }
+
+    @Synchronized
+    fun flushIfAwake() {
+        if (items.isEmpty() || Store.settings.value.isQuiet()) return
+        val text = items.takeLast(5).joinToString("\n") + if (items.size > 5) "\n… és még ${items.size - 5}" else ""
+        TrayNotifier.send("Éjszaka ${items.size} ár esett a célár alá", text)
+        items.clear()
+    }
+}
+
 // ---------------------------------------------------------------- Háttér-ellenőrzés
 
 /** Amíg az app fut (ablakban vagy a tálcán), a beállított gyakorisággal ellenőriz. */
@@ -175,6 +195,7 @@ object BackgroundLoop {
                     runCatching { PriceChecker.checkAll() }
                 }
                 runCatching { Updater.dailyCheck() }
+                runCatching { QuietQueue.flushIfAwake() }
                 delay(10 * 60_000L)
             }
         }
@@ -251,7 +272,53 @@ object DesktopPlatform : PlatformApi {
             best.outboundText()?.let { append(" Indulás: $it") }
             best.airline?.let { append(" · $it") }
         }
-        TrayNotifier.send("${w.routeTitle}: ${formatPrice(best.price, currency)}", text)
+        val title = "${w.routeTitle}: ${formatPrice(best.price, currency)}"
+        // Csendes órákban nem ugrik fel; a csendes idő végén összefoglalót küldünk
+        if (Store.settings.value.isQuiet()) QuietQueue.add(title) else TrayNotifier.send(title, text)
+    }
+
+    override val quietHint =
+        "Ilyenkor nem ugrik fel értesítés; a csendes idő végén egy összefoglalót kapsz a közben esett árakról."
+
+    override fun shareText(text: String): Boolean = runCatching {
+        java.awt.Toolkit.getDefaultToolkit().systemClipboard
+            .setContents(java.awt.datatransfer.StringSelection(text), null)
+    }.isSuccess
+
+    override fun readClipboard(): String? = runCatching {
+        java.awt.Toolkit.getDefaultToolkit().systemClipboard
+            .getData(java.awt.datatransfer.DataFlavor.stringFlavor) as? String
+    }.getOrNull()
+
+    override fun exportFile(suggestedName: String, content: String, onDone: (Boolean) -> Unit) {
+        SwingUtilities.invokeLater {
+            val ok = runCatching {
+                val dialog = java.awt.FileDialog(null as java.awt.Frame?, "REFI-mentés helye", java.awt.FileDialog.SAVE)
+                dialog.file = suggestedName
+                dialog.isVisible = true
+                val name = dialog.file ?: return@runCatching false
+                var f = File(dialog.directory, name)
+                if (!f.name.endsWith(".json", ignoreCase = true)) f = File(f.parentFile, f.name + ".json")
+                f.writeText(content, Charsets.UTF_8)
+                true
+            }.getOrDefault(false)
+            onDone(ok)
+        }
+    }
+
+    override fun importFile(onResult: (String?) -> Unit) {
+        SwingUtilities.invokeLater {
+            val text = runCatching {
+                val dialog = java.awt.FileDialog(null as java.awt.Frame?, "REFI-mentés megnyitása", java.awt.FileDialog.LOAD)
+                dialog.setFilenameFilter { _, n -> n.endsWith(".json", ignoreCase = true) }
+                dialog.isVisible = true
+                val name = dialog.file ?: return@runCatching null
+                val f = File(dialog.directory, name)
+                require(f.length() <= 5L * 1024 * 1024) { "túl nagy fájl" }
+                f.readText(Charsets.UTF_8)
+            }.getOrNull()
+            onResult(text)
+        }
     }
 
     override fun notifyUpdate(release: Updater.Release) {

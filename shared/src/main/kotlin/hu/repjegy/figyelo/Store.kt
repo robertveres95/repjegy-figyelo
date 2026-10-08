@@ -41,6 +41,9 @@ object Store {
             intervalHours = prefs.getInt("intervalHours", 6),
             themeMode = prefs.getString("themeMode", THEME_AUTO) ?: THEME_AUTO,
             textScale = prefs.getInt("textScale", 100),
+            quietOn = prefs.getBoolean("quietOn", false),
+            quietFrom = prefs.getInt("quietFrom", 22).coerceIn(0, 23),
+            quietTo = prefs.getInt("quietTo", 7).coerceIn(0, 23),
         )
         val raw = prefs.getString("watches", "[]") ?: "[]"
         val arr = runCatching { JSONArray(raw) }.getOrNull()
@@ -129,8 +132,58 @@ object Store {
             putInt("intervalHours", settings.intervalHours)
             putString("themeMode", settings.themeMode)
             putInt("textScale", settings.textScale)
+            putBoolean("quietOn", settings.quietOn)
+            putInt("quietFrom", settings.quietFrom)
+            putInt("quietTo", settings.quietTo)
         }
         _settings.value = settings
+    }
+
+    /**
+     * Figyelések átvétele (visszaállítás fájlból vagy megosztott kódból). Az azonos azonosítójú
+     * figyelést frissíti, a többit hozzáadja. Ha a figyelések más pénznemben készültek, a
+     * célárakat átváltja (lásd [convertTargets]). Visszaadja: (új, frissített) darabszám.
+     */
+    suspend fun importWatches(incoming: List<Watch>, currency: String): Pair<Int, Int> {
+        val converted = convertTargets(incoming, currency, settings.value.currency)
+        return synchronized(this) {
+            val list = _watches.value.toMutableList()
+            var added = 0
+            var updated = 0
+            for (w in converted) {
+                val i = list.indexOfFirst { it.id == w.id }
+                if (i >= 0) {
+                    // A meglévő eredmények maradnak, ha a keresés ugyanaz
+                    val old = list[i]
+                    list[i] = if (old.searchKey() == w.searchKey()) w.copy(
+                        lastPrice = old.lastPrice, lowestPrice = old.lowestPrice, lastChecked = old.lastChecked,
+                        offers = old.offers, sourceStatus = old.sourceStatus, history = old.history,
+                    ) else w
+                    updated++
+                } else {
+                    list += w
+                    added++
+                }
+            }
+            persist(list)
+            added to updated
+        }
+    }
+
+    /** Célárak átváltása egyik pénznemről a másikra (árfolyamhiba esetén értesítés ki + figyelmeztetés). */
+    private fun convertTargets(list: List<Watch>, from: String, to: String): List<Watch> {
+        if (from == to) return list
+        val factor = runCatching { Rates.convert(1.0, from, to) }.getOrNull()?.takeIf { it > 0 && it.isFinite() }
+        return list.map { w ->
+            val cleared = w.clearResults()
+            if (factor != null) {
+                val raw = w.targetPrice * factor
+                val target = if (to == "HUF") (Math.round(raw / 100.0) * 100).toInt() else Math.round(raw).toInt()
+                cleared.copy(targetPrice = target.coerceAtLeast(1))
+            } else {
+                cleared.copy(notify = false, lastError = "${PriceChecker.CURRENCY_HINT_PREFIX}: add meg újra a célárat, és kapcsold vissza az értesítést.")
+            }
+        }
     }
 
     private fun persist(list: List<Watch>) {
@@ -138,5 +191,6 @@ object Store {
         list.forEach { arr.put(it.toJson()) }
         prefs.edit { putString("watches", arr.toString()) }
         _watches.value = list
+        runCatching { Platform.current.watchesChanged() }
     }
 }

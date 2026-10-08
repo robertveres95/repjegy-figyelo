@@ -333,7 +333,7 @@ private val enteredKeys = java.util.Collections.synchronizedSet(HashSet<Any>())
  */
 @Composable
 fun Modifier.enterAnimation(delayMs: Int = 0, key: Any? = null): Modifier {
-    val already = key != null && key in enteredKeys
+    val already = AppScope.reduceMotion || (key != null && key in enteredKeys)
     val progress = remember { Animatable(if (already) 1f else 0f) }
     LaunchedEffect(Unit) {
         if (already) return@LaunchedEffect

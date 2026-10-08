@@ -55,9 +55,17 @@ object PriceChecker {
         }
         try {
             val runs = buildList {
-                if (settings.googleOn) add(SourceRun(GoogleFlights.NAME) { GoogleFlights.search(watch, currency) })
-                if (settings.ryanairOn) add(SourceRun(Ryanair.NAME) { Ryanair.search(watch, currency) })
-                if (settings.wizzOn) add(SourceRun(WizzAir.NAME) { WizzAir.search(watch, currency) })
+                // Rugalmas dátumnál a kulcs nélküli források minden dátumpárt lekérdeznek
+                // (a kulcsos SerpApi/Ignav csak a pontos dátumot – azok keretét ne égessük el)
+                if (settings.googleOn) add(SourceRun(GoogleFlights.NAME) { flexSearch(watch) { GoogleFlights.search(it, currency) } })
+                if (settings.ryanairOn) add(SourceRun(Ryanair.NAME) {
+                    airlineAllowed(watch, "ryanair")
+                    flexSearch(watch) { Ryanair.search(it, currency) }
+                })
+                if (settings.wizzOn) add(SourceRun(WizzAir.NAME) {
+                    airlineAllowed(watch, "wizz")
+                    flexSearch(watch) { WizzAir.search(it, currency) }
+                })
                 if (settings.useSerpApi) add(SourceRun(SerpApi.NAME) { SerpApi.search(watch, settings.apiKey, currency) })
                 if (settings.useIgnav) add(SourceRun(Ignav.NAME) { Ignav.search(watch, settings.ignavKey, currency) })
             }
@@ -143,6 +151,41 @@ object PriceChecker {
         }
     }
 
+    /** Ha a légitársaság-szűrő kizárja ezt a fapadost, a lekérdezést meg sem kezdjük. */
+    private fun airlineAllowed(w: Watch, name: String) {
+        val tokens = w.airlineTokens
+        if (tokens.isNotEmpty() && tokens.none { name.contains(it) || it.contains(name) }) {
+            throw SkipSourceException("kizárva a légitársaság-szűrővel")
+        }
+    }
+
+    /**
+     * Rugalmas dátum: minden dátumpárra lefuttatja a keresést és összefésüli. Ha egy-egy
+     * dátum hibázik, a többi eredménye megmarad; ha mind hibázik, az első hibát adja tovább.
+     */
+    internal fun flexSearch(w: Watch, search: (Watch) -> List<Offer>): List<Offer> {
+        val pairs = w.datePairs()
+        if (pairs.size <= 1 && w.flexDays == 0) return search(w)
+        val results = mutableListOf<Offer>()
+        var firstError: Exception? = null
+        var anyOk = false
+        for ((index, pair) in pairs.withIndex()) {
+            if (index > 0) Thread.sleep(400) // ne zúdítsunk egyszerre sok kérést a forrásra
+            try {
+                results += search(w.copy(outboundDate = pair.first, returnDate = pair.second, flexDays = 0))
+                anyOk = true
+            } catch (e: SkipSourceException) {
+                throw e
+            } catch (e: FatalSourceException) {
+                if (anyOk) break else throw e
+            } catch (e: Exception) {
+                if (firstError == null) firstError = e
+            }
+        }
+        if (!anyOk && firstError != null) throw firstError
+        return results
+    }
+
     /** A pénznemváltás miatti „add meg újra a célárat” figyelmeztetés maradjon, amíg az értesítés ki van kapcsolva. */
     private fun keepCurrencyHint(w: Watch): String? =
         w.lastError?.takeIf { !w.notify && it.startsWith(CURRENCY_HINT_PREFIX) }
@@ -162,6 +205,8 @@ object PriceChecker {
      */
     internal fun rank(w: Watch, offers: List<Offer>, now: LocalDateTime = LocalDateTime.now()): List<Offer> {
         val deduped = offers
+            // Időablak és légitársaság-szűrő
+            .filter { w.matchesFilters(it) }
             // Már elindult járat ne legyen „legjobb ajánlat”. Az idő a reptér helyi ideje, a
             // készüléké más időzónában lehet (akár 9-12 óra), ezért bőven hagyunk ráhagyást
             .filter { o ->

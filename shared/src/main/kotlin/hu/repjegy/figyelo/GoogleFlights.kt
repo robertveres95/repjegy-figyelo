@@ -152,10 +152,16 @@ object GoogleFlights {
         }.bytes()
 
         val info = Pb().apply {
-            for ((date, origins, destinations) in legs) {
+            for ((legIndex, leg) in legs.withIndex()) {
+                val (date, origins, destinations) = leg
                 message(3) {
                     string(2, date)
                     if (maxStops != null) int(5, maxStops)
+                    // Odaút időablaka (fast-flights: earliest/latest_departure_hour = 8/9)
+                    if (legIndex == 0) {
+                        w.depFrom?.let { int(8, it) }
+                        w.depTo?.takeIf { it < 24 }?.let { int(9, it) }
+                    }
                     origins.forEach { code -> message(13) { string(2, code) } }
                     destinations.forEach { code -> message(14) { string(2, code) } }
                 }

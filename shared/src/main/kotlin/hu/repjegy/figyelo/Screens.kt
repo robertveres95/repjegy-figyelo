@@ -57,6 +57,9 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -116,8 +119,9 @@ import java.util.UUID
 
 private sealed interface Screen {
     data object Home : Screen
-    data class Edit(val id: String?) : Screen
+    data class Edit(val id: String?, val template: Watch? = null) : Screen
     data object Options : Screen
+    data object Explore : Screen
 }
 
 private val dateFormat = DateTimeFormatter.ofPattern("yyyy. MMM d., EEE", HU)
@@ -159,9 +163,14 @@ fun AppRoot() {
                     onAdd = { screen = Screen.Edit(null) },
                     onEdit = { screen = Screen.Edit(it) },
                     onSettings = { screen = Screen.Options },
+                    onExplore = { screen = Screen.Explore },
                 )
-                is Screen.Edit -> EditScreen(s.id, onDone = { screen = Screen.Home })
+                is Screen.Edit -> EditScreen(s.id, s.template, onDone = { screen = Screen.Home })
                 Screen.Options -> SettingsScreen(onDone = { screen = Screen.Home })
+                Screen.Explore -> DiscoverScreen(
+                    onBack = { screen = Screen.Home },
+                    onPick = { template -> screen = Screen.Edit(null, template) },
+                )
             }
         }
 
@@ -231,7 +240,7 @@ private fun UpdateOverlay(release: Updater.Release) {
 
 /** Fekete, átlátszó felső sáv izzó, monospace címmel. */
 @Composable
-private fun NeonTopBar(
+internal fun NeonTopBar(
     title: String,
     onBack: (() -> Unit)? = null,
     actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {},
@@ -264,10 +273,43 @@ private fun NeonTopBar(
 // ---------------------------------------------------------------- Főképernyő
 
 @Composable
-private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: () -> Unit) {
+internal fun HomeScreen(
+    onAdd: () -> Unit,
+    onEdit: (String) -> Unit,
+    onSettings: () -> Unit,
+    onExplore: () -> Unit = {},
+) {
     val watches by Store.watches.collectAsState()
     val settings by Store.settings.collectAsState()
     val checking by Store.checking.collectAsState()
+    // Rövid visszajelzés (pl. „Vágólapra másolva”, „3 figyelés visszaállítva”)
+    var toast by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(toast) {
+        if (toast != null) {
+            kotlinx.coroutines.delay(4500)
+            toast = null
+        }
+    }
+    var menuOpen by remember { mutableStateOf(false) }
+    var codeDialog by remember { mutableStateOf<String?>(null) }
+    // Más appból megosztott szöveg (pl. a néni által küldött REFI-kód)
+    val incoming by AppScope.incomingText.collectAsState()
+    LaunchedEffect(incoming) {
+        incoming?.let {
+            codeDialog = it
+            AppScope.incomingText.value = null
+        }
+    }
+    codeDialog?.let { initial ->
+        ImportCodeDialog(
+            initial = initial,
+            onDismiss = { codeDialog = null },
+            onImported = { msg ->
+                codeDialog = null
+                toast = msg
+            },
+        )
+    }
     // A rendszerben letiltott értesítés esetén a csengők hiába „bekapcsoltak”: figyelmeztetünk.
     // Minden visszatéréskor újranézzük (a rendszerbeállításokban visszakapcsolhatja).
     var notifyBlocked by remember { mutableStateOf(false) }
@@ -294,8 +336,59 @@ private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: 
                             modifier = if (checking.isNotEmpty()) Modifier.rotate(angle) else Modifier,
                         )
                     }
+                    IconButton(onClick = onExplore) {
+                        Icon(Icons.Filled.Search, contentDescription = "Felfedezés: hova repülhetek olcsón?")
+                    }
                     IconButton(onClick = onSettings) {
                         Icon(Icons.Filled.Settings, contentDescription = "Beállítások")
+                    }
+                    Box {
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "Továbbiak")
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Felfedezés – hova repülhetek olcsón?") },
+                                onClick = { menuOpen = false; onExplore() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Kód beillesztése") },
+                                onClick = {
+                                    menuOpen = false
+                                    codeDialog = Platform.current.readClipboard()?.takeIf { it.contains("REFI1:") } ?: ""
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Mentés fájlba") },
+                                onClick = {
+                                    menuOpen = false
+                                    val content = Backup.export(Store.watches.value, Store.settings.value)
+                                    Platform.current.exportFile(Backup.fileName(), content) { ok ->
+                                        toast = if (ok) "Mentve: ${Store.watches.value.size} figyelés." else "A mentés nem sikerült."
+                                    }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Visszaállítás fájlból") },
+                                onClick = {
+                                    menuOpen = false
+                                    Platform.current.importFile { text ->
+                                        if (text == null) return@importFile
+                                        val parsed = Backup.parse(text)
+                                        if (parsed == null) {
+                                            toast = "Ez nem REFI-mentésfájl."
+                                            return@importFile
+                                        }
+                                        AppScope.scope.launch {
+                                            val (added, updated) = Store.importWatches(parsed.watches, parsed.currency)
+                                            toast = "Visszaállítva: $added új, $updated frissített figyelés" +
+                                                (if (parsed.skipped > 0) " (${parsed.skipped} hibás kihagyva)." else ".")
+                                            if (Store.settings.value.isReady) PriceChecker.checkAll()
+                                        }
+                                    }
+                                },
+                            )
+                        }
                     }
                 },
             )
@@ -324,6 +417,13 @@ private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: 
             contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            toast?.let { msg ->
+                item(key = "toast") {
+                    NeonCard(modifier = Modifier.fillMaxWidth().animateItem()) {
+                        Text(msg, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            }
             if (!settings.isReady) {
                 item { SetupCard(onSettings) }
             }
@@ -353,6 +453,10 @@ private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: 
                     onCheck = { AppScope.scope.launch { PriceChecker.checkOne(w.id) } },
                     onEdit = { onEdit(w.id) },
                     onOpen = { url -> Platform.current.openUrl(url) },
+                    onShare = {
+                        val copied = Platform.current.shareText(ShareCode.message(w, settings.currency))
+                        if (copied) toast = "A figyelés kódja a vágólapra került – illeszd be egy üzenetbe."
+                    },
                 )
             }
         }
@@ -400,6 +504,7 @@ private fun WatchCard(
     onCheck: () -> Unit,
     onEdit: () -> Unit,
     onOpen: (String) -> Unit,
+    onShare: () -> Unit = {},
 ) {
     val good = Neon.Green
     val best = w.bestOffer
@@ -420,7 +525,9 @@ private fun WatchCard(
                     color = Neon.Green,
                     modifier = Modifier.weight(1f),
                 )
-                Spacer(Modifier.width(8.dp))
+                IconButton(onClick = onShare) {
+                    Icon(Icons.Filled.Share, contentDescription = "Figyelés megosztása", tint = Neon.TextDim)
+                }
                 BellToggle(on = w.notify, onToggle = onToggleNotify)
             }
             Text(dateLine(w), style = MaterialTheme.typography.bodyMedium)
@@ -465,6 +572,19 @@ private fun WatchCard(
                         )
                     }
                 }
+            }
+            // „Most vegyem vagy várjak?” – az eddigi árak alapján
+            verdictFor(w)?.let { v ->
+                Text(
+                    v.text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = when (v.tone) {
+                        Verdict.Tone.GOOD -> Neon.Green
+                        Verdict.Tone.WAIT -> Neon.Amber
+                        Verdict.Tone.NEUTRAL -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    modifier = Modifier.padding(top = 6.dp),
+                )
             }
             if (best != null) {
                 OfferDetails(best, highlight = true)
@@ -605,7 +725,7 @@ private fun LegBlock(label: String, parts: LegParts, highlight: Boolean) {
 }
 
 @Composable
-private fun StatusText(text: String, isError: Boolean) {
+internal fun StatusText(text: String, isError: Boolean) {
     Text(
         text,
         style = MaterialTheme.typography.bodySmall,
@@ -616,7 +736,8 @@ private fun StatusText(text: String, isError: Boolean) {
 private fun dateLine(w: Watch): String {
     val out = runCatching { LocalDate.parse(w.outboundDate).format(shortDate) }.getOrDefault(w.outboundDate)
     val ret = w.returnDate?.let { r -> runCatching { LocalDate.parse(r).format(shortDate) }.getOrDefault(r) }
-    return if (ret != null) "$out – $ret · oda-vissza" else "$out · csak oda"
+    val flex = if (w.flexDays > 0) " (±${w.flexDays} nap)" else ""
+    return if (ret != null) "$out – $ret$flex · oda-vissza" else "$out$flex · csak oda"
 }
 
 private fun detailLine(w: Watch): String {
@@ -631,6 +752,13 @@ private fun detailLine(w: Watch): String {
     if (w.bags > 0) extra += "${w.bags} kézipoggyász"
     if (w.checkedBag) extra += "feladott poggyász"
     if (w.stops != 0) extra += STOP_OPTIONS.firstOrNull { it.first == w.stops }?.second ?: ""
+    if (w.depFrom != null || w.depTo != null) {
+        extra += "indulás " + listOfNotNull(
+            w.depFrom?.let { "%02d:00-tól".format(it) },
+            w.depTo?.let { "%02d:00-ig".format(it) },
+        ).joinToString(" ")
+    }
+    if (w.airlineTokens.isNotEmpty()) extra += "csak: ${w.airlines.trim()}"
     return extra.joinToString(" · ")
 }
 
@@ -674,37 +802,43 @@ private fun Sparkline(points: List<PricePoint>, target: Int, modifier: Modifier)
 // ---------------------------------------------------------------- Szerkesztés
 
 @Composable
-private fun EditScreen(id: String?, onDone: () -> Unit) {
+internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit) {
     val existing = remember(id) { id?.let { i -> Store.watches.value.find { it.id == i } } }
+    // Kezdőértékek: a szerkesztett figyelés, vagy egy sablon (pl. a Felfedezés találatából)
+    val init = existing ?: template
     val currency = Store.settings.collectAsState().value.currency
     val today = remember { LocalDate.now() }
 
     var fromPlace by remember {
         mutableStateOf<Place?>(
-            if (existing != null) Airports.placeFor(existing.from, existing.fromLabel)
+            if (init != null) Airports.placeFor(init.from, init.fromLabel)
             else Airports.placeFor("BUD", null)
         )
     }
     var toPlace by remember {
-        mutableStateOf<Place?>(existing?.let { Airports.placeFor(it.to, it.toLabel) })
+        mutableStateOf<Place?>(init?.let { Airports.placeFor(it.to, it.toLabel) })
     }
-    var roundTrip by remember { mutableStateOf(existing?.isRoundTrip ?: true) }
+    var roundTrip by remember { mutableStateOf(init?.isRoundTrip ?: true) }
     var outDate by remember {
-        mutableStateOf(existing?.outboundDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: today.plusDays(30))
+        mutableStateOf(init?.outboundDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: today.plusDays(30))
     }
     var retDate by remember {
-        mutableStateOf(existing?.returnDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: outDate.plusDays(7))
+        mutableStateOf(init?.returnDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: outDate.plusDays(7))
     }
-    var travelClass by remember { mutableStateOf(existing?.travelClass ?: 1) }
-    var adults by remember { mutableStateOf(existing?.adults ?: 1) }
-    var children by remember { mutableStateOf(existing?.children ?: 0) }
-    var infantsInSeat by remember { mutableStateOf(existing?.infantsInSeat ?: 0) }
-    var infantsOnLap by remember { mutableStateOf(existing?.infantsOnLap ?: 0) }
-    var bags by remember { mutableStateOf(existing?.bags ?: 0) }
-    var stops by remember { mutableStateOf(existing?.stops ?: 0) }
-    var target by remember { mutableStateOf(existing?.targetPrice?.toString() ?: "") }
-    var notify by remember { mutableStateOf(existing?.notify ?: true) }
-    var checkedBag by remember { mutableStateOf(existing?.checkedBag ?: false) }
+    var travelClass by remember { mutableStateOf(init?.travelClass ?: 1) }
+    var adults by remember { mutableStateOf(init?.adults ?: 1) }
+    var children by remember { mutableStateOf(init?.children ?: 0) }
+    var infantsInSeat by remember { mutableStateOf(init?.infantsInSeat ?: 0) }
+    var infantsOnLap by remember { mutableStateOf(init?.infantsOnLap ?: 0) }
+    var bags by remember { mutableStateOf(init?.bags ?: 0) }
+    var stops by remember { mutableStateOf(init?.stops ?: 0) }
+    var target by remember { mutableStateOf(init?.targetPrice?.toString() ?: "") }
+    var notify by remember { mutableStateOf(init?.notify ?: true) }
+    var checkedBag by remember { mutableStateOf(init?.checkedBag ?: false) }
+    var flexDays by remember { mutableStateOf(init?.flexDays ?: 0) }
+    var depFrom by remember { mutableStateOf(init?.depFrom) }
+    var depTo by remember { mutableStateOf(init?.depTo) }
+    var airlines by remember { mutableStateOf(init?.airlines ?: "") }
     var error by remember { mutableStateOf<String?>(null) }
     var outValid by remember { mutableStateOf(true) }
     var retValid by remember { mutableStateOf(true) }
@@ -727,6 +861,7 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
             roundTrip && retDate.isBefore(outDate) -> "A visszaút nem lehet az indulás előtt."
             adults + children + infantsInSeat + infantsOnLap > 9 -> "Legfeljebb 9 utas adható meg."
             targetValue == null || targetValue <= 0 -> "Adj meg egy célárat."
+            depFrom != null && depTo != null && depTo!! <= depFrom!! -> "Az indulási időablak vége legyen későbbi, mint az eleje."
             else -> null
         }
         if (error != null || targetValue == null || from == null || to == null) return
@@ -749,6 +884,10 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
             checkedBag = checkedBag,
             targetPrice = targetValue,
             notify = notify,
+            flexDays = flexDays,
+            depFrom = depFrom,
+            depTo = depTo,
+            airlines = airlines.trim(),
         )
         val sameSearch = existing != null && existing.searchKey() == fresh.searchKey()
         if (sameSearch) {
@@ -804,6 +943,14 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
             if (roundTrip) {
                 DateField("Visszaút", retDate, minDate = outDate, onValidChange = { retValid = it }) { retDate = it }
             }
+            ChoiceField("Rugalmasság", FLEX_OPTIONS, flexDays) { flexDays = it }
+            if (flexDays > 0) {
+                Text(
+                    "A megadott naptól ±$flexDays napon belül keresi a legolcsóbbat (az út hossza marad).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
             SectionTitle("Utasok és osztály")
             ChoiceField("Osztály", TRAVEL_CLASSES, travelClass) { travelClass = it }
@@ -823,6 +970,21 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             ChoiceField("Átszállás", STOP_OPTIONS, stops) { stops = it }
+
+            SectionTitle("Szűrők")
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(Modifier.weight(1f)) { ChoiceField("Indulás legkorábban", HOUR_FROM_OPTIONS, depFrom) { depFrom = it } }
+                Box(Modifier.weight(1f)) { ChoiceField("Indulás legkésőbb", HOUR_TO_OPTIONS, depTo) { depTo = it } }
+            }
+            OutlinedTextField(
+                value = airlines,
+                onValueChange = { airlines = it.take(80) },
+                label = { Text("Csak ezek a légitársaságok") },
+                placeholder = { Text("pl. Wizz, Ryanair – üresen: bármelyik") },
+                supportingText = { Text("Vesszővel elválasztva; elég a név része is") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
             SectionTitle("Riasztás")
             OutlinedTextField(
@@ -862,7 +1024,7 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
 // ---------------------------------------------------------------- Beállítások
 
 @Composable
-private fun SettingsScreen(onDone: () -> Unit) {
+internal fun SettingsScreen(onDone: () -> Unit) {
     val initial = remember { Store.settings.value }
     var googleOn by remember { mutableStateOf(initial.googleOn) }
     var ryanairOn by remember { mutableStateOf(initial.ryanairOn) }
@@ -875,8 +1037,14 @@ private fun SettingsScreen(onDone: () -> Unit) {
     var interval by remember { mutableStateOf(initial.intervalHours) }
     var themeMode by remember { mutableStateOf(initial.themeMode) }
     var textScale by remember { mutableStateOf(initial.textScale) }
-    val draft = Settings(
-        googleOn, ryanairOn, wizzOn, serpOn, ignavOn, apiKey, ignavKey, currency, interval, themeMode, textScale,
+    var quietOn by remember { mutableStateOf(initial.quietOn) }
+    var quietFrom by remember { mutableStateOf(initial.quietFrom) }
+    var quietTo by remember { mutableStateOf(initial.quietTo) }
+    val draft = initial.copy(
+        googleOn = googleOn, ryanairOn = ryanairOn, wizzOn = wizzOn, serpOn = serpOn, ignavOn = ignavOn,
+        apiKey = apiKey, ignavKey = ignavKey, currency = currency, intervalHours = interval,
+        themeMode = themeMode, textScale = textScale,
+        quietOn = quietOn, quietFrom = quietFrom, quietTo = quietTo,
     )
 
     val watches by Store.watches.collectAsState()
@@ -990,6 +1158,20 @@ private fun SettingsScreen(onDone: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            SectionTitle("Csendes órák")
+            SwitchRow("Éjszaka ne szóljon és ne rezegjen", quietOn) { quietOn = it }
+            if (quietOn) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(Modifier.weight(1f)) { ChoiceField("Ettől", QUIET_HOURS, quietFrom) { quietFrom = it } }
+                    Box(Modifier.weight(1f)) { ChoiceField("Eddig", QUIET_HOURS, quietTo) { quietTo = it } }
+                }
+                Text(
+                    Platform.current.quietHint,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             SectionTitle("Verzió")
             Text(
                 "Telepítve: ${Updater.currentVersion}.",
@@ -1044,7 +1226,7 @@ private fun SecretField(label: String, value: String, onChange: (String) -> Unit
 // ---------------------------------------------------------------- Közös elemek
 
 @Composable
-private fun AirportField(label: String, selected: Place?, onSelect: (Place?) -> Unit) {
+internal fun AirportField(label: String, selected: Place?, onSelect: (Place?) -> Unit) {
     val focusManager = LocalFocusManager.current
     var text by remember { mutableStateOf(selected?.fieldText ?: "") }
     var expanded by remember { mutableStateOf(false) }
@@ -1123,7 +1305,7 @@ private fun AirportField(label: String, selected: Place?, onSelect: (Place?) -> 
 }
 
 @Composable
-private fun SectionTitle(text: String) {
+internal fun SectionTitle(text: String) {
     Text(
         text,
         style = MaterialTheme.typography.titleMedium.glow(radius = 10f),
@@ -1133,7 +1315,7 @@ private fun SectionTitle(text: String) {
 }
 
 @Composable
-private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Switch(checked = checked, onCheckedChange = onChange)
@@ -1165,7 +1347,7 @@ private fun Stepper(label: String, hint: String?, value: Int, range: IntRange, o
 }
 
 @Composable
-private fun <T> ChoiceField(label: String, options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit) {
+internal fun <T> ChoiceField(label: String, options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label, style = MaterialTheme.typography.labelLarge)

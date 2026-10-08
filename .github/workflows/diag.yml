@@ -31,6 +31,10 @@ jobs:
         continue-on-error: true
         run: gradle -p desktop test --no-daemon -Drefi.live=true --tests '*LiveSourcesTest*' 2>&1 | tail -5
 
+      - name: Képernyőképek
+        continue-on-error: true
+        run: gradle -p desktop test --no-daemon -Drefi.screens=true --tests '*ScreenshotTest*' 2>&1 | tail -30
+
       - name: Android lint
         continue-on-error: true
         run: gradle :app:lintDebug --no-daemon 2>&1 | tail -20
@@ -52,6 +56,10 @@ jobs:
             echo "### ÉLES ÁRFORRÁSOK"
             cat desktop/build/diag/live.txt 2>/dev/null || echo "(nincs live.txt)"
             echo
+            echo "### KÉPERNYŐKÉPEK"
+            ls desktop/build/screens 2>/dev/null || echo "(nincsenek)"
+            cat desktop/build/screens/hibak.txt 2>/dev/null || true
+            echo
             echo "### ANDROID LINT"
             cat app/build/reports/lint-results-debug.txt 2>/dev/null || echo "(nincs lint-jelentés)"
           } > diag.txt
@@ -61,7 +69,17 @@ jobs:
           fi
           old=$(gh api "repos/${{ github.repository }}/releases/$id/assets" --jq '.[]|select(.name=="diag.txt")|.id')
           [ -n "$old" ] && gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$old"
-          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Content-Type: text/plain" \
-            --data-binary @diag.txt \
-            "https://uploads.github.com/repos/${{ github.repository }}/releases/$id/assets?name=diag.txt" > /dev/null
+          upload() {
+            local file="$1" name="$2" type="$3"
+            local old
+            old=$(gh api "repos/${{ github.repository }}/releases/$id/assets?per_page=100" --jq ".[]|select(.name==\"$name\")|.id")
+            [ -n "$old" ] && gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$old"
+            curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Content-Type: $type" \
+              --data-binary @"$file" \
+              "https://uploads.github.com/repos/${{ github.repository }}/releases/$id/assets?name=$name" > /dev/null
+          }
+          upload diag.txt diag.txt text/plain
+          for f in desktop/build/screens/*.png desktop/build/screens/*.txt; do
+            [ -f "$f" ] && upload "$f" "$(basename "$f")" "$( [[ $f == *.png ]] && echo image/png || echo text/plain )"
+          done
           echo "kész"

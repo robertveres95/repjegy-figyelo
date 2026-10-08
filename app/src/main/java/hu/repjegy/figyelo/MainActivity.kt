@@ -35,6 +35,8 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
         )
         AndroidPlatform.ensure(this)
+        FileBridge.register(this)
+        handleShare(intent)
 
         // Csak az első indításkor kérdezünk (újralétrehozáskor ne kérje újra)
         if (savedInstanceState == null && Build.VERSION.SDK_INT >= 33 &&
@@ -52,6 +54,18 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        handleShare(intent)
+    }
+
+    /** Egy másik appból ide megosztott szöveg (pl. REFI-kód) átadása a felületnek. */
+    private fun handleShare(intent: android.content.Intent?) {
+        if (intent?.action != android.content.Intent.ACTION_SEND) return
+        val text = intent.getStringExtra(android.content.Intent.EXTRA_TEXT) ?: return
+        AppScope.incomingText.value = text.take(20_000)
     }
 
     override fun onResume() {
