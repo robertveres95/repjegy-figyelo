@@ -250,6 +250,16 @@ private fun selfTest(outFile: String): Int {
         require(res.code in 200..499) { "HTTP ${res.code}" }
         "kapcsolat rendben (HTTP ${res.code})"
     }
+    check("3D nyitóanimáció képkockái") {
+        var n = 0
+        while (true) {
+            val bytes = DesktopPlatform::class.java.getResourceAsStream("/splash3d/f%03d.webp".format(n))?.use { it.readBytes() } ?: break
+            org.jetbrains.skia.Image.makeFromEncoded(bytes).use { require(it.width > 0) { "hibás kép: $n" } }
+            n++
+        }
+        require(n >= 50) { "csak $n képkocka" }
+        "$n képkocka betölthető"
+    }
     check("3D-fájlok kihagyva") {
         require(DesktopPlatform::class.java.getResource("/splash/three.min.js") == null) { "a three.js bekerült" }
         "igen"

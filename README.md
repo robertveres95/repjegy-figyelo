@@ -39,7 +39,7 @@ Android- és Windows-app, ami figyeli a repülőjegyárakat, és értesítést k
 - A nem forintos árakat az EKB napi árfolyamával (frankfurter.dev) váltjuk át.
 - A Google Flights-lekérdezés a nyílt forrású fast-flights, a Wizz Air-felület leírása a flywizz könyvtár alapján készült.
 - A repülőtér-lista az OurAirports nyílt adatbázisából származik (menetrend szerinti járatú repterek).
-- A nyitóanimáció a three.js (MIT licenc) könyvtárat használja, az appba csomagolva.
+- A nyitóanimáció a three.js (MIT licenc) könyvtárat használja: Androidon élőben, Windowson előre rögzített képkockákként (desktop/src/main/resources/splash3d).
 - Betűtípus: Plus Jakarta Sans (SIL Open Font License), az appba csomagolva.
 - A Google Flights a legtöbb légitársaságot és irodát lefedi, de nem mindet.
 
