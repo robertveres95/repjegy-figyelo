@@ -816,8 +816,9 @@ private fun EditScreen(id: String?, onDone: () -> Unit) {
             Stepper("Kézipoggyász", "összesen, minden utasra", bags, 0..maxBags) { bags = it }
             SwitchRow("Feladott poggyász (utasonként 1)", checkedBag) { checkedBag = it }
             Text(
-                "A Google Flights és az Ignav a poggyász becsült díját beleszámolja. A Ryanair és a " +
-                    "Wizz Air poggyász nélküli alapárat ad, ezeket a lista végére sorolom.",
+                "A fapadosoknál (Ryanair, Wizz Air, easyJet…) a poggyász díját becsült összeggel " +
+                    "adom hozzá az árhoz. A hagyományos légitársaságoknál úgy számolok, hogy a " +
+                    "poggyász benne van a jegyárban (a legolcsóbb „light” jegyeknél ez nem mindig igaz).",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

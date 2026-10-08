@@ -57,6 +57,15 @@ class LiveSourcesTest {
             keys.take(6).forEach { k -> out.appendLine("    $k: " + table.joinToString(" | ") { (it.second[k] ?: "-").toString() }) }
         }
         out.appendLine()
+        out.appendLine("=== Google több repteres oda-vissza, 3 próbálkozás (hibajelzés + repterenkénti tartalék)")
+        repeat(3) { n ->
+            val lw = w("BUD", "LHR,LGW,STN,LTN,LCY,SEN", d.plusDays(n.toLong()), d.plusDays(5L + n))
+            val t0 = System.currentTimeMillis()
+            val r = runCatching { GoogleFlights.search(lw, "HUF") }
+            out.appendLine("  #${n + 1}: " + r.fold({ "${it.size} ajánlat, legolcsóbb ${it.minOfOrNull { o -> o.price }}" }, { "HIBA: ${it.message}" }) +
+                " (${System.currentTimeMillis() - t0} ms, utolsó: ${GoogleFlights.lastDebug})")
+        }
+        out.appendLine()
         out.appendLine("=== Árfolyam: 1 EUR = ${runCatching { Rates.convert(1.0, "EUR", "HUF") }.getOrElse { "HIBA: $it" }} HUF")
         out.appendLine("=== Frissítésfigyelő: ${runCatching { Updater.check()?.toString() ?: "nincs újabb (vagy nincs .msi)" }.getOrElse { "HIBA: $it" }}")
         File("build/diag").mkdirs()

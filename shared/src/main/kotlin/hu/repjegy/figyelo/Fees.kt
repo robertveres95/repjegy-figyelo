@@ -38,9 +38,15 @@ object Fees {
         Lcc("frontier", 45.0, 45.0, 0.0),
     )
 
+    private val patterns = carriers.map { it to Regex("\\b${Regex.escape(it.name)}\\b") }
+
+    /**
+     * Egész szavas egyezés a légitársaság-nevekben (pl. „Wizz Air UK”, „Ryanair, Malta Air”),
+     * hogy más nevek ne egyezzenek véletlenül (pl. „KM Malta Airlines” nem fapados).
+     */
     private fun lccOf(airline: String?): Lcc? {
         val a = airline?.lowercase() ?: return null
-        return carriers.firstOrNull { a.contains(it.name) }
+        return patterns.firstOrNull { (_, re) -> re.containsMatchIn(a) }?.first
     }
 
     fun isLowCost(airline: String?): Boolean = lccOf(airline) != null
@@ -53,7 +59,8 @@ object Fees {
     fun extraEur(w: Watch, airline: String?, includeInfants: Boolean): Double {
         val lcc = lccOf(airline) ?: return 0.0
         val legs = if (w.isRoundTrip) 2 else 1
-        var perLeg = w.bags * lcc.cabinEur + (if (w.checkedBag) lcc.checkedEur else 0.0)
+        // Kézipoggyász: összesen ennyi darab; feladott poggyász: utasonként 1 (a szerkesztő szerint)
+        var perLeg = w.bags * lcc.cabinEur + (if (w.checkedBag) lcc.checkedEur * w.seatedPassengers else 0.0)
         if (includeInfants) perLeg += w.infantsOnLap * lcc.infantEur
         return perLeg * legs
     }
@@ -62,7 +69,14 @@ object Fees {
     fun apply(o: Offer, w: Watch, currency: String, includeInfants: Boolean): Offer {
         val eur = extraEur(w, o.airline, includeInfants)
         if (eur <= 0.0) return o.copy(bagsIncluded = true)
-        val extra = ceil(Rates.convert(eur, "EUR", currency)).toInt()
+        // Ha az árfolyam nem érhető el, az alapár marad, de nem lesz összevethető a célárral
+        // (így nem riaszt tévesen) – a forrás többi ajánlata ettől még megjelenik
+        val extra = runCatching { ceil(Rates.convert(eur, "EUR", currency)).toInt() }.getOrNull()
+            ?: return o.copy(
+                bagsIncluded = !w.wantsBags,
+                partial = includeInfants && w.infantsOnLap > 0,
+                note = listOfNotNull(o.note, "poggyász-/csecsemődíj nélkül").joinToString(", "),
+            )
         val what = buildList {
             if (w.wantsBags) add("poggyász")
             if (includeInfants && w.infantsOnLap > 0) add("csecsemő")

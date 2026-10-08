@@ -190,31 +190,36 @@ object Rates {
     private class Source(val url: String) {
         private var cache: Map<String, Double>? = null
         private var fetchedAt = 0L
+        private var failedAt = 0L
 
         fun rates(): Map<String, Double> {
             val now = System.currentTimeMillis()
             cache?.let { if (now - fetchedAt < MAX_AGE_MS) return it }
-            // Hálózati hiba esetén is jó a korábbi (kicsit régebbi) árfolyam
-            val res = try {
-                Http.request(url, timeoutMs = 20_000)
-            } catch (e: IOException) {
+            // Nemrég sikertelen volt: 10 percig nem próbáljuk újra (különben minden ajánlatnál
+            // végigvárnánk az időkorlátot), addig a régebbi árfolyam is jó
+            if (now - failedAt < 10 * 60_000L) {
+                cache?.let { return it }
+                throw IOException("Az árfolyam-szolgáltatás nem elérhető")
+            }
+            try {
+                return fetch(now)
+            } catch (e: Exception) {
+                failedAt = now
                 cache?.let { return it }
                 throw e
             }
-            if (res.code !in 200..299) {
-                cache?.let { return it }
-                throw IOException("Nem sikerült lekérni az árfolyamot (HTTP ${res.code})")
-            }
+        }
+
+        private fun fetch(now: Long): Map<String, Double> {
+            val res = Http.request(url, timeoutMs = 15_000)
+            if (res.code !in 200..299) throw IOException("Nem sikerült lekérni az árfolyamot (HTTP ${res.code})")
             val obj = JSONObject(res.body).getJSONObject("rates")
             val map = mutableMapOf("EUR" to 1.0)
             obj.keys().forEach { k ->
                 val v = obj.optDouble(k, Double.NaN)
                 if (v.isFinite() && v > 0) map[k.uppercase()] = v
             }
-            if (map.size < 2) {
-                cache?.let { return it }
-                throw IOException("Hibás árfolyam-válasz")
-            }
+            if (map.size < 2) throw IOException("Hibás árfolyam-válasz")
             cache = map
             fetchedAt = now
             return map

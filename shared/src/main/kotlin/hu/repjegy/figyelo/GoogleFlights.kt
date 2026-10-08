@@ -25,17 +25,31 @@ object GoogleFlights {
     @Volatile
     var lastDebug: String = ""
 
+    private class Fetched(val offers: List<Offer>, val seen: Int, val errorStatus: Boolean)
+
     fun search(w: Watch, currency: String): List<Offer> {
-        // Az élő próbák szerint a Google néha üres választ ad elsőre (pl. több repteres
-        // oda-vissza útnál), ami másodszorra már tele van – ezért egyszer újrapróbáljuk
+        // Élő próbák: a Google néha hibajelzést („errorHasStatus”) ad, főleg több repteres
+        // oda-vissza keresésre. Ilyenkor egyszer újrapróbáljuk, majd repterenként kérdezünk.
         val first = fetch(w, currency)
-        if (first.second > 0 || first.first.isNotEmpty()) return first.first
+        if (!first.errorStatus) return first.offers
         Thread.sleep(1500)
-        return fetch(w, currency).first
+        val again = fetch(w, currency)
+        if (!again.errorStatus) return again.offers
+        val pairs = pairsOf(w)
+        if (pairs.size > 1) {
+            val results = pairs.take(6).map { (o, d) ->
+                Thread.sleep(700)
+                runCatching { fetch(w.copy(from = o, to = d), currency) }.getOrNull()
+            }
+            if (results.any { it != null && !it.errorStatus }) {
+                return results.filterNotNull().flatMap { it.offers }
+            }
+        }
+        // Nem „nincs járat”: a forrás hibázott, így a korábbi ár megmarad
+        throw IOException("A Google erre a keresésre most hibát jelzett")
     }
 
-    /** Ajánlatok + a válaszban talált járat-elemek száma. */
-    private fun fetch(w: Watch, currency: String): Pair<List<Offer>, Int> {
+    private fun fetch(w: Watch, currency: String): Fetched {
         // Az EU-s beleegyezési oldal átugrása
         Http.setCookie("www.google.com", ".google.com", "SOCS", "CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg")
         Http.setCookie("www.google.com", ".google.com", "CONSENT", "YES+")
@@ -55,7 +69,7 @@ object GoogleFlights {
         val data = script.substringAfter("data:").substringBeforeLast(",").trim()
         if (data.endsWith("errorHasStatus: true")) {
             lastDebug = "errorHasStatus"
-            return emptyList<Offer>() to 0
+            return Fetched(emptyList(), 0, errorStatus = true)
         }
         val payload = JSONArray(data)
 
@@ -78,7 +92,7 @@ object GoogleFlights {
             throw IOException("A Google válaszát nem sikerült értelmezni (változhatott a formátum)")
         }
         lastDebug = "payload=${payload.length()} elem=$seen hibás=$failed"
-        return offers to seen
+        return Fetched(offers, seen, errorStatus = false)
     }
 
     private fun parseItem(item: JSONArray, url: String, w: Watch, currency: String): Offer? {

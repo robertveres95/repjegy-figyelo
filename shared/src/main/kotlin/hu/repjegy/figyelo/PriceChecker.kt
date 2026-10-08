@@ -162,9 +162,12 @@ object PriceChecker {
      */
     internal fun rank(w: Watch, offers: List<Offer>, now: LocalDateTime = LocalDateTime.now()): List<Offer> {
         val deduped = offers
-            // Ma már elindult járat ne legyen „legjobb ajánlat” (az idő a reptér helyi ideje,
-            // a készülék órájával közelítjük – egy-két óra eltérés itt nem számít)
-            .filter { o -> o.departure?.let { d -> runCatching { LocalDateTime.parse(d) }.getOrNull() }?.isAfter(now) ?: true }
+            // Már elindult járat ne legyen „legjobb ajánlat”. Az idő a reptér helyi ideje, a
+            // készüléké más időzónában lehet (akár 9-12 óra), ezért bőven hagyunk ráhagyást
+            .filter { o ->
+                o.departure?.let { d -> runCatching { LocalDateTime.parse(d) }.getOrNull() }
+                    ?.isAfter(now.minusHours(12)) ?: true
+            }
             .groupBy { o ->
                 if (o.departure != null) {
                     listOf(o.departure, o.returnDeparture, o.fromCode, o.toCode, o.airline?.lowercase()).joinToString("|")

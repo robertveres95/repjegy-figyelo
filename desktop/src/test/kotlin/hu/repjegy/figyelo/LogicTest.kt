@@ -135,6 +135,9 @@ class LogicTest {
     @Test fun bagFeeEstimates() {
         val rt = watch(ret = LocalDate.now().plusDays(37).toString(), bags = 1, checked = true)
         assertEquals(2 * (25.0 + 35.0), Fees.extraEur(rt, "Ryanair", includeInfants = false))
+        assertEquals(2 * (25.0 + 2 * 35.0), Fees.extraEur(rt.copy(adults = 2), "Ryanair", includeInfants = false), "feladott: utasonként")
+        assertEquals(0.0, Fees.extraEur(rt, "KM Malta Airlines", includeInfants = false))
+        assertTrue(Fees.isLowCost("Wizz Air UK") && Fees.isLowCost("Ryanair, Malta Air") && !Fees.isLowCost("Playa Air"))
         assertEquals(0.0, Fees.extraEur(rt, "Lufthansa", includeInfants = false))
         assertEquals(0.0, Fees.extraEur(watch(), "Wizz Air", includeInfants = true))
         val o = Fees.apply(Offer(100, "Ryanair", "Ryanair"), rt, "EUR", includeInfants = false)
@@ -147,7 +150,7 @@ class LogicTest {
 
     @Test fun pastDeparturesAreDropped() {
         val w = watch()
-        val now = java.time.LocalDateTime.of(2026, 11, 5, 12, 0)
+        val now = java.time.LocalDateTime.of(2026, 11, 5, 20, 0)
         val ranked = PriceChecker.rank(w, listOf(
             Offer(100, "x", "A", "BUD", "STN", "2026-11-05T06:00"),
             Offer(200, "x", "B", "BUD", "STN", "2026-11-05T18:00"),

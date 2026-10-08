@@ -247,7 +247,7 @@ object Notifier {
 
         val best = w.bestOffer ?: return
         val price = best.price
-        val intent = (best.url?.takeIf(::isSafeWebUrl)?.let { Intent(Intent.ACTION_VIEW, Uri.parse(it)) }
+        val intent = (best.url?.takeIf(::isSafeWebUrl)?.let { Intent(Intent.ACTION_VIEW, Uri.parse(it.trim())) }
             ?: Intent(context, MainActivity::class.java))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val pending = PendingIntent.getActivity(
