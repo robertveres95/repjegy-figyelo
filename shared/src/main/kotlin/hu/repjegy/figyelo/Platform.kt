@@ -77,6 +77,9 @@ interface PlatformApi {
     /** Kijelentkezés a szinkronizálásból (a tárolt hozzáférés törlése). */
     fun googleSignOut() {}
 
+    /** Folyamatban lévő bejelentkezés megszakítása (pl. bezárta a böngészőt). */
+    fun googleCancelSignIn() {}
+
     @Composable
     fun BackHandler(enabled: Boolean, onBack: () -> Unit)
 

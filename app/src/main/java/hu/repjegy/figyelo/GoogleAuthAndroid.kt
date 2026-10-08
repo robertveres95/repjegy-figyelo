@@ -28,8 +28,13 @@ object GoogleAuthAndroid {
     private const val SCOPE = "https://www.googleapis.com/auth/drive.appdata"
 
     private var activity: WeakReference<ComponentActivity>? = null
-    private var launcher: ActivityResultLauncher<IntentSenderRequest>? = null
-    private var pending: CompletableDeferred<String?>? = null
+    @Volatile private var launcher: ActivityResultLauncher<IntentSenderRequest>? = null
+    @Volatile private var pending: CompletableDeferred<String?>? = null
+
+    fun cancel() {
+        pending?.complete(null)
+        pending = null
+    }
     @Volatile private var lastToken: String? = null
 
     private fun request() = AuthorizationRequest.builder()

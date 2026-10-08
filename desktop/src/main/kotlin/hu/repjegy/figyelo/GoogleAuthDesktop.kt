@@ -31,6 +31,12 @@ object GoogleAuthDesktop {
     private val secret: String by lazy { String(Base64.getDecoder().decode(SECRET_ENC)).reversed() }
 
     @Volatile private var accessToken: String? = null
+    @Volatile private var waiting: CompletableFuture<Map<String, String>>? = null
+
+    /** A böngészős bejelentkezés várakozásának megszakítása. */
+    fun cancel() {
+        waiting?.completeExceptionally(java.util.concurrent.CancellationException("megszakítva"))
+    }
     @Volatile private var expiresAt = 0L
 
     suspend fun token(interactive: Boolean): String? = withContext(Dispatchers.IO) {
@@ -100,6 +106,8 @@ object GoogleAuthDesktop {
 
         val server = HttpServer.create(InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0)
         val result = CompletableFuture<Map<String, String>>()
+        waiting?.completeExceptionally(java.util.concurrent.CancellationException("új bejelentkezés"))
+        waiting = result
         server.createContext("/") { ex ->
             val params = (ex.requestURI.rawQuery ?: "").split('&').filter { it.contains('=') }.associate {
                 val (k, v) = it.split('=', limit = 2)
@@ -145,6 +153,7 @@ object GoogleAuthDesktop {
             return store(JSONObject(res.body))
         } finally {
             server.stop(0)
+            if (waiting === result) waiting = null
         }
     }
 

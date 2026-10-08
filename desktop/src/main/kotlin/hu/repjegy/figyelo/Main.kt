@@ -281,6 +281,7 @@ object DesktopPlatform : PlatformApi {
 
     override suspend fun googleAccessToken(interactive: Boolean): String? = GoogleAuthDesktop.token(interactive)
     override fun googleInvalidateToken() = GoogleAuthDesktop.invalidate()
+    override fun googleCancelSignIn() = GoogleAuthDesktop.cancel()
     override fun googleSignOut() {
         Thread { GoogleAuthDesktop.signOut() }.start()
     }

@@ -134,6 +134,8 @@ class AndroidPlatform private constructor(private val context: Context) : Platfo
 
     override fun googleSignOut() = googleInvalidateToken()
 
+    override fun googleCancelSignIn() = GoogleAuthAndroid.cancel()
+
     private var widgetJob: kotlinx.coroutines.Job? = null
 
     /** A widget frissítése; gyors egymásutáni változásoknál csak egyszer. */

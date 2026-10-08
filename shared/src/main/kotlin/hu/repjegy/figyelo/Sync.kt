@@ -44,7 +44,7 @@ object Sync {
         val p = Store.prefs
         state.value = State(
             enabled = p.getBoolean("syncOn", false),
-            account = p.getString("syncAccount", null),
+            account = p.getString("syncAccount", null)?.takeIf { it.isNotBlank() },
             lastSync = p.getLong("syncLast", 0L).takeIf { it > 0 },
         )
     }
@@ -91,15 +91,21 @@ object Sync {
         if (!state.value.enabled) return false
         return mutex.withLock {
             state.value = state.value.copy(running = true)
-            val r = runCatching { syncOnce() }
-            val now = System.currentTimeMillis()
-            state.value = if (r.isSuccess) {
+            try {
+                syncOnce()
+                val now = System.currentTimeMillis()
                 Store.prefs.edit { putLong("syncLast", now) }
-                state.value.copy(running = false, lastSync = now, error = null)
-            } else {
-                state.value.copy(running = false, error = "Szinkronizálási hiba: ${r.exceptionOrNull()?.message?.take(120)}")
+                state.value = state.value.copy(lastSync = now, error = null)
+                true
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Egy újabb módosítás miatt újraindul – ez nem hiba
+                throw e
+            } catch (e: Exception) {
+                state.value = state.value.copy(error = "Szinkronizálási hiba: ${e.message?.take(120)}")
+                false
+            } finally {
+                state.value = state.value.copy(running = false)
             }
-            r.isSuccess
         }
     }
 
@@ -110,8 +116,9 @@ object Sync {
 
         // 1. Meglévő fájl keresése a rejtett mappában
         val q = URLEncoder.encode("name='$FILE_NAME'", "UTF-8")
-        val list = Http.request("$API/files?spaces=appDataFolder&q=$q&fields=files(id)&pageSize=10", headers = auth, timeoutMs = 30_000)
-        check401(list.code)
+        // A legrégebbi fájl a „hivatalos” (ha két eszköz egyszerre hozott létre egyet, mindkettő ugyanazt választja)
+        val list = Http.request("$API/files?spaces=appDataFolder&q=$q&fields=files(id)&orderBy=createdTime&pageSize=10", headers = auth, timeoutMs = 30_000)
+        check401(list.code, list.body)
         if (list.code !in 200..299) throw IOException("Drive HTTP ${list.code}")
         val fileId = JSONObject(list.body).optJSONArray("files")?.optJSONObject(0)?.optString("id")?.takeIf { it.isNotBlank() }
 
@@ -120,23 +127,27 @@ object Sync {
         var remote: Snapshot? = null
         if (fileId != null) {
             val dl = Http.request("$API/files/$fileId?alt=media", headers = auth, timeoutMs = 30_000)
-            check401(dl.code)
+            check401(dl.code, dl.body)
             if (dl.code !in 200..299) throw IOException("Drive HTTP ${dl.code}")
             remote = parse(dl.body)
         }
-        val localWatches = Store.watches.value
-        val localTomb = Store.tombstones()
-        val merged = if (remote != null) {
-            val remoteWatches = convertCurrency(remote.watches, remote.currency, currency)
-            merge(localWatches, localTomb, remoteWatches, remote.tombstones)
-        } else {
-            localWatches to localTomb
+        // A pénznem-átváltás (hálózat) még az összefésülés előtt; ha nem megy, most kihagyjuk,
+        // különben a felhőbe a másik eszköz változásai nélkül töltenénk fel
+        val remoteWatches = remote?.let {
+            runCatching { convertCurrency(it.watches, it.currency, currency) }.getOrElse {
+                throw IOException("az árfolyam most nem érhető el (a két eszköz pénzneme eltér) – később újrapróbálja")
+            }
         }
-        Store.replaceFromSync(merged.first, merged.second)
+        // Az összefésülés a tároló zárján belül, a legfrissebb helyi állapottal (közben érkezett
+        // szerkesztés, törlés vagy ár nem vész el)
+        val merged = Store.mergeFromSync(remoteWatches.orEmpty(), remote?.tombstones.orEmpty())
 
         // 3. Feltöltés (csak ha változott a felhőben lévőhöz képest)
         val body = serialize(merged.first, merged.second, currency)
-        if (remote != null && remote.currency == currency && remote.watches == merged.first && remote.tombstones == merged.second) return
+        if (remote != null && remote.currency == currency &&
+            remote.watches.associateBy { it.id } == merged.first.associateBy { it.id } &&
+            remote.tombstones == merged.second
+        ) return
         val res = if (fileId == null) {
             val boundary = "refi" + System.nanoTime()
             val meta = JSONObject().put("name", FILE_NAME).put("parents", JSONArray().put("appDataFolder")).toString()
@@ -147,22 +158,26 @@ object Sync {
                 headers = auth + ("Content-Type" to "multipart/related; boundary=$boundary"), body = multipart, timeoutMs = 30_000,
             )
         } else {
-            // A HttpURLConnection nem ismeri a PATCH-et; a Google API-k elfogadják így is
+            // Tartalom cseréje: a Drive v2 PUT-ot fogad (a HttpURLConnection nem tud PATCH-et küldeni,
+            // amit a v3 várna); ugyanazt a fájlt és jogosultságot használja
             Http.request(
-                "$UPLOAD/files/$fileId?uploadType=media&fields=id", method = "POST",
-                headers = auth + mapOf("Content-Type" to "application/json; charset=UTF-8", "X-HTTP-Method-Override" to "PATCH"),
+                "https://www.googleapis.com/upload/drive/v2/files/$fileId?uploadType=media", method = "PUT",
+                headers = auth + ("Content-Type" to "application/json; charset=UTF-8"),
                 body = body, timeoutMs = 30_000,
             )
         }
-        check401(res.code)
+        check401(res.code, res.body)
         if (res.code !in 200..299) throw IOException("Drive feltöltés HTTP ${res.code}")
     }
 
-    private fun check401(code: Int) {
-        if (code == 401 || code == 403) {
+    private fun check401(code: Int, body: String = "") {
+        // 403 lehet kvóta/korlát is: csak jogosultsági hibánál kérünk új bejelentkezést
+        val authProblem = code == 401 || (code == 403 && (body.contains("insufficientPermissions") || body.contains("authError")))
+        if (authProblem) {
             runCatching { Platform.current.googleInvalidateToken() }
             throw IOException("A Google-hozzáférés lejárt – jelentkezz be újra (Beállítások)")
         }
+        if (code == 403 || code == 429) throw IOException("a Google ideiglenesen korlátozta a kéréseket – később újrapróbálja")
     }
 
     private fun accountEmail(token: String): String? {
@@ -220,7 +235,9 @@ object Sync {
         remote: List<Watch>,
         remoteTomb: Map<String, Long>,
     ): Pair<List<Watch>, Map<String, Long>> {
+        val cutoff = System.currentTimeMillis() - 120L * 24 * 3_600_000L
         val tomb = (localTomb.keys + remoteTomb.keys).associateWith { maxOf(localTomb[it] ?: 0L, remoteTomb[it] ?: 0L) }
+            .filterValues { it > cutoff }
         val byIdRemote = remote.associateBy { it.id }
         val byIdLocal = local.associateBy { it.id }
         // Sorrend: a helyi sorrend, utána a csak távol meglévők
@@ -246,9 +263,12 @@ object Sync {
     private fun mergeResults(base: Watch, other: Watch): Watch {
         if (base.searchKey() != other.searchKey()) return base
         val history = (base.history + other.history).distinctBy { it.time }.sortedBy { it.time }.takeLast(120)
-        val notified = listOfNotNull(base.lastNotifiedPrice, other.lastNotifiedPrice).minOrNull()
         val lowest = listOfNotNull(base.lowestPrice, other.lowestPrice).minOrNull()
         val fresher = if ((other.lastChecked ?: 0L) > (base.lastChecked ?: 0L)) other else base
+        val staler = if (fresher === base) other else base
+        // A frissebben ellenőrző eszköz döntése számít: ha nála nincs jelzett ár (pl. visszament a
+        // célár fölé), az a mérvadó; ha mindkettőnél van, a kisebb (a másik már szólt erről)
+        val notified = fresher.lastNotifiedPrice?.let { f -> staler.lastNotifiedPrice?.let { minOf(f, it) } ?: f }
         return base.copy(
             lastPrice = fresher.lastPrice,
             lastChecked = fresher.lastChecked,
@@ -258,7 +278,8 @@ object Sync {
             lowestPrice = lowest,
             history = history,
             // Ha már valamelyik eszköz szólt erről az árról, a másik ne szóljon újra
-            lastNotifiedPrice = if (base.notify) notified else base.lastNotifiedPrice,
+            // Ha a felhasználó épp most kapcsolta át a csengőt (újabb módosítás), az ő törlése nyer
+            lastNotifiedPrice = if (base.editedAt > other.editedAt && base.lastNotifiedPrice == null) null else notified,
         )
     }
 }

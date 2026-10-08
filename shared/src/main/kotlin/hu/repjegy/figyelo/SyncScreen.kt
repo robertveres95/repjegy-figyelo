@@ -34,6 +34,9 @@ internal fun SyncSection() {
             Button(onClick = { AppScope.scope.launch { Sync.enable() } }, enabled = !s.running) {
                 Text(if (s.running) "Bejelentkezés…" else "Bejelentkezés Google-fiókkal")
             }
+            if (s.running) {
+                TextButton(onClick = { Platform.current.googleCancelSignIn() }) { Text("Mégse") }
+            }
         } else {
             Text(
                 "Bejelentkezve: ${s.account ?: "Google-fiók"}",
@@ -59,7 +62,7 @@ internal fun SyncSection() {
         s.error?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             if (s.enabled) {
-                TextButton(onClick = { AppScope.scope.launch { Sync.enable() } }) { Text("Újra bejelentkezés") }
+                TextButton(onClick = { AppScope.scope.launch { Sync.enable() } }, enabled = !s.running) { Text("Újra bejelentkezés") }
             }
         }
     }

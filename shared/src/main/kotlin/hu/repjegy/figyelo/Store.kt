@@ -112,11 +112,17 @@ object Store {
         prefs.edit { putString("tombstones", obj.toString()) }
     }
 
-    /** A szinkronizálás eredményének mentése (felhasználói időbélyeg változtatása nélkül). */
+    /**
+     * A felhőből jött állapot összefésülése a mostani helyi állapottal, a zár alatt (így a
+     * hálózati lekérés közben történt szerkesztés, törlés vagy ellenőrzés nem vész el).
+     * Felhasználói időbélyeget nem változtat. Visszaadja a feltöltendő állapotot.
+     */
     @Synchronized
-    internal fun replaceFromSync(list: List<Watch>, tombstones: Map<String, Long>) {
-        if (list != _watches.value) persist(list)
-        saveTombstones(tombstones)
+    internal fun mergeFromSync(remote: List<Watch>, remoteTomb: Map<String, Long>): Pair<List<Watch>, Map<String, Long>> {
+        val merged = Sync.merge(_watches.value, tombstones(), remote, remoteTomb)
+        if (merged.first != _watches.value) persist(merged.first)
+        saveTombstones(merged.second)
+        return merged
     }
 
     @Synchronized

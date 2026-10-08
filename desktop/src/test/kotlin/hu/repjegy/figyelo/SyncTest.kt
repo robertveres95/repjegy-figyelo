@@ -47,7 +47,8 @@ class SyncTest {
     }
 
     @Test fun deletionPropagatesButNewerEditSurvives() {
-        val (m, t) = Sync.merge(listOf(w("a", edited = 10), w("b", edited = 100)), emptyMap(), emptyList(), mapOf("a" to 50L, "b" to 50L))
+        val base = System.currentTimeMillis()
+        val (m, t) = Sync.merge(listOf(w("a", edited = base + 10), w("b", edited = base + 100)), emptyMap(), emptyList(), mapOf("a" to base + 50, "b" to base + 50))
         assertEquals(listOf("b"), m.map { it.id }, "„a” törölve (régebbi módosítás), „b” megmarad (újabb)")
         assertEquals(setOf("a", "b"), t.keys)
     }
@@ -64,12 +65,27 @@ class SyncTest {
         assertEquals(25000, merged.lastNotifiedPrice)
     }
 
+    @Test fun notificationResetFromFresherDeviceWins() {
+        // A frissebben ellenőrző eszközön az ár visszament a célár fölé → a jelzés törlődött
+        val fresh = w("a", edited = 10, checked = 2000, price = 40000).copy(lastNotifiedPrice = null)
+        val old = w("a", edited = 10, checked = 1000, price = 25000).copy(lastNotifiedPrice = 25000)
+        val merged = Sync.merge(listOf(old), emptyMap(), listOf(fresh), emptyMap()).first.single()
+        assertNull(merged.lastNotifiedPrice, "különben a következő esésnél egyik eszköz sem szólna")
+    }
+
+    @Test fun oldTombstonesArePruned() {
+        val ancient = System.currentTimeMillis() - 200L * 24 * 3_600_000L
+        val (_, t) = Sync.merge(emptyList(), mapOf("x" to ancient), emptyList(), mapOf("y" to System.currentTimeMillis()))
+        assertEquals(setOf("y"), t.keys)
+    }
+
     @Test fun fileRoundTrip() {
         val ws = listOf(w("a", edited = 5, checked = 7, price = 9), w("b"))
-        val text = Sync.serialize(ws, mapOf("x" to 3L), "EUR")
+        val now = System.currentTimeMillis()
+        val text = Sync.serialize(ws, mapOf("x" to now), "EUR")
         val back = assertNotNull(Sync.parse(text))
         assertEquals(ws, back.watches)
-        assertEquals(mapOf("x" to 3L), back.tombstones)
+        assertEquals(mapOf("x" to now), back.tombstones)
         assertEquals("EUR", back.currency)
         assertNull(Sync.parse("{\"format\":\"más\"}"))
         assertTrue(Sync.parse("szemét") == null)
