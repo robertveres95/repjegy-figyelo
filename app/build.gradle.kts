@@ -50,6 +50,13 @@ android {
         jvmTarget = "17"
     }
 
+    // Statikus elemzés (gradle :app:lintDebug) – a hibakereső folyamat használja
+    lint {
+        abortOnError = false
+        textReport = true
+        checkDependencies = false
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true

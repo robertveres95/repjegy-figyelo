@@ -13,7 +13,7 @@ private const val MAX_PAIRS = 12
  * sorra, hogy a korlát minden reptérből adjon párt – a fapadosok bázisai (STN, LTN)
  * gyakran a lista végén vannak, és a sima sorrendnél kimaradnának.
  */
-private fun pairsOf(w: Watch): List<Pair<String, String>> {
+internal fun pairsOf(w: Watch): List<Pair<String, String>> {
     val from = w.from.split(',')
     val to = w.to.split(',')
     return from.indices.flatMap { i -> to.indices.map { j -> Triple(i, j, from[i] to to[j]) } }

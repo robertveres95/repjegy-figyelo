@@ -24,7 +24,7 @@ object Updater {
     private fun parts(v: String) = v.split('.').map { it.toIntOrNull() ?: 0 } + listOf(0, 0, 0)
 
     /** Újabb-e a kiadás: előbb a verziószám dönt, egyezésnél a build sorszáma. */
-    private fun isNewer(r: Release): Boolean {
+    internal fun isNewer(r: Release): Boolean {
         val a = parts(r.version)
         val b = parts(currentVersion)
         for (i in 0 until 3) if (a[i] != b[i]) return a[i] > b[i]

@@ -47,6 +47,17 @@ dependencies {
     implementation("org.jetbrains.compose.material:material-icons-core:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.9.0")
     implementation("org.json:json:20240303")
+
+    testImplementation(kotlin("test"))
+}
+
+// Automata tesztek; -Drefi.live=true esetén az éles árforrás-próba is lefut
+tasks.test {
+    useJUnitPlatform()
+    systemProperty("refi.live", System.getProperty("refi.live") ?: "false")
+    workingDir = projectDir
+    outputs.upToDateWhen { false }
+    testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
 }
 
 compose.desktop {

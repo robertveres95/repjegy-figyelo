@@ -1,0 +1,65 @@
+name: Diagnosztika
+
+# Csak kézi indításra fut (fejlesztői hibakereséshez). Nem készít kiadást:
+# az eredményt egy rejtett (vázlat) kiadás "diag.txt" fájljába teszi.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Egységtesztek
+        continue-on-error: true
+        run: gradle -p desktop test --no-daemon 2>&1 | tee unit.log
+
+      - name: Éles árforrás-próba
+        continue-on-error: true
+        run: gradle -p desktop test --no-daemon -Drefi.live=true --tests '*LiveSourcesTest*' 2>&1 | tail -5
+
+      - name: Android lint
+        continue-on-error: true
+        run: gradle :app:lintDebug --no-daemon 2>&1 | tail -20
+
+      - name: Jelentés összeállítása és feltöltése
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          {
+            echo "### Commit: $(git rev-parse --short HEAD)"
+            echo "### EGYSÉGTESZTEK"
+            grep -E "Test.*(FAILED|PASSED)|tests completed|BUILD|e: |AssertionError|Expected|expected" unit.log | head -80 || true
+            for f in desktop/build/test-results/test/*.xml; do
+              [ -f "$f" ] && grep -oE 'testsuite name="[^"]+" tests="[0-9]+" skipped="[0-9]+" failures="[0-9]+" errors="[0-9]+"' "$f"
+            done
+            echo
+            echo "### ÉLES ÁRFORRÁSOK"
+            cat desktop/build/diag/live.txt 2>/dev/null || echo "(nincs live.txt)"
+            echo
+            echo "### ANDROID LINT"
+            cat app/build/reports/lint-results-debug.txt 2>/dev/null || echo "(nincs lint-jelentés)"
+          } > diag.txt
+          id=$(gh api "repos/${{ github.repository }}/releases?per_page=100" --jq '[.[]|select(.draft and .name=="diagnostics")][0].id // empty')
+          if [ -z "$id" ]; then
+            id=$(gh api -X POST "repos/${{ github.repository }}/releases" -f tag_name=diagnostics -f name=diagnostics -F draft=true -F prerelease=true -f body="Fejlesztői diagnosztika (nem kiadás)" --jq .id)
+          fi
+          old=$(gh api "repos/${{ github.repository }}/releases/$id/assets" --jq '.[]|select(.name=="diag.txt")|.id')
+          [ -n "$old" ] && gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$old"
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Content-Type: text/plain" \
+            --data-binary @diag.txt \
+            "https://uploads.github.com/repos/${{ github.repository }}/releases/$id/assets?name=diag.txt" > /dev/null
+          echo "kész"

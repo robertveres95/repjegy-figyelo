@@ -124,7 +124,7 @@ private val dateFormat = DateTimeFormatter.ofPattern("yyyy. MMM d., EEE", HU)
 private val typedDateFormat = DateTimeFormatter.ofPattern("yyyy.MM.dd")
 
 /** Begépelt dátum: 2026.10.16, 2026-10-16, 2026/10/16, 2026.10.16. vagy 2026. 10. 16. */
-private fun parseTypedDate(raw: String): LocalDate? {
+internal fun parseTypedDate(raw: String): LocalDate? {
     val nums = raw.split('.', '-', '/', ' ').filter { it.isNotBlank() }
     if (nums.size != 3 || nums[0].length != 4) return null
     return runCatching { LocalDate.of(nums[0].toInt(), nums[1].toInt(), nums[2].toInt()) }.getOrNull()

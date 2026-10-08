@@ -144,7 +144,7 @@ object PriceChecker {
      * Ha poggyászt kértél, a poggyász nélküli (fapados alap-) árak a lista végére kerülnek,
      * hogy ne ezek nyerjenek tévesen.
      */
-    private fun rank(w: Watch, offers: List<Offer>): List<Offer> {
+    internal fun rank(w: Watch, offers: List<Offer>): List<Offer> {
         val deduped = offers
             .groupBy { o ->
                 if (o.departure != null) {
