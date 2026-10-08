@@ -57,7 +57,7 @@ Kotlin + Jetpack Compose (Android), Compose Multiplatform Desktop (Windows), Wor
 
 - **Szerkezet:** `shared/` – közös kód (árforrások, adatkezelés, felület, témák); `app/` – Android; `desktop/` – Windows (külön Gradle-build: `gradle -p desktop packageMsi`). A platformfüggő részek a `PlatformApi` felület mögött vannak.
 
-- **Verziószám:** a `version.properties` fájlban (`VERSION_NAME=1.2.0`). Új kiadás előtt ezt kell átírni.
+- **Verziószám:** a `version.properties` fájlban (`VERSION_NAME=1.3.0`). Új kiadás előtt ezt kell átírni.
 - **Teszt-build:** minden `main`-re pusholt változásból „teszt” jelölésű (prerelease) kiadás készül. Letölthető kipróbálásra, de a telepített appok **nem** ajánlják fel frissítésként.
 - **Éles kiadás:** csak külön kérésre, egy `v*` címke pusholásával (vagy a workflow kézi indításával, publish=true). Ekkor `v<verzió>-build-<N>` címkéjű kiadás készül, és a telepített appok kötelező frissítést kérnek.
 - **Aláírás:** az APK-t a GitHub Actions írja alá a saját REFI-kulccsal (`app/refi-release.jks`, jelszó a `REFI_KEYSTORE_PASS` titokban), kulcscsere-lánccal a korábbi fejlesztői kulcsról – így a régebbi telepítések újratelepítés nélkül frissülnek. Mindkét kulcsfájlt meg kell őrizni; a jelszó nélkül nem adható ki frissítés.
