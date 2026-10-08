@@ -64,7 +64,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          gradle :app:assembleDebug --no-daemon 2>&1 | tee build.log
+          gradle :app:assembleRelease --no-daemon 2>&1 | tee build.log
 
       - name: Fordítási hibák kiírása
         if: failure()
@@ -74,8 +74,62 @@ jobs:
             echo "::error::${line}"
           done
 
-      - name: APK átnevezése
-        run: cp app/build/outputs/apk/debug/app-debug.apk REFI.apk
+      # Aláírás kulcscserével (APK Signature Scheme v3 „rotation”): a régi, nyilvános
+      # fejlesztői kulcsról a saját REFI-kulcsra váltunk úgy, hogy a már telepített appok
+      # gond nélkül frissüljenek (nem kell újratelepíteni, a figyelések megmaradnak).
+      # Android 9+ ettől kezdve csak az új kulccsal aláírt frissítést fogadja el.
+      - name: APK aláírása
+        shell: bash
+        env:
+          REFI_KEYSTORE_PASS: ${{ secrets.REFI_KEYSTORE_PASS }}
+          PUBLISH: ${{ steps.meta.outputs.publish }}
+        run: |
+          set -euo pipefail
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          echo "build-tools: $BT"
+          "$BT/zipalign" -f 4 app/build/outputs/apk/release/app-release-unsigned.apk aligned.apk
+          OLD=(--ks app/debug.keystore --ks-pass pass:android --ks-key-alias androiddebugkey --key-pass pass:android)
+          if [ -n "${REFI_KEYSTORE_PASS:-}" ]; then
+            NEW=(--ks app/refi-release.jks --ks-pass env:REFI_KEYSTORE_PASS --ks-key-alias refi --key-pass env:REFI_KEYSTORE_PASS)
+            "$BT/apksigner" rotate --out lineage.bin \
+              --old-signer "${OLD[@]}" --set-rollback false \
+              --new-signer "${NEW[@]}"
+            "$BT/apksigner" sign "${OLD[@]}" --next-signer "${NEW[@]}" \
+              --lineage lineage.bin --rotation-min-sdk-version 28 \
+              --v4-signing-enabled false --out REFI.apk aligned.apk
+          else
+            if [ "$PUBLISH" = "true" ]; then
+              echo "::error::Hiányzik a REFI_KEYSTORE_PASS titok – éles kiadás csak az új kulccsal készülhet"
+              exit 1
+            fi
+            echo "::warning::Nincs REFI_KEYSTORE_PASS titok: a teszt-build a régi fejlesztői kulccsal készül"
+            "$BT/apksigner" sign "${OLD[@]}" --v4-signing-enabled false --out REFI.apk aligned.apk
+          fi
+          "$BT/apksigner" verify -v --print-certs REFI.apk > verify.txt
+          grep -E "Verified using|certificate SHA-256" verify.txt || true
+          if [ -f lineage.bin ]; then
+            "$BT/apksigner" lineage --in REFI.apk --print-certs > lineage.txt
+            cat lineage.txt
+            echo "::notice::APK aláírva az új REFI-kulccsal (kulcscsere-lánccal)"
+          fi
+
+      # A kulcscsere parancsainak próbája egy eldobható kulccsal – így a folyamat akkor is
+      # ellenőrzött, amikor a valódi titok még nincs beállítva
+      - name: Kulcscsere próbája
+        shell: bash
+        run: |
+          set -euo pipefail
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          keytool -genkeypair -keystore /tmp/dry.jks -storetype PKCS12 -alias dry -keyalg RSA -keysize 2048 \
+            -validity 365 -storepass dryrun123 -keypass dryrun123 -dname "CN=dry" > /dev/null 2>&1
+          OLD=(--ks app/debug.keystore --ks-pass pass:android --ks-key-alias androiddebugkey --key-pass pass:android)
+          NEW=(--ks /tmp/dry.jks --ks-pass pass:dryrun123 --ks-key-alias dry --key-pass pass:dryrun123)
+          "$BT/apksigner" rotate --out /tmp/dry.lineage --old-signer "${OLD[@]}" --set-rollback false --new-signer "${NEW[@]}"
+          "$BT/apksigner" sign "${OLD[@]}" --next-signer "${NEW[@]}" --lineage /tmp/dry.lineage \
+            --rotation-min-sdk-version 28 --v4-signing-enabled false --out /tmp/dry.apk aligned.apk
+          "$BT/apksigner" verify -v /tmp/dry.apk | grep -E "Verified using" || true
+          "$BT/apksigner" lineage --in /tmp/dry.apk --print-certs | grep -c "Signer" | xargs -I{} echo "lánc tagjai: {}"
+          echo "::notice::Kulcscsere-próba rendben"
 
       - name: Kiadás létrehozása
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2

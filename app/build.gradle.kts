@@ -32,6 +32,7 @@ android {
 
     buildTypes {
         release {
+            // A kiadott APK aláírását a GitHub Actions végzi (kulcscserével, lásd build.yml)
             isMinifyEnabled = false
         }
     }
