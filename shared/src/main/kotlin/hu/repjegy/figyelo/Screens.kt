@@ -147,6 +147,7 @@ fun AppRoot() {
     // Szinkronizálás induláskor és minden visszatéréskor (a másik eszköz módosításai)
     val resumes by AppScope.resumeCount.collectAsState()
     LaunchedEffect(resumes) { AppScope.scope.launch { Sync.syncNow() } }
+    val sync by Sync.state.collectAsState()
 
     Box(Modifier.fillMaxSize().background(Neon.Black)) {
         AnimatedContent(
@@ -177,6 +178,12 @@ fun AppRoot() {
             }
         }
 
+        // A repülő után kötelező a Google-bejelentkezés (adattárolás és szinkronizálás)
+        AnimatedVisibility(visible = !showSplash && !sync.enabled, enter = fadeIn(tween(500)), exit = fadeOut(tween(300))) {
+            LoginGate()
+        }
+
+        // A kötelező frissítés mindennél előrébb való (régi verzióval a bejelentkezés sem biztos, hogy működik)
         AnimatedVisibility(visible = update != null && !showSplash, enter = fadeIn(tween(400)), exit = fadeOut()) {
             update?.let { UpdateOverlay(it) }
         }

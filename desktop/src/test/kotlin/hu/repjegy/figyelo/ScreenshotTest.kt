@@ -100,6 +100,7 @@ class ScreenshotTest {
             Discover.Result("PFO", "Ciprus", "Cyprus", 21990, "${d.plusDays(6)}T13:05", null, "BUD"),
         )
         shot("06-felfedezes", heightDp = 1400) { DiscoverScreen(onBack = {}, onPick = {}, initialResults = results) }
+        shot("08-bejelentkezes") { LoginGate() }
         val code = ShareCode.message(london, "HUF")
         shot("07-kod-beillesztese") {
             HomeScreen(onAdd = {}, onEdit = {}, onSettings = {})

@@ -1,6 +1,10 @@
 package hu.repjegy.figyelo
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.Button
@@ -56,13 +60,72 @@ internal fun SyncSection() {
                 OutlinedButton(onClick = { AppScope.scope.launch { Sync.syncNow() } }, enabled = !s.running) {
                     Text("Szinkronizálás most")
                 }
-                TextButton(onClick = { Sync.disable() }) { Text("Kikapcsolás") }
+                TextButton(onClick = { Sync.disable() }) { Text("Kijelentkezés") }
             }
         }
         s.error?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             if (s.enabled) {
                 TextButton(onClick = { AppScope.scope.launch { Sync.enable() } }, enabled = !s.running) { Text("Újra bejelentkezés") }
+            }
+        }
+    }
+}
+
+/**
+ * Kötelező bejelentkezés a nyitóanimáció után: a figyelések a Google-fiókban tárolódnak
+ * (szinkronizálás, és nem vesznek el telefoncserénél). Amíg nincs bejelentkezés, ez takarja az appot.
+ */
+@Composable
+internal fun LoginGate() {
+    val s by Sync.state.collectAsState()
+    androidx.compose.foundation.layout.Box(
+        androidx.compose.ui.Modifier
+            .fillMaxSize()
+            .background(Neon.Black)
+            .padding(24.dp),
+        contentAlignment = androidx.compose.ui.Alignment.Center,
+    ) {
+        NeonCard(modifier = androidx.compose.ui.Modifier.fillMaxWidth().enterAnimation()) {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text(
+                    "REFI",
+                    style = MaterialTheme.typography.headlineMedium.glow(),
+                    color = Neon.Green,
+                )
+                Text("Jelentkezz be a Google-fiókoddal", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "A figyeléseidet a Google-fiókodban tároljuk, így minden eszközödön – telefonon és " +
+                        "számítógépen – ugyanazok lesznek, és telefoncserénél sem vesznek el.",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    "A REFI csak a saját, rejtett adatterületét látja a Google Drive-odon; a többi fájlodhoz, " +
+                        "leveleidhez nem fér hozzá.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(
+                    onClick = { AppScope.scope.launch { Sync.enable() } },
+                    enabled = !s.running,
+                    modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (s.running) "Bejelentkezés folyamatban…" else "Bejelentkezés Google-fiókkal")
+                }
+                if (s.running) {
+                    Text(
+                        "Válaszd ki a fiókodat a megnyíló Google-ablakban.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    TextButton(onClick = { Platform.current.googleCancelSignIn() }) { Text("Mégse") }
+                }
+                s.error?.let {
+                    Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                }
+                TextButton(onClick = { Platform.current.openUrl("https://github.com/robertveres95/repjegy-figyelo/blob/main/PRIVACY.md") }) {
+                    Text("Adatkezelési tájékoztató")
+                }
             }
         }
     }
