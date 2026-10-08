@@ -59,8 +59,9 @@ class SyncTest {
     }
 
     @Test fun notificationNotRepeatedAcrossDevices() {
-        val local = w("a", edited = 10).copy(lastNotifiedPrice = null)
-        val remote = w("a", edited = 10).copy(lastNotifiedPrice = 25000)
+        // A másik eszköz később ellenőrzött és már szólt: ez az eszköz ne szóljon újra ugyanerről
+        val local = w("a", edited = 10, checked = 1000, price = 26000).copy(lastNotifiedPrice = null)
+        val remote = w("a", edited = 10, checked = 2000, price = 25000).copy(lastNotifiedPrice = 25000)
         val merged = Sync.merge(listOf(local), emptyMap(), listOf(remote), emptyMap()).first.single()
         assertEquals(25000, merged.lastNotifiedPrice)
     }
