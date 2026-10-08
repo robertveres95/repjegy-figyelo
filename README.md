@@ -49,7 +49,7 @@ Kotlin + Jetpack Compose (Android), Compose Multiplatform Desktop (Windows), Wor
 
 - **Szerkezet:** `shared/` – közös kód (árforrások, adatkezelés, felület, témák); `app/` – Android; `desktop/` – Windows (külön Gradle-build: `gradle -p desktop packageMsi`). A platformfüggő részek a `PlatformApi` felület mögött vannak.
 
-- **Verziószám:** a `version.properties` fájlban (`VERSION_NAME=1.1.0`). Új kiadás előtt ezt kell átírni.
+- **Verziószám:** a `version.properties` fájlban (`VERSION_NAME=1.2.0`). Új kiadás előtt ezt kell átírni.
 - **Teszt-build:** minden `main`-re pusholt változásból „teszt” jelölésű (prerelease) kiadás készül. Letölthető kipróbálásra, de a telepített appok **nem** ajánlják fel frissítésként.
 - **Éles kiadás:** csak külön kérésre, egy `v*` címke pusholásával (vagy a workflow kézi indításával, publish=true). Ekkor `v<verzió>-build-<N>` címkéjű kiadás készül, és a telepített appok kötelező frissítést kérnek.
 - A frissítésfigyelő a GitHub „legfrissebb kiadását” nézi (a teszt-buildeket nem), ezért a repónak nyilvánosnak kell maradnia.
