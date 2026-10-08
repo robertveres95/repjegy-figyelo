@@ -39,6 +39,24 @@ class LiveSourcesTest {
             out.appendLine("  → rangsor első 3: " + ranked.take(3).joinToString(" | ") { "${it.price} Ft ${it.source}/${it.airline} ${it.departure} bags=${it.bagsIncluded}" })
             out.appendLine()
         }
+        // Poggyász-kísérlet: beleszámolja-e a Google a poggyászdíjat? Ugyanazon járatok ára
+        // poggyász nélkül, kézipoggyásszal és feladott poggyásszal.
+        out.appendLine("=== POGGYÁSZ-KÍSÉRLET (Google, BUD→BGY és BUD→LTN, csak oda)")
+        for (dest in listOf("BGY", "LTN")) {
+            val variants = listOf(
+                "nincs" to w("BUD", dest, d, null),
+                "1 kézi" to w("BUD", dest, d, null, bags = 1),
+                "feladott" to w("BUD", dest, d, null, checked = true),
+            )
+            val table = variants.map { (label, vw) ->
+                val offers = runCatching { GoogleFlights.search(vw, "HUF") }.getOrElse { emptyList() }
+                label to offers.associate { "${it.departure?.takeLast(5)} ${it.airline}" to it.price }
+            }
+            val keys = table.flatMap { it.second.keys }.distinct().sorted()
+            out.appendLine("  $dest: " + table.joinToString(" | ") { it.first })
+            keys.take(6).forEach { k -> out.appendLine("    $k: " + table.joinToString(" | ") { (it.second[k] ?: "-").toString() }) }
+        }
+        out.appendLine()
         out.appendLine("=== Árfolyam: 1 EUR = ${runCatching { Rates.convert(1.0, "EUR", "HUF") }.getOrElse { "HIBA: $it" }} HUF")
         out.appendLine("=== Frissítésfigyelő: ${runCatching { Updater.check()?.toString() ?: "nincs újabb (vagy nincs .msi)" }.getOrElse { "HIBA: $it" }}")
         File("build/diag").mkdirs()
@@ -52,7 +70,7 @@ class LiveSourcesTest {
         val ms = System.currentTimeMillis() - t0
         r.onFailure { out.appendLine("  [$source] HIBA (${ms} ms): ${it.javaClass.simpleName}: ${it.message}") }
         r.onSuccess { offers ->
-            out.appendLine("  [$source] ${offers.size} ajánlat (${ms} ms)")
+            out.appendLine("  [$source] ${offers.size} ajánlat (${ms} ms)" + if (source == "Google Flights") " · ${GoogleFlights.lastDebug}" else "")
             val problems = mutableListOf<String>()
             offers.forEach { o ->
                 if (o.price <= 0) problems += "nem pozitív ár: $o"

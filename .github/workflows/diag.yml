@@ -23,7 +23,9 @@ jobs:
 
       - name: Egységtesztek
         continue-on-error: true
-        run: gradle -p desktop test --no-daemon 2>&1 | tee unit.log
+        run: |
+          gradle -p desktop test --no-daemon 2>&1 | tee unit.log
+          mkdir -p unit-results && cp desktop/build/test-results/test/*.xml unit-results/ 2>/dev/null || true
 
       - name: Éles árforrás-próba
         continue-on-error: true
@@ -43,7 +45,7 @@ jobs:
             echo "### Commit: $(git rev-parse --short HEAD)"
             echo "### EGYSÉGTESZTEK"
             grep -E "Test.*(FAILED|PASSED)|tests completed|BUILD|e: |AssertionError|Expected|expected" unit.log | head -80 || true
-            for f in desktop/build/test-results/test/*.xml; do
+            for f in unit-results/*.xml; do
               [ -f "$f" ] && grep -oE 'testsuite name="[^"]+" tests="[0-9]+" skipped="[0-9]+" failures="[0-9]+" errors="[0-9]+"' "$f"
             done
             echo

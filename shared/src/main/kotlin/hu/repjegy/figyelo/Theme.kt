@@ -232,7 +232,10 @@ fun NeonTheme(mode: String, textScale: Int = 100, content: @Composable () -> Uni
     // Normál méretnél a rendszer saját sűrűségét hagyjuk érintetlenül: így megmarad az
     // Android 14+ nem lineáris betűskálázása is (nagyon nagy rendszerbetűnél nem „szétfolyó” címek)
     val scaled = remember(density, textScale) {
-        if (textScale == 100) density else Density(density.density, density.fontScale * textScale / 100f)
+        // A rendszer- és az app-beállítás szorzata ne nőjön a végtelenségig (200% × 130% = 2,6×
+        // már szétfeszítené a gombokat); legfeljebb 2× vagy a rendszer saját értéke
+        if (textScale == 100) density
+        else Density(density.density, (density.fontScale * textScale / 100f).coerceAtMost(maxOf(density.fontScale, 2f)))
     }
     CompositionLocalProvider(LocalDensity provides scaled) {
         MaterialTheme(colorScheme = colors, typography = NeonTypography, content = content)

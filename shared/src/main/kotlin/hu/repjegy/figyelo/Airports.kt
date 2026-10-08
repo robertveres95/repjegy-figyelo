@@ -153,4 +153,7 @@ object Airports {
     private fun normalize(s: String): String =
         Normalizer.normalize(s.trim().lowercase(Locale.ROOT), Normalizer.Form.NFD)
             .replace(Regex("\\p{Mn}+"), "")
+            // Nem bontható betűk (pl. Łódź, København, Düsseldorf ß-vel)
+            .replace("ł", "l").replace("ø", "o").replace("ß", "ss").replace("æ", "ae")
+            .replace("đ", "d").replace("ı", "i").replace("œ", "oe").replace("þ", "th")
 }

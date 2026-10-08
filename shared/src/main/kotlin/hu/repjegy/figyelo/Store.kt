@@ -2,6 +2,8 @@ package hu.repjegy.figyelo
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 
 /** A figyelések és beállítások tárolása (Androidon SharedPreferences, Windowson fájl; JSON). */
@@ -48,7 +50,7 @@ object Store {
         // Ha valami nem olvasható be, a nyers adatot félretesszük, mielőtt a következő
         // mentés felülírná – így nem vész el végleg egy figyelés sem.
         if (arr == null || parsed.size < arr.length()) {
-            prefs.edit { putString("watches_backup_${System.currentTimeMillis()}", raw) }
+            prefs.edit { putString("watches_backup", raw) }
         }
         _watches.value = parsed
         initialized = true
@@ -85,8 +87,21 @@ object Store {
      * kikapcsoljuk, és kérjük az új célárat – különben a régi szám (pl. 30 000 Ft → 30 000 €)
      * azonnal téves riasztást adna.
      */
+    private val currencyMutex = Mutex()
+
+    /**
+     * Pénznemváltás a háttérben, egymás után sorban: ha gyorsan kétszer váltasz, a második
+     * a már átváltott célárakból és a valóban aktuális pénznemből számol.
+     */
+    suspend fun switchCurrency(to: String) = currencyMutex.withLock {
+        val from = settings.value.currency
+        if (from == to) return@withLock
+        val factor = runCatching { Rates.convert(1.0, from, to) }.getOrNull()?.takeIf { it > 0 && it.isFinite() }
+        changeCurrency(to, factor)
+    }
+
     @Synchronized
-    fun changeCurrency(to: String, factor: Double?) {
+    private fun changeCurrency(to: String, factor: Double?) {
         persist(_watches.value.map { w ->
             val cleared = w.clearResults()
             if (factor != null) {
@@ -94,7 +109,7 @@ object Store {
                 val target = if (to == "HUF") (Math.round(raw / 100.0) * 100).toInt() else Math.round(raw).toInt()
                 cleared.copy(targetPrice = target.coerceAtLeast(1))
             } else {
-                cleared.copy(notify = false, lastError = "Pénznemet váltottál: add meg újra a célárat, és kapcsold vissza az értesítést.")
+                cleared.copy(notify = false, lastError = "${PriceChecker.CURRENCY_HINT_PREFIX}: add meg újra a célárat, és kapcsold vissza az értesítést.")
             }
         })
         saveSettings(_settings.value.copy(currency = to))

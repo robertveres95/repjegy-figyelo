@@ -163,40 +163,61 @@ object Ignav {
 /** Árfolyamok az Európai Központi Bank adataiból (frankfurter.dev, kulcs nélkül). */
 object Rates {
     private const val MAX_AGE_MS = 12 * 60 * 60 * 1000L
-    private var cache: Map<String, Double>? = null
-    private var fetchedAt = 0L
+
+    /** Elsődleges: EKB-árfolyamok (29 pénznem, köztük HUF). */
+    private val ecb = Source("https://api.frankfurter.dev/v1/latest?base=EUR")
+
+    /**
+     * Tartalék a ritkább pénznemekhez: a Wizz Air az indulási állomás pénznemében áraz
+     * (pl. Tirana ALL, Szkopje MKD, Kutaiszi GEL), ezek nincsenek az EKB-listában.
+     */
+    private val wide = Source("https://open.er-api.com/v6/latest/EUR")
 
     @Synchronized
     fun convert(amount: Double, from: String, to: String): Double {
         if (from.equals(to, ignoreCase = true)) return amount
-        val rates = rates()
-        val fromRate = rates[from.uppercase()] ?: throw IOException("Ismeretlen pénznem: $from")
-        val toRate = rates[to.uppercase()] ?: throw IOException("Ismeretlen pénznem: $to")
-        return amount / fromRate * toRate
+        val f = from.uppercase()
+        val t = to.uppercase()
+        // Mindkét árfolyam ugyanabból a forrásból jöjjön, hogy egymáshoz illeszkedjenek
+        val primary = runCatching { ecb.rates() }.getOrNull()
+        if (primary != null && f in primary && t in primary) return amount / primary.getValue(f) * primary.getValue(t)
+        val backup = runCatching { wide.rates() }.getOrNull()
+        if (backup != null && f in backup && t in backup) return amount / backup.getValue(f) * backup.getValue(t)
+        if (primary == null && backup == null) throw IOException("Nem sikerült lekérni az árfolyamot")
+        throw IOException("Ismeretlen pénznem: ${if (primary?.containsKey(f) == true || backup?.containsKey(f) == true) t else f}")
     }
 
-    private fun rates(): Map<String, Double> {
-        val now = System.currentTimeMillis()
-        cache?.let { if (now - fetchedAt < MAX_AGE_MS) return it }
-        val conn = URL("https://api.frankfurter.dev/v1/latest?base=EUR").openConnection() as HttpURLConnection
-        conn.connectTimeout = 20_000
-        conn.readTimeout = 30_000
-        try {
+    private class Source(val url: String) {
+        private var cache: Map<String, Double>? = null
+        private var fetchedAt = 0L
+
+        fun rates(): Map<String, Double> {
+            val now = System.currentTimeMillis()
+            cache?.let { if (now - fetchedAt < MAX_AGE_MS) return it }
             // Hálózati hiba esetén is jó a korábbi (kicsit régebbi) árfolyam
-            val code = try { conn.responseCode } catch (e: IOException) { cache?.let { return it }; throw e }
-            if (code !in 200..299) {
+            val res = try {
+                Http.request(url, timeoutMs = 20_000)
+            } catch (e: IOException) {
                 cache?.let { return it }
-                throw IOException("Nem sikerült lekérni az árfolyamot")
+                throw e
             }
-            val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
-            val obj = json.getJSONObject("rates")
+            if (res.code !in 200..299) {
+                cache?.let { return it }
+                throw IOException("Nem sikerült lekérni az árfolyamot (HTTP ${res.code})")
+            }
+            val obj = JSONObject(res.body).getJSONObject("rates")
             val map = mutableMapOf("EUR" to 1.0)
-            obj.keys().forEach { k -> map[k] = obj.getDouble(k) }
+            obj.keys().forEach { k ->
+                val v = obj.optDouble(k, Double.NaN)
+                if (v.isFinite() && v > 0) map[k.uppercase()] = v
+            }
+            if (map.size < 2) {
+                cache?.let { return it }
+                throw IOException("Hibás árfolyam-válasz")
+            }
             cache = map
             fetchedAt = now
             return map
-        } finally {
-            conn.disconnect()
         }
     }
 }

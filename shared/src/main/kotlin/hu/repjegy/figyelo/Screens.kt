@@ -10,7 +10,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateIntAsState
+import kotlin.math.roundToInt
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -269,13 +269,11 @@ private fun HomeScreen(onAdd: () -> Unit, onEdit: (String) -> Unit, onSettings: 
     val settings by Store.settings.collectAsState()
     val checking by Store.checking.collectAsState()
     // A rendszerben letiltott értesítés esetén a csengők hiába „bekapcsoltak”: figyelmeztetünk.
-    // Időnként újranézzük, mert a felhasználó a rendszerbeállításokban visszakapcsolhatja.
+    // Minden visszatéréskor újranézzük (a rendszerbeállításokban visszakapcsolhatja).
     var notifyBlocked by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            notifyBlocked = runCatching { Platform.current.notificationsBlocked() }.getOrDefault(false)
-            kotlinx.coroutines.delay(2000)
-        }
+    val resumes by AppScope.resumeCount.collectAsState()
+    LaunchedEffect(resumes) {
+        notifyBlocked = runCatching { Platform.current.notificationsBlocked() }.getOrDefault(false)
     }
 
     Scaffold(
@@ -405,7 +403,8 @@ private fun WatchCard(
 ) {
     val good = Neon.Green
     val best = w.bestOffer
-    val belowTarget = best != null && best.price <= w.targetPrice
+    // Ugyanaz a szabály, mint a riasztásnál (poggyász, hiányos ár), hogy a kártya ne mondjon mást
+    val belowTarget = best != null && w.alertable(best)
     var showAll by remember { mutableStateOf(false) }
 
     NeonCard(
@@ -436,9 +435,15 @@ private fun WatchCard(
                 Column(Modifier.weight(1f)) {
                     Text("Legolcsóbb most", style = MaterialTheme.typography.labelMedium)
                     // Az ár „pörögve” változik az új értékre
-                    val animatedPrice by animateIntAsState(best?.price ?: 0, tween(900, easing = FastOutSlowInEasing), label = "price")
+                    // Üres állapotból vagy pénznemváltás után nem „pörög fel” nulláról / a régi számról
+                    val priceAnim = remember(currency) { androidx.compose.animation.core.Animatable((best?.price ?: 0).toFloat()) }
+                    LaunchedEffect(best?.price, currency) {
+                        val p = best?.price ?: return@LaunchedEffect
+                        if (priceAnim.value <= 0f) priceAnim.snapTo(p.toFloat())
+                        else priceAnim.animateTo(p.toFloat(), tween(900, easing = FastOutSlowInEasing))
+                    }
                     Text(
-                        if (best != null) formatPrice(animatedPrice, currency) else "—",
+                        if (best != null) formatPrice(priceAnim.value.roundToInt(), currency) else "—",
                         style = if (belowTarget) MaterialTheme.typography.headlineMedium.glow(radius = 24f)
                         else MaterialTheme.typography.headlineMedium,
                         color = if (belowTarget) good else Neon.Text,
@@ -1003,13 +1008,9 @@ private fun SettingsScreen(onDone: () -> Unit) {
                 onClick = {
                     if (currency != initial.currency) {
                         // A pénznem a célárak átváltásával együtt, a háttérben vált
-                        Store.saveSettings(draft.copy(currency = initial.currency))
-                        val from = initial.currency
+                        Store.saveSettings(draft.copy(currency = Store.settings.value.currency))
                         val to = currency
-                        AppScope.scope.launch {
-                            val factor = runCatching { Rates.convert(1.0, from, to) }.getOrNull()
-                            Store.changeCurrency(to, factor)
-                        }
+                        AppScope.scope.launch { Store.switchCurrency(to) }
                     } else {
                         Store.saveSettings(draft)
                     }
@@ -1202,9 +1203,13 @@ private fun DateField(
     LaunchedEffect(error) { onValidChange(error == null) }
 
     // Ha a dátum máshonnan változik (pl. naptárból vagy az indulás eltolja a visszautat), frissüljön a mező
-    LaunchedEffect(date) {
-        if (parseTypedDate(text) != date) {
+    // A hibaüzenet a legkorábbi dátum (pl. az indulás) változásakor is újraértékelődik
+    LaunchedEffect(date, minDate) {
+        val typed = parseTypedDate(text)
+        if (typed != date) {
             text = date.format(typedDateFormat)
+            error = null
+        } else if (error != null && !date.isBefore(minDate)) {
             error = null
         }
     }

@@ -50,11 +50,25 @@ object Http {
             }
             val code = conn.responseCode
             val stream = if (code < 400) conn.inputStream else conn.errorStream
-            val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
+            val text = stream?.use { readLimited(it) } ?: ""
             return Response(code, text)
         } finally {
             conn.disconnect()
         }
+    }
+
+    /** Legfeljebb 12 MB-ot olvas (egy elromlott vagy rosszindulatú válasz ne fogyassza el a memóriát). */
+    private fun readLimited(input: java.io.InputStream): String {
+        val limit = 12 * 1024 * 1024
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(16 * 1024)
+        while (true) {
+            val n = input.read(buf)
+            if (n < 0) break
+            out.write(buf, 0, n)
+            if (out.size() > limit) throw IOException("Túl nagy válasz")
+        }
+        return out.toString(Charsets.UTF_8.name())
     }
 
     fun cookie(host: String, name: String): String? =

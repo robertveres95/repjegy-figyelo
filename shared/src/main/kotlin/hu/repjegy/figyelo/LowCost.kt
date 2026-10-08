@@ -91,7 +91,9 @@ object Ryanair {
         if (res.code == 404) return emptyList()
         if (res.code !in 200..299) throw IOException("HTTP ${res.code}")
 
-        val fares = JSONObject(res.body).optJSONArray("fares") ?: JSONArray()
+        val root = JSONObject(res.body)
+        // Hiányzó „fares” mező formátumváltozást jelez – ne „nincs járat” legyen belőle
+        val fares = root.optJSONArray("fares") ?: throw IOException("Váratlan Ryanair-válasz (változhatott a formátum)")
         val offers = mutableListOf<Offer>()
         for (i in 0 until fares.length()) {
             val fare = fares.optJSONObject(i) ?: continue
@@ -117,6 +119,8 @@ object Ryanair {
                 url = bookingUrl(w, origin, destination),
                 bagsIncluded = !w.wantsBags,
                 note = lowCostNote(w),
+                // Az ölben utazó csecsemő díja nincs benne: nem riaszthat és nem nyerhet tévesen
+                partial = w.infantsOnLap > 0,
             )
         }
         return offers
@@ -215,6 +219,9 @@ object WizzAir {
         if (res.code !in 200..299) throw IOException("HTTP ${res.code}")
 
         val json = JSONObject(res.body)
+        if (!json.has("outboundFlights") && !json.has("returnFlights")) {
+            throw IOException("Váratlan Wizz Air-válasz (változhatott a formátum)")
+        }
         val outbound = cheapest(json.optJSONArray("outboundFlights"), w.outboundDate) ?: return emptyList()
         val inbound = w.returnDate?.let { cheapest(json.optJSONArray("returnFlights"), it) ?: return emptyList() }
 
@@ -225,22 +232,32 @@ object WizzAir {
                 price = ceil(perPerson * w.seatedPassengers).toInt(),
                 source = NAME,
                 airline = "Wizz Air",
-                fromCode = origin,
-                toCode = destination,
+                // A Wizz a város másik repterére is adhat járatot (pl. LGW-re kérve LTN-t):
+                // a válaszban szereplő valódi reptér kell, különben ugyanaz a járat többször látszik
+                fromCode = outbound.from ?: origin,
+                toCode = outbound.to ?: destination,
                 departure = outbound.departure,
                 stops = 0,
                 returnDeparture = inbound?.departure,
                 returnStops = if (inbound != null) 0 else null,
-                url = "https://wizzair.com/hu-hu/booking/select-flight/$origin/$destination/" +
+                url = "https://wizzair.com/hu-hu/booking/select-flight/${outbound.from ?: origin}/${outbound.to ?: destination}/" +
                     "${w.outboundDate}/${w.returnDate ?: "null"}/${w.adults}/" +
                     "${w.children + w.infantsInSeat}/${w.infantsOnLap}/null",
                 bagsIncluded = !w.wantsBags,
                 note = lowCostNote(w),
+                // Az ölben utazó csecsemő díja nincs benne: nem riaszthat és nem nyerhet tévesen
+                partial = w.infantsOnLap > 0,
             )
         )
     }
 
-    private class DayFare(val amount: Double, val currency: String, val departure: String?)
+    private class DayFare(
+        val amount: Double,
+        val currency: String,
+        val departure: String?,
+        val from: String? = null,
+        val to: String? = null,
+    )
 
     private fun cheapest(flights: JSONArray?, date: String): DayFare? {
         flights ?: return null
@@ -259,7 +276,11 @@ object WizzAir {
                 if (d.optBoolean("isCheapestOfTheDay")) break
             }
             if (best == null || amount < best.amount) {
-                best = DayFare(amount, price.optString("currencyCode", "EUR"), time)
+                best = DayFare(
+                    amount, price.optString("currencyCode", "EUR"), time,
+                    f.optString("departureStation").takeIf { it.length == 3 },
+                    f.optString("arrivalStation").takeIf { it.length == 3 },
+                )
             }
         }
         return best

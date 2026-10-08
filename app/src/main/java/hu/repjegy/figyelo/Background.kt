@@ -247,7 +247,7 @@ object Notifier {
 
         val best = w.bestOffer ?: return
         val price = best.price
-        val intent = (best.url?.let { Intent(Intent.ACTION_VIEW, Uri.parse(it)) }
+        val intent = (best.url?.takeIf(::isSafeWebUrl)?.let { Intent(Intent.ACTION_VIEW, Uri.parse(it)) }
             ?: Intent(context, MainActivity::class.java))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val pending = PendingIntent.getActivity(
@@ -282,11 +282,12 @@ object Notifier {
 }
 
 fun openUrl(context: Context, url: String?) {
-    if (url.isNullOrBlank()) return
+    if (!isSafeWebUrl(url)) return
     try {
         context.startActivity(
-            Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            Intent(Intent.ACTION_VIEW, Uri.parse(url!!.trim())).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
     } catch (_: ActivityNotFoundException) {
+    } catch (_: RuntimeException) {
     }
 }

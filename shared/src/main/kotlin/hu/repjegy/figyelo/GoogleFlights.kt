@@ -17,9 +17,25 @@ object GoogleFlights {
 
     fun searchUrl(w: Watch, currency: String): String =
         "https://www.google.com/travel/flights?tfs=" +
-            URLEncoder.encode(tfs(w), "UTF-8") + "&hl=en&curr=$currency"
+            URLEncoder.encode(tfs(w), "UTF-8") + "&hl=en&curr=$currency" +
+            // „Minden járat és ár” nézet (a fast-flights is ezt kéri), különben kimaradhat a legolcsóbb
+            "&tfu=EgQIABABIgA"
+
+    /** Diagnosztikához: az utolsó lekérés nyers jellemzői (hány elem, hiba-jelzés). */
+    @Volatile
+    var lastDebug: String = ""
 
     fun search(w: Watch, currency: String): List<Offer> {
+        // Az élő próbák szerint a Google néha üres választ ad elsőre (pl. több repteres
+        // oda-vissza útnál), ami másodszorra már tele van – ezért egyszer újrapróbáljuk
+        val first = fetch(w, currency)
+        if (first.second > 0 || first.first.isNotEmpty()) return first.first
+        Thread.sleep(1500)
+        return fetch(w, currency).first
+    }
+
+    /** Ajánlatok + a válaszban talált járat-elemek száma. */
+    private fun fetch(w: Watch, currency: String): Pair<List<Offer>, Int> {
         // Az EU-s beleegyezési oldal átugrása
         Http.setCookie("www.google.com", ".google.com", "SOCS", "CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg")
         Http.setCookie("www.google.com", ".google.com", "CONSENT", "YES+")
@@ -37,24 +53,39 @@ object GoogleFlights {
             }
 
         val data = script.substringAfter("data:").substringBeforeLast(",").trim()
-        if (data.endsWith("errorHasStatus: true")) return emptyList()
+        if (data.endsWith("errorHasStatus: true")) {
+            lastDebug = "errorHasStatus"
+            return emptyList<Offer>() to 0
+        }
         val payload = JSONArray(data)
 
         val offers = mutableListOf<Offer>()
+        var seen = 0
+        var failed = 0
         for (groupIndex in listOf(2, 3)) {
             val group = payload.optJSONArray(groupIndex)?.optJSONArray(0) ?: continue
             for (i in 0 until group.length()) {
                 val item = group.optJSONArray(i) ?: continue
-                runCatching { parseItem(item, url) }.getOrNull()?.let(offers::add)
+                seen++
+                val r = runCatching { parseItem(item, url) }
+                if (r.isFailure) failed++
+                r.getOrNull()?.let(offers::add)
             }
         }
-        return offers
+        // Ha voltak járatok, de egyiket sem tudtuk értelmezni, az formátumváltozás –
+        // ezt hibaként jelezzük, ne „nincs járat”-ként
+        if (seen > 0 && offers.isEmpty() && failed > 0) {
+            throw IOException("A Google válaszát nem sikerült értelmezni (változhatott a formátum)")
+        }
+        lastDebug = "payload=${payload.length()} elem=$seen hibás=$failed"
+        return offers to seen
     }
 
     private fun parseItem(item: JSONArray, url: String): Offer? {
         val flight = item.getJSONArray(0)
-        val price = (item.optJSONArray(1)?.optJSONArray(0)?.opt(1) as? Number)?.toInt() ?: return null
-        if (price <= 0) return null
+        val raw = (item.optJSONArray(1)?.optJSONArray(0)?.opt(1) as? Number)?.toDouble() ?: return null
+        if (!raw.isFinite() || raw <= 0 || raw > 1e9) return null
+        val price = kotlin.math.ceil(raw).toInt()
         val airlines = flight.optJSONArray(1)?.let { arr ->
             (0 until arr.length()).mapNotNull { arr.opt(it) as? String }.distinct().joinToString(", ")
         }?.takeIf { it.isNotBlank() }
@@ -120,7 +151,7 @@ object GoogleFlights {
             int(9, w.travelClass.coerceIn(1, 4))
             if (w.bags > 0 || w.checkedBag) {
                 message(13) {
-                    if (w.bags > 0) int(2, 1)
+                    if (w.bags > 0) int(2, w.bags)
                     if (w.checkedBag) int(3, 1)
                 }
             }

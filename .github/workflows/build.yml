@@ -18,9 +18,10 @@ on:
 permissions:
   contents: write
 
-# Két kiadás ne fusson egymásba (különben a „legfrissebb” jelölés felcserélődhet)
+# Éles kiadások sorban futnak (a „legfrissebb” jelölés ne cserélődhessen fel); a teszt-buildek
+# mindegyike saját csoportot kap, így egy újabb push nem dobhat el egy várakozó éles kiadást
 concurrency:
-  group: release-${{ github.ref }}
+  group: ${{ (github.ref_type == 'tag' || inputs.publish) && 'refi-publish' || format('refi-test-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:

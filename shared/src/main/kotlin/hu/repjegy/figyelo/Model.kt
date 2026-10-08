@@ -23,6 +23,7 @@ data class Offer(
     val url: String? = null,
     val bagsIncluded: Boolean = true,      // a kért poggyász díja benne van-e
     val note: String? = null,              // pl. "becsült ár"
+    val partial: Boolean = false,          // az ár hiányos (pl. ölben utazó csecsemő díja nélkül)
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("price", price)
@@ -39,6 +40,7 @@ data class Offer(
         putOpt("url", url)
         put("bagsIncluded", bagsIncluded)
         putOpt("note", note)
+        if (partial) put("partial", true)
     }
 
     companion object {
@@ -57,6 +59,7 @@ data class Offer(
             url = o.stringOrNull("url"),
             bagsIncluded = o.optBoolean("bagsIncluded", true),
             note = o.stringOrNull("note"),
+            partial = o.optBoolean("partial", false),
         )
     }
 }
@@ -104,6 +107,15 @@ data class Watch(
     val routeTitle: String get() = "${fromLabel ?: from} → ${toLabel ?: to}"
 
     val bestOffer: Offer? get() = offers.firstOrNull()
+
+    /**
+     * Összevethető-e az ajánlat a célárral: a kért poggyász díja benne van, és az ár nem
+     * hiányos (pl. a fapadosok ölben utazó csecsemőre számolt díja nélkül). A riasztás,
+     * az árgörbe és a kártya „célár alatt” jelzése is ezt használja, hogy egyezzenek.
+     */
+    fun comparable(o: Offer): Boolean = !(wantsBags && !o.bagsIncluded) && !o.partial
+
+    fun alertable(o: Offer): Boolean = comparable(o) && o.price <= targetPrice
 
     fun isExpired(today: LocalDate = LocalDate.now()): Boolean =
         runCatching { LocalDate.parse(outboundDate).isBefore(today) }.getOrDefault(false)
@@ -157,7 +169,7 @@ data class Watch(
         fun fromJson(o: JSONObject): Watch {
             val h = o.optJSONArray("history") ?: JSONArray()
             val history = (0 until h.length()).mapNotNull { i ->
-                h.optJSONArray(i)?.let { PricePoint(it.getLong(0), it.getInt(1)) }
+                h.optJSONArray(i)?.let { p -> runCatching { PricePoint(p.getLong(0), p.getInt(1)) }.getOrNull() }
             }
             val offersArr = o.optJSONArray("offers") ?: JSONArray()
             val offers = (0 until offersArr.length()).mapNotNull { i ->
@@ -257,6 +269,16 @@ val INTERVALS = listOf(
 
 val HU: Locale = Locale.forLanguageTag("hu-HU")
 
+/**
+ * Csak sima https-weboldal nyitható meg. A linkek külső forrásokból is jönnek (pl. SerpApi),
+ * és egy file:, intent: vagy javascript: cím programot indíthatna vagy összeomlaszthatná az appot.
+ */
+fun isSafeWebUrl(url: String?): Boolean {
+    if (url.isNullOrBlank() || url.length > 4000) return false
+    val uri = runCatching { java.net.URI(url.trim()) }.getOrNull() ?: return false
+    return uri.scheme.equals("https", ignoreCase = true) && !uri.host.isNullOrBlank()
+}
+
 fun currencySymbol(currency: String): String = when (currency) {
     "HUF" -> "Ft"
     "EUR" -> "€"
@@ -266,8 +288,9 @@ fun currencySymbol(currency: String): String = when (currency) {
 }
 
 fun formatPrice(price: Int, currency: String): String {
-    val digits = String.format(Locale.ROOT, "%,d", price).replace(',', ' ')
-    return "$digits ${currencySymbol(currency)}"
+    // Nem törő szóközök: nagy betűméretnél se törjön el a „485 000 Ft” két sorba
+    val digits = String.format(Locale.ROOT, "%,d", price).replace(',', '\u00A0')
+    return "$digits\u00A0${currencySymbol(currency)}"
 }
 
 internal fun JSONObject.stringOrNull(key: String): String? =
@@ -298,7 +321,7 @@ fun describeLeg(departure: String?, arrival: String?, stops: Int?, from: String?
             append(" → ")
             append("%02d:%02d".format(arr.hour, arr.minute))
             val days = java.time.temporal.ChronoUnit.DAYS.between(dep.toLocalDate(), arr.toLocalDate())
-            if (days > 0) append(" (+$days nap)")
+            if (days != 0L) append(" (${if (days > 0) "+" else ""}$days nap)")
         }
         if (from != null && to != null) append(" · $from → $to")
         when (stops) {
@@ -325,7 +348,7 @@ fun legParts(departure: String?, arrival: String?, stops: Int?, from: String?, t
             append(" → ")
             append("%02d:%02d".format(arr.hour, arr.minute))
             val days = java.time.temporal.ChronoUnit.DAYS.between(dep.toLocalDate(), arr.toLocalDate())
-            if (days > 0) append(" (+$days nap)")
+            if (days != 0L) append(" (${if (days > 0) "+" else ""}$days nap)")
         }
     }
     val route = listOfNotNull(

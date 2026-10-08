@@ -74,9 +74,15 @@ object DesktopPrefs : Prefs {
             override fun putInt(key: String, value: Int) { props.setProperty(key, value.toString()) }
             override fun putLong(key: String, value: Long) { props.setProperty(key, value.toString()) }
         }.block()
-        // Előbb ideiglenes fájlba, aztán csere: áramszünetnél se sérüljön
+        // Előbb ideiglenes fájlba, aztán csere: áramszünetnél se sérüljön.
+        // Ha a mappa nem írható (pl. teli lemez), az app ne omoljon össze: a változás
+        // a memóriában megmarad, és a következő sikeres mentéskor kiíródik.
         val tmp = File(file.parentFile, file.name + ".tmp")
-        tmp.writer(Charsets.UTF_8).use { props.store(it, "REFI") }
+        try {
+            tmp.writer(Charsets.UTF_8).use { props.store(it, "REFI") }
+        } catch (_: Exception) {
+            return
+        }
         // Windowson a renameTo nem ír felül létező fájlt, ezért Files.move kell
         val src = tmp.toPath()
         val dst = file.toPath()
@@ -223,13 +229,15 @@ object DesktopPlatform : PlatformApi {
     }
 
     override fun openUrl(url: String) {
-        if (url.isBlank()) return
+        // Csak https-weboldal: egy file: cím a Windowson programot indíthatna
+        if (!isSafeWebUrl(url)) return
+        val uri = URI(url.trim())
         val ok = runCatching {
             if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-                Desktop.getDesktop().browse(URI(url)); true
+                Desktop.getDesktop().browse(uri); true
             } else false
         }.getOrDefault(false)
-        if (!ok) runCatching { ProcessBuilder("rundll32", "url.dll,FileProtocolHandler", url).start() }
+        if (!ok) runCatching { ProcessBuilder("rundll32", "url.dll,FileProtocolHandler", uri.toASCIIString()).start() }
     }
 
     override fun openAsset(name: String): InputStream =
@@ -373,17 +381,13 @@ fun main(args: Array<String>) {
             height = minOf(820, usableHeight - 24).coerceAtLeast(480).dp,
             position = WindowPosition(Alignment.Center),
         )
-        var awtWindow by remember { mutableStateOf<java.awt.Window?>(null) }
+        // Előtérbe hozás: az ablak csak a következő újrarajzoláskor válik láthatóvá, ezért
+        // a tényleges előrehozás az ablakon belül, egy számláló változására történik
+        var showTick by remember { mutableStateOf(0) }
         fun show() {
             visible = true
             windowState.isMinimized = false
-            awtWindow?.let { w ->
-                // A Windows a háttérből nem engedi előtérbe hozni az ablakot; ez a szokásos kerülőút
-                w.toFront()
-                w.isAlwaysOnTop = true
-                w.isAlwaysOnTop = false
-                w.requestFocus()
-            }
+            showTick++
         }
         LaunchedEffect(Unit) {
             while (true) {
@@ -427,7 +431,16 @@ fun main(args: Array<String>) {
             title = "REFI",
             icon = icon,
         ) {
-            LaunchedEffect(window) { awtWindow = window }
+            LaunchedEffect(showTick) {
+                if (showTick > 0) {
+                    delay(50)
+                    // A Windows a háttérből nem engedi előtérbe hozni az ablakot; ez a szokásos kerülőút
+                    window.toFront()
+                    window.isAlwaysOnTop = true
+                    window.isAlwaysOnTop = false
+                    window.requestFocus()
+                }
+            }
             val settings by Store.settings.collectAsState()
             NeonTheme(mode = settings.themeMode, textScale = settings.textScale) {
                 Surface(Modifier.fillMaxSize(), color = Neon.Black) {

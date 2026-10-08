@@ -57,7 +57,8 @@ object Updater {
         }
         // Ha ebben a kiadásban (még) nincs telepítő ehhez a platformhoz (pl. a Windows-build
         // később végez), ne kérjünk kötelező frissítést: az ablak nem lenne bezárható.
-        if (apkUrl.isNullOrBlank()) return@runCatching null
+        // Csak a saját GitHub-kiadásunkból töltünk le
+        if (apkUrl.isNullOrBlank() || !apkUrl.startsWith("https://github.com/$REPO/releases/download/")) return@runCatching null
         val pageUrl = json.optString("html_url", "https://github.com/$REPO/releases/latest")
         val release = Release(version, build, apkUrl, pageUrl)
         if (isNewer(release)) release else null

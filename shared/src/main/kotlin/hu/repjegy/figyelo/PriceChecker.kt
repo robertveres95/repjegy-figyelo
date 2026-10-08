@@ -6,17 +6,22 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
+import java.time.LocalDateTime
 
 object PriceChecker {
 
     private const val MAX_HISTORY = 120
     private const val MAX_OFFERS = 10
+    const val CURRENCY_HINT_PREFIX = "Pénznemet váltottál"
 
     private class SourceRun(val name: String, val search: () -> List<Offer>)
 
     suspend fun checkAll() {
         Store.watches.value
             .filter { !it.isExpired() }
+            // A legrégebben ellenőrzött először: ha a háttérfutás időkorlátja (Androidon
+            // ~10 perc) közbeszól, a következő futás a kimaradtakkal kezd
+            .sortedBy { it.lastChecked ?: 0L }
             .forEach { checkOne(it.id) }
     }
 
@@ -72,7 +77,8 @@ object PriceChecker {
                     onFailure = { e ->
                         when (e) {
                             is SkipSourceException -> SourceStatus(name, true, e.message ?: "kihagyva")
-                            else -> SourceStatus(name, false, e.message ?: e.javaClass.simpleName)
+                            // A szerverek hibaszövege lehet hosszú (akár HTML) – röviden tároljuk
+                            else -> SourceStatus(name, false, (e.message ?: e.javaClass.simpleName).take(160))
                         }
                     },
                 )
@@ -82,15 +88,21 @@ object PriceChecker {
 
             if (offers.isEmpty()) {
                 val anyWorked = statuses.any { it.ok }
+                // Csak akkor „nincs járat”, ha minden forrás válaszolt; ha valamelyik hibázott,
+                // a korábbi ár megmarad (lehet, hogy éppen az a forrás ismeri ezt az útvonalat)
+                val allAnswered = statuses.isNotEmpty() && statuses.all { it.ok }
                 Store.update(id) {
                     if (stale(it, watch, currency)) return@update it
                     it.copy(
                         lastChecked = now,
                         sourceStatus = statuses,
-                        // Ha volt válasz, de nincs járat, a régi ár ne látsszon frissnek
-                        offers = if (anyWorked) emptyList() else it.offers,
-                        lastPrice = if (anyWorked) null else it.lastPrice,
-                        lastError = if (anyWorked) "Nincs találat ezekkel a beállításokkal" else "Egyik forrás sem válaszolt",
+                        offers = if (allAnswered) emptyList() else it.offers,
+                        lastPrice = if (allAnswered) null else it.lastPrice,
+                        lastError = when {
+                            allAnswered -> "Nincs találat ezekkel a beállításokkal"
+                            anyWorked -> "Nem minden forrás válaszolt, és a többi nem talált járatot"
+                            else -> "Egyik forrás sem válaszolt"
+                        }.let { msg -> keepCurrencyHint(it) ?: msg },
                     )
                 }
                 return@withContext changedSince(id, watch)
@@ -103,14 +115,14 @@ object PriceChecker {
                 if (stale(cur, watch, currency)) return@update cur
                 // Poggyászt kértél, de csak poggyász nélküli fapados alapár jött: ez nem
                 // összevethető a célárral, ezért nem riaszt és nem kerül az árgörbére
-                val comparable = !(cur.wantsBags && !best.bagsIncluded)
+                val comparable = cur.comparable(best)
                 val shouldNotify = comparable && cur.notify && best.price <= cur.targetPrice &&
                     (cur.lastNotifiedPrice == null || best.price.toLong() * 100 <= cur.lastNotifiedPrice.toLong() * 98)
                 val next = cur.copy(
                     lastPrice = best.price,
                     lowestPrice = if (comparable) minOf(cur.lowestPrice ?: best.price, best.price) else cur.lowestPrice,
                     lastChecked = now,
-                    lastError = null,
+                    lastError = keepCurrencyHint(cur),
                     offers = offers,
                     sourceStatus = statuses,
                     history = if (comparable) (cur.history + PricePoint(now, best.price)).takeLast(MAX_HISTORY) else cur.history,
@@ -131,6 +143,10 @@ object PriceChecker {
         }
     }
 
+    /** A pénznemváltás miatti „add meg újra a célárat” figyelmeztetés maradjon, amíg az értesítés ki van kapcsolva. */
+    private fun keepCurrencyHint(w: Watch): String? =
+        w.lastError?.takeIf { !w.notify && it.startsWith(CURRENCY_HINT_PREFIX) }
+
     private fun stale(cur: Watch, started: Watch, currency: String) =
         cur.searchKey() != started.searchKey() || Store.settings.value.currency != currency
 
@@ -144,8 +160,11 @@ object PriceChecker {
      * Ha poggyászt kértél, a poggyász nélküli (fapados alap-) árak a lista végére kerülnek,
      * hogy ne ezek nyerjenek tévesen.
      */
-    internal fun rank(w: Watch, offers: List<Offer>): List<Offer> {
+    internal fun rank(w: Watch, offers: List<Offer>, now: LocalDateTime = LocalDateTime.now()): List<Offer> {
         val deduped = offers
+            // Ma már elindult járat ne legyen „legjobb ajánlat” (az idő a reptér helyi ideje,
+            // a készülék órájával közelítjük – egy-két óra eltérés itt nem számít)
+            .filter { o -> o.departure?.let { d -> runCatching { LocalDateTime.parse(d) }.getOrNull() }?.isAfter(now) ?: true }
             .groupBy { o ->
                 if (o.departure != null) {
                     listOf(o.departure, o.returnDeparture, o.fromCode, o.toCode, o.airline?.lowercase()).joinToString("|")
@@ -153,9 +172,9 @@ object PriceChecker {
                     "${o.source}|${o.price}|${o.airline}"
                 }
             }
-            .map { (_, same) -> same.minWith(compareBy<Offer>({ !it.bagsIncluded }, { it.price })) }
+            .map { (_, same) -> same.minWith(compareBy<Offer>({ !w.comparable(it) }, { !it.bagsIncluded }, { it.price })) }
         return deduped
-            .sortedWith(compareBy<Offer>({ w.wantsBags && !it.bagsIncluded }, { it.price }))
+            .sortedWith(compareBy<Offer>({ !w.comparable(it) }, { it.price }))
             .take(MAX_OFFERS)
     }
 }

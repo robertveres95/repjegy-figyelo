@@ -29,6 +29,7 @@ object SerpApi {
             "sort_by" to "2",
             "currency" to currency,
             "hl" to "hu",
+            "gl" to "hu", // magyarországi árakat kérünk (különben amerikai „piacról” keres)
             "api_key" to apiKey,
         )
         w.returnDate?.let { params["return_date"] = it }
@@ -52,8 +53,9 @@ object SerpApi {
             val arr = json.optJSONArray(key) ?: JSONArray()
             for (i in 0 until arr.length()) {
                 val option = arr.optJSONObject(i) ?: continue
-                val price = option.optInt("price", -1)
-                if (price <= 0) continue
+                val rawPrice = option.optDouble("price", -1.0)
+                if (!rawPrice.isFinite() || rawPrice <= 0) continue
+                val price = kotlin.math.ceil(rawPrice).toInt()
                 val flights = option.optJSONArray("flights") ?: JSONArray()
                 val first = flights.optJSONObject(0)
                 val last = flights.optJSONObject(flights.length() - 1)

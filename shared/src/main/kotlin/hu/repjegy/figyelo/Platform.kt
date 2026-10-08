@@ -69,6 +69,9 @@ object AppScope {
 
     /** Hidegindításkor igaz: ilyenkor egyszer lefut a nyitóanimáció. */
     var splashPending = true
+
+    /** Nő, valahányszor az app előtérbe kerül (Androidon onResume). */
+    val resumeCount = kotlinx.coroutines.flow.MutableStateFlow(0)
 }
 
 /** Egyszerű kulcs–érték tároló (Androidon SharedPreferences, Windowson fájl). */
