@@ -29,11 +29,11 @@ jobs:
 
       - name: Éles árforrás-próba
         continue-on-error: true
-        run: gradle -p desktop test --no-daemon -Drefi.live=true --tests '*LiveSourcesTest*' 2>&1 | tail -5
+        run: gradle -p desktop test --no-daemon -Drefi.live=true --tests '*LiveSourcesTest*' 2>&1 | tee live.log | tail -5
 
       - name: Képernyőképek
         continue-on-error: true
-        run: gradle -p desktop test --no-daemon -Drefi.screens=true --tests '*ScreenshotTest*' 2>&1 | tail -30
+        run: gradle -p desktop test --no-daemon -Drefi.screens=true --tests '*ScreenshotTest*' 2>&1 | tee screens.log | tail -30
 
       - name: Android lint
         continue-on-error: true
@@ -54,11 +54,13 @@ jobs:
             done
             echo
             echo "### ÉLES ÁRFORRÁSOK"
-            cat desktop/build/diag/live.txt 2>/dev/null || echo "(nincs live.txt)"
+            cat desktop/build/diag/live.txt 2>/dev/null || { echo "(nincs live.txt)"; tail -60 live.log 2>/dev/null; }
             echo
             echo "### KÉPERNYŐKÉPEK"
             ls desktop/build/screens 2>/dev/null || echo "(nincsenek)"
             cat desktop/build/screens/hibak.txt 2>/dev/null || true
+            grep -E "FAILED|Exception|Error|error:|e: " screens.log 2>/dev/null | head -60 || true
+            tail -25 screens.log 2>/dev/null || true
             echo
             echo "### ANDROID LINT"
             cat app/build/reports/lint-results-debug.txt 2>/dev/null || echo "(nincs lint-jelentés)"
