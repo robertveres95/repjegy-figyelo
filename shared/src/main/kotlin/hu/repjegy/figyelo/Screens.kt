@@ -210,9 +210,7 @@ private fun UpdateOverlay(release: Updater.Release) {
             )
             Spacer(Modifier.height(12.dp))
             Text(
-                "1. Koppints a gombra, a böngésző letölti az új verziót.\n" +
-                    "2. Nyisd meg a letöltött fájlt, és telepítsd (idegen forrásból származó " +
-                    "alkalmazás telepítését engedélyezni kell).",
+                Platform.current.updateSteps,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

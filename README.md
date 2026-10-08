@@ -1,6 +1,6 @@
 # REFI – repjegy figyelő
 
-Android-app, ami figyeli a repülőjegyárakat, és értesítést küld, ha egy jegy a megadott célár alá esik.
+Android- és Windows-app, ami figyeli a repülőjegyárakat, és értesítést küld, ha egy jegy a megadott célár alá esik.
 
 Árforrások, párhuzamosan versenyeztetve:
 - **Kulcs nélkül:** Google Flights (légitársaságok és irodák), Ryanair és Wizz Air közvetlenül
@@ -27,7 +27,8 @@ Android-app, ami figyeli a repülőjegyárakat, és értesítést küld, ha egy 
 
 1. A repó **Releases** részében nyisd meg a legfrissebb (nem „teszt”) kiadást, és töltsd le a `REFI.apk` fájlt.
 2. Nyisd meg a telefonon. Ha kéri, engedélyezd a böngészőnek az „ismeretlen forrásból származó alkalmazások” telepítését.
-3. Kulcs nem kell: a Google Flights, Ryanair és Wizz Air alapból be van kapcsolva. A SerpApi és az Ignav a **Beállításokban** kapcsolható be, ha van kulcsod.
+3. **Windowson:** töltsd le a `REFI-Setup.msi` fájlt, és futtasd. Ha a Windows figyelmeztet („A Windows megvédte a számítógépet”), kattints a „További információ”, majd a „Futtatás mindenképp” gombra. Az app bezáráskor a tálcán fut tovább, és bejelentkezéskor magától elindul (ez a Feladatkezelő „Indítási alkalmazások” lapján kikapcsolható).
+4. Kulcs nem kell: a Google Flights, Ryanair és Wizz Air alapból be van kapcsolva. A SerpApi és az Ignav a **Beállításokban** kapcsolható be, ha van kulcsod.
 
 ## Korlátok
 
@@ -44,7 +45,9 @@ Android-app, ami figyeli a repülőjegyárakat, és értesítést küld, ha egy 
 
 ## Fejlesztés
 
-Kotlin + Jetpack Compose, WorkManager.
+Kotlin + Jetpack Compose (Android), Compose Multiplatform Desktop (Windows), WorkManager.
+
+- **Szerkezet:** `shared/` – közös kód (árforrások, adatkezelés, felület, témák); `app/` – Android; `desktop/` – Windows (külön Gradle-build: `gradle -p desktop packageMsi`). A platformfüggő részek a `PlatformApi` felület mögött vannak.
 
 - **Verziószám:** a `version.properties` fájlban (`VERSION_NAME=1.1.0`). Új kiadás előtt ezt kell átírni.
 - **Teszt-build:** minden `main`-re pusholt változásból „teszt” jelölésű (prerelease) kiadás készül. Letölthető kipróbálásra, de a telepített appok **nem** ajánlják fel frissítésként.

@@ -27,6 +27,9 @@ interface PlatformApi {
     /** „telefonon” / „számítógépen” – a szövegekben. */
     val deviceWord: String
 
+    /** A frissítési ablak lépései (a jóváhagyott szöveg platformra szabva). */
+    val updateSteps: String
+
     /** Rövid megjegyzés a háttér-ellenőrzésről a Beállításokban. */
     val backgroundHint: String
 

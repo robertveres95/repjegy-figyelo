@@ -72,6 +72,10 @@ class AndroidPlatform private constructor(private val context: Context) : Platfo
     override val buildNumber: Int get() = BuildConfig.VERSION_CODE
     override val installerSuffix = ".apk"
     override val deviceWord = "telefonon"
+    override val updateSteps =
+        "1. Koppints a gombra, a böngésző letölti az új verziót.\n" +
+            "2. Nyisd meg a letöltött fájlt, és telepítsd (idegen forrásból származó " +
+            "alkalmazás telepítését engedélyezni kell)."
     override val backgroundHint = "Az Android energiatakarékossága miatt a háttér-ellenőrzés kicsit csúszhat."
     override val appFont = FontFamily(
         Font(R.font.jakarta_regular, FontWeight.Normal),
