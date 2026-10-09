@@ -136,8 +136,12 @@ object Store {
      * Felhasználói időbélyeget nem változtat. Visszaadja a feltöltendő állapotot.
      */
     @Synchronized
-    internal fun mergeFromSync(remote: List<Watch>, remoteTomb: Map<String, Long>): Pair<List<Watch>, Map<String, Long>> {
-        val merged = Sync.merge(_watches.value, tombstones(), remote, remoteTomb)
+    internal fun mergeFromSync(
+        remote: List<Watch>,
+        remoteTomb: Map<String, Long>,
+        dropLocalOnlyBefore: Long? = null,
+    ): Pair<List<Watch>, Map<String, Long>> {
+        val merged = Sync.merge(_watches.value, tombstones(), remote, remoteTomb, dropLocalOnlyBefore)
         if (merged.first != _watches.value) persist(merged.first)
         saveTombstones(merged.second)
         return merged

@@ -37,6 +37,21 @@ interface PlatformApi {
     val quietHint: String get() = "Ilyenkor a riasztás hang és rezgés nélkül érkezik; reggel ott vár az értesítések között."
 
     fun openUrl(url: String)
+
+    /** Tudja-e az app maga letölteni és elindítani a frissítést (Windowson igen). */
+    val canSelfUpdate: Boolean get() = false
+
+    /**
+     * A frissítés letöltése és a telepítő elindítása (ez a példány utána kilép). [progress]: 0..1.
+     * Hamis, ha nem sikerült (ilyenkor a böngészős letöltés a tartalék).
+     */
+    fun installUpdate(release: Updater.Release, progress: (Float) -> Unit): Boolean = false
+
+    /** Indulás a rendszerrel (Windows): van-e ilyen beállítás, és be van-e kapcsolva. */
+    val autostartSupported: Boolean get() = false
+    var autostart: Boolean
+        get() = false
+        set(_) {}
     fun openAsset(name: String): InputStream
     fun notifyPriceDrop(w: Watch, currency: String)
     fun notifyUpdate(release: Updater.Release)

@@ -26,6 +26,8 @@ class LiveSourcesTest {
             "BUD→Milánó csak oda, feladott poggyász" to w("BUD", "MXP,LIN,BGY", d, null, checked = true),
             "BUD→JFK business, max 1 átszállás" to w("BUD", "JFK", d, d.plusDays(10), cls = 3, stops = 2),
             "Nem létező útvonal: DEB→LIS" to w("DEB", "LIS", d, null),
+            "Wizz-próba: létező reptér, nem létező Wizz-útvonal BUD→JFK" to w("BUD", "JFK", d, null),
+            "Wizz-próba: 13 hónap múlva BUD→LTN" to w("BUD", "LTN", LocalDate.now().plusMonths(13), null),
         )
         for ((name, watch) in cases) {
             out.appendLine("=== $name  (${watch.outboundDate}${watch.returnDate?.let { " – $it" } ?: ""})")
@@ -34,7 +36,9 @@ class LiveSourcesTest {
                 out.appendLine("  [Google árelőzmény] " + (m?.let { "${it.points.size} nap, szokásos: ${it.typicalLow}–${it.typicalHigh}, utolsó: ${it.points.last().price}" } ?: "nincs"))
             }
             run("Ryanair", watch) { Ryanair.search(watch, "HUF") }
+            WizzAir.lastRejection = ""
             run("Wizz Air", watch) { WizzAir.search(watch, "HUF") }
+            if (WizzAir.lastRejection.isNotEmpty()) out.appendLine("  [Wizz elutasítás] ${WizzAir.lastRejection}")
             val all = runCatching { GoogleFlights.search(watch, "HUF") }.getOrDefault(emptyList()) +
                 runCatching { Ryanair.search(watch, "HUF") }.getOrDefault(emptyList()) +
                 runCatching { WizzAir.search(watch, "HUF") }.getOrDefault(emptyList())

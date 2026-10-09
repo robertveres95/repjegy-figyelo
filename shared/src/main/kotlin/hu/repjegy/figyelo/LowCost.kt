@@ -139,6 +139,10 @@ object WizzAir {
     private const val SESSION_MAX_AGE_MS = 20 * 60 * 1000L
 
     private var apiBase: String? = null
+
+    /** Az utolsó elutasítás (HTTP 400) szövege – diagnosztikához. */
+    @Volatile
+    var lastRejection: String = ""
     private var sessionAt = 0L
 
     fun search(w: Watch, currency: String, maxPairs: Int = MAX_PAIRS): List<Offer> {
@@ -204,6 +208,7 @@ object WizzAir {
         if (res.code == 429) throw FatalSourceException("a Wizz Air bot-védelme blokkolta")
         if (res.code == 400 || res.code == 401 || res.code == 403) {
             // Nincs ilyen útvonal: ezt nem érdemes új munkamenettel újrapróbálni
+            if (res.code == 400) lastRejection = "$origin→$destination ${w.outboundDate}: ${res.body.take(400)}"
             if (res.code == 400 && res.body.contains("validationCodes")) return emptyList()
             if (retry) return searchPair(w, origin, destination, currency, retry = false)
             throw FatalSourceException("a Wizz Air elutasította a kérést (HTTP ${res.code})")

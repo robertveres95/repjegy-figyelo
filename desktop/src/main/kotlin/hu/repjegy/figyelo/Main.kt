@@ -265,6 +265,15 @@ object Autostart {
             ).redirectErrorStream(true).start().waitFor()
         }
     }
+
+    /** Automatikus indítás kikapcsolása: a bejegyzés törlése (ha nincs, nem hiba). */
+    fun disable() {
+        if (!System.getProperty("os.name", "").startsWith("Windows")) return
+        runCatching {
+            ProcessBuilder("reg", "delete", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "REFI", "/f")
+                .redirectErrorStream(true).start().waitFor()
+        }
+    }
 }
 
 // ---------------------------------------------------------------- Platform
@@ -280,10 +289,67 @@ object DesktopPlatform : PlatformApi {
     override val buildNumber: Int get() = versionProps.getProperty("build", "1").toIntOrNull() ?: 1
     override val installerSuffix = ".msi"
     override val deviceWord = "számítógépen"
-    override val updateSteps =
+    override val updateSteps: String get() = if (canSelfUpdate) {
+        "1. Kattints a gombra: a REFI letölti az új verziót, és elindítja a telepítést.\n" +
+            "2. A telepítés magától lefut (egy kis folyamatjelző látszik). Utána nyisd meg újra a REFI-t."
+    } else {
         "1. Kattints a gombra, a böngésző letölti az új verziót.\n" +
             "2. Nyisd meg a letöltött fájlt, és telepítsd (ha a Windows figyelmeztet, kattints a " +
             "„További információ”, majd a „Futtatás mindenképp” gombra)."
+    }
+
+    private val isWindows get() = System.getProperty("os.name", "").startsWith("Windows")
+
+    override val canSelfUpdate: Boolean get() = isWindows && System.getProperty("jpackage.app-path") != null
+
+    /**
+     * Letölti az MSI-t a saját kiadási oldalunkról, és a Windows telepítőjével (msiexec, csak
+     * folyamatjelzővel) elindítja; ez a példány kilép, hogy a telepítő cserélhesse a fájlokat.
+     */
+    override fun installUpdate(release: Updater.Release, progress: (Float) -> Unit): Boolean {
+        if (!canSelfUpdate) return false
+        if (!release.apkUrl.startsWith("https://github.com/robertveres95/repjegy-figyelo/releases/download/")) return false
+        if (!release.apkUrl.endsWith(".msi")) return false
+        val dir = File(System.getProperty("java.io.tmpdir"), "REFI-frissites").apply { mkdirs() }
+        val msi = File(dir, "REFI-Setup-${release.version}-${release.build}.msi")
+        val conn = java.net.URL(release.apkUrl).openConnection() as java.net.HttpURLConnection
+        conn.instanceFollowRedirects = true
+        conn.connectTimeout = 20_000
+        conn.readTimeout = 60_000
+        if (conn.responseCode !in 200..299) return false
+        val total = conn.contentLengthLong
+        var done = 0L
+        conn.inputStream.use { input ->
+            msi.outputStream().use { out ->
+                val buf = ByteArray(64 * 1024)
+                while (true) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    out.write(buf, 0, n)
+                    done += n
+                    if (total > 0) progress((done.toFloat() / total).coerceAtMost(0.99f))
+                }
+            }
+        }
+        if (msi.length() < 1_000_000 || (total > 0 && msi.length() != total)) return false
+        progress(1f)
+        ProcessBuilder("msiexec", "/i", msi.absolutePath, "/passive", "/norestart").start()
+        // A telepítő csak a kilépésünk után cserélheti a fájlokat
+        Thread {
+            Thread.sleep(1500)
+            kotlin.system.exitProcess(0)
+        }.start()
+        return true
+    }
+
+    override val autostartSupported: Boolean get() = canSelfUpdate
+
+    override var autostart: Boolean
+        get() = DesktopPrefs.getBoolean("autostart", true)
+        set(value) {
+            DesktopPrefs.edit { putBoolean("autostart", value) }
+            if (value) Autostart.enable() else Autostart.disable()
+        }
     override val backgroundHint =
         "Ablak bezárásakor a REFI a tálcán fut tovább és onnan ellenőriz; kikapcsolt gépen nem figyel."
 
@@ -479,7 +545,7 @@ fun main(args: Array<String>) {
     Store.init(DesktopPrefs)
     AppScope.splashPending = !startHidden
     AppScope.scope.launch { runCatching { Airports.preload() } }
-    Autostart.enable()
+    if (DesktopPrefs.getBoolean("autostart", true)) Autostart.enable() else Autostart.disable()
     BackgroundLoop.restart()
 
     application {

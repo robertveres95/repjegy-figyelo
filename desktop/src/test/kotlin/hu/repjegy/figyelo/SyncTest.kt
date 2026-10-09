@@ -104,6 +104,19 @@ class SyncTest {
         assertEquals(1, snap.skipped)
     }
 
+    @Test fun longAbsentDeviceDoesNotResurrectDeletedWatches() {
+        // A régóta nem szinkronizált eszközön megvan „a” (régi) és „b” (azóta létrehozott); a felhőben csak „c”
+        val lastSync = 1_000L
+        val (m, _) = Sync.merge(
+            listOf(w("a", edited = 500), w("b", edited = 5_000)), emptyMap(),
+            listOf(w("c", edited = 900)), emptyMap(), dropLocalOnlyBefore = lastSync,
+        )
+        assertEquals(setOf("b", "c"), m.map { it.id }.toSet())
+        // Szokásos esetben (nincs hosszú kimaradás) semmi sem vész el
+        val (m2, _) = Sync.merge(listOf(w("a", edited = 500)), emptyMap(), listOf(w("c")), emptyMap())
+        assertEquals(setOf("a", "c"), m2.map { it.id }.toSet())
+    }
+
     @Test fun keysTravelInSyncFile() {
         val k = Store.SyncedKeys("serp-123", true, "ign-456", false, 42L)
         val back = assertNotNull(Sync.parse(Sync.serialize(listOf(w("a")), emptyMap(), "HUF", k)))

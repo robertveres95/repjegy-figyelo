@@ -265,8 +265,33 @@ private fun UpdateOverlay(release: Updater.Release) {
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(18.dp))
-            Button(onClick = { Platform.current.openUrl(release.apkUrl) }, modifier = Modifier.fillMaxWidth()) {
-                Text("Letöltés és frissítés", fontWeight = FontWeight.Bold)
+            var progress by remember { mutableStateOf<Float?>(null) }
+            Button(
+                onClick = {
+                    if (!Platform.current.canSelfUpdate) {
+                        Platform.current.openUrl(release.apkUrl)
+                        return@Button
+                    }
+                    // Windowson az app maga tölti le és indítja a telepítőt (a tálcán futó példány kilép)
+                    progress = 0f
+                    AppScope.scope.launch {
+                        val ok = runCatching {
+                            Platform.current.installUpdate(release) { p -> progress = p }
+                        }.getOrDefault(false)
+                        if (!ok) {
+                            progress = null
+                            Platform.current.openUrl(release.apkUrl)
+                        }
+                    }
+                },
+                enabled = progress == null,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    progress?.let { p -> if (p >= 1f) "Telepítés indul…" else "Letöltés… ${(p * 100).toInt()}%" }
+                        ?: "Letöltés és frissítés",
+                    fontWeight = FontWeight.Bold,
+                )
             }
         }
     }
@@ -1196,6 +1221,14 @@ internal fun SettingsScreen(onDone: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+
+            if (Platform.current.autostartSupported) {
+                var auto by remember { mutableStateOf(Platform.current.autostart) }
+                SwitchRow("Indítás a Windowszal (a tálcán, a háttérben figyel)", auto) {
+                    auto = it
+                    Platform.current.autostart = it
+                }
             }
 
             SectionTitle("Ellenőrzés gyakorisága")

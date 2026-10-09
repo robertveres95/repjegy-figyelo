@@ -120,7 +120,22 @@ object Sync {
         }
     }
 
+    /** A felhőben lévő fájl közben megváltozott (egy másik eszköz épp feltöltött): újrakezdjük. */
+    private class ConflictException : IOException("a másik eszköz épp szinkronizált – újrapróbálom")
+
     private suspend fun syncOnce() {
+        // Ha két eszköz egyszerre tölt fel, a későbbi „ütközést” kap: újra letölti, összefésüli, feltölti
+        repeat(2) {
+            try {
+                return syncAttempt()
+            } catch (_: ConflictException) {
+                kotlinx.coroutines.delay(1500)
+            }
+        }
+        syncAttempt()
+    }
+
+    private suspend fun syncAttempt() {
         val token = Platform.current.googleAccessToken(interactive = false)
             ?: throw IOException("Jelentkezz be újra a Google-fiókkal (Beállítások)")
         val auth = mapOf("Authorization" to "Bearer $token")
@@ -136,7 +151,13 @@ object Sync {
         // 2. Letöltés és összefésülés
         val currency = Store.settings.value.currency
         var remote: Snapshot? = null
+        // A fájl verziójele: feltöltéskor ezzel ellenőrizzük, hogy közben nem írta-e felül más eszköz
+        var etag: String? = null
         if (fileId != null) {
+            etag = runCatching {
+                val meta = Http.request("https://www.googleapis.com/drive/v2/files/$fileId?fields=etag", headers = auth, timeoutMs = 20_000)
+                if (meta.code in 200..299) JSONObject(meta.body).optString("etag").takeIf { it.isNotBlank() } else null
+            }.getOrNull()
             val dl = Http.request("$API/files/$fileId?alt=media", headers = auth, timeoutMs = 30_000)
             check401(dl.code, dl.body)
             if (dl.code !in 200..299) throw IOException("Drive HTTP ${dl.code}")
@@ -154,7 +175,11 @@ object Sync {
         }
         // Az összefésülés a tároló zárján belül, a legfrissebb helyi állapottal (közben érkezett
         // szerkesztés, törlés vagy ár nem vész el)
-        val merged = Store.mergeFromSync(remoteWatches.orEmpty(), remote?.tombstones.orEmpty())
+        // Ha ez az eszköz nagyon régen (a törlésjelek megőrzési idejénél régebben) szinkronizált, a csak
+        // nála meglévő, azóta nem módosított figyelések máshol már törölve lettek: ezeket nem hozzuk vissza
+        val last = state.value.lastSync
+        val dropBefore = if (remote != null && last != null && System.currentTimeMillis() - last > 100L * 24 * 3_600_000L) last else null
+        val merged = Store.mergeFromSync(remoteWatches.orEmpty(), remote?.tombstones.orEmpty(), dropBefore)
         // Ha egy-egy figyelés nem volt beolvasható, a feltöltés kihagyná őket: inkább nem töltünk fel
         if (remote != null && remote.skipped > 0) {
             throw IOException("${remote.skipped} figyelés a felhőben nem olvasható – frissítsd a REFI-t a legújabb verzióra")
@@ -185,10 +210,12 @@ object Sync {
             // amit a v3 várna); ugyanazt a fájlt és jogosultságot használja
             Http.request(
                 "https://www.googleapis.com/upload/drive/v2/files/$fileId?uploadType=media", method = "PUT",
-                headers = auth + ("Content-Type" to "application/json; charset=UTF-8"),
+                headers = auth + ("Content-Type" to "application/json; charset=UTF-8") +
+                    (etag?.let { mapOf("If-Match" to it) } ?: emptyMap()),
                 body = body, timeoutMs = 30_000,
             )
         }
+        if (res.code == 412) throw ConflictException()
         check401(res.code, res.body)
         if (res.code !in 200..299) throw IOException("Drive feltöltés HTTP ${res.code}")
     }
@@ -279,6 +306,7 @@ object Sync {
         localTomb: Map<String, Long>,
         remote: List<Watch>,
         remoteTomb: Map<String, Long>,
+        dropLocalOnlyBefore: Long? = null,
     ): Pair<List<Watch>, Map<String, Long>> {
         val cutoff = System.currentTimeMillis() - 120L * 24 * 3_600_000L
         val tomb = (localTomb.keys + remoteTomb.keys).associateWith { maxOf(localTomb[it] ?: 0L, remoteTomb[it] ?: 0L) }
@@ -297,6 +325,8 @@ object Sync {
                 else -> l
             }
             val other = if (base === l) r else l
+            // Hosszú kimaradás után: csak itt meglévő, azóta nem módosított figyelés = máshol törölték
+            if (r == null && dropLocalOnlyBefore != null && l != null && l.editedAt <= dropLocalOnlyBefore) return@mapNotNull null
             val deletedAt = tomb[id]
             if (deletedAt != null && deletedAt >= base.editedAt) return@mapNotNull null
             if (other == null) return@mapNotNull base
