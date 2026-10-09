@@ -87,6 +87,7 @@ jobs:
         shell: bash
         env:
           REFI_KEYSTORE_PASS: ${{ secrets.REFI_KEYSTORE_PASS }}
+          REFI_KEYSTORE_B64: ${{ secrets.REFI_KEYSTORE_B64 }}
           PUBLISH: ${{ steps.meta.outputs.publish }}
         run: |
           set -euo pipefail
@@ -94,8 +95,15 @@ jobs:
           echo "build-tools: $BT"
           "$BT/zipalign" -f 4 app/build/outputs/apk/release/app-release-unsigned.apk aligned.apk
           OLD=(--ks app/debug.keystore --ks-pass pass:android --ks-key-alias androiddebugkey --key-pass pass:android)
+          # Az aláíró kulcs a GitHub titkai közül jön (nem a nyilvános tárolóból); átmenetileg még a régi helyről is
+          KS=app/refi-release.jks
+          if [ -n "${REFI_KEYSTORE_B64:-}" ]; then
+            KS="$RUNNER_TEMP/refi-release.jks"
+            printf '%s' "$REFI_KEYSTORE_B64" | tr -d '\r\n ' | base64 -d > "$KS"
+            echo "Aláíró kulcs: GitHub-titokból"
+          fi
           if [ -n "${REFI_KEYSTORE_PASS:-}" ]; then
-            NEW=(--ks app/refi-release.jks --ks-pass env:REFI_KEYSTORE_PASS --ks-key-alias refi --key-pass env:REFI_KEYSTORE_PASS)
+            NEW=(--ks "$KS" --ks-pass env:REFI_KEYSTORE_PASS --ks-key-alias refi --key-pass env:REFI_KEYSTORE_PASS)
             "$BT/apksigner" rotate --out lineage.bin \
               --old-signer "${OLD[@]}" --set-rollback false \
               --new-signer "${NEW[@]}"
