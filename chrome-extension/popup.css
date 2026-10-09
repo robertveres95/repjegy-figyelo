@@ -92,3 +92,4 @@ footer { padding: 6px 14px 10px; border-top: 1px solid var(--line); }
   animation: spin 0.9s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+button:disabled { opacity: .6; cursor: default; }

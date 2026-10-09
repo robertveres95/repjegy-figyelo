@@ -28,8 +28,16 @@ const store = {
 // A bejelentkezést a háttér-szkript végzi (background.js), mert ez az ablak bezárulhat közben
 async function signIn(interactive) {
   const r = await chrome.runtime.sendMessage({ type: 'signin', interactive });
-  if (!r || !r.token) throw new Error((r && r.error) || 'nincs hozzáférés');
+  if (!r || !r.token) throw new Error(friendlyAuthError((r && r.error) || 'nincs hozzáférés'));
   return r.token;
+}
+
+/** A Chrome/Google angol hibaüzenetei helyett érthető szöveg. */
+function friendlyAuthError(msg) {
+  if (/did not approve|canceled|cancelled|closed/i.test(msg)) return 'A bejelentkezés megszakadt (bezárult a Google ablaka). Próbáld újra.';
+  if (/redirect_uri_mismatch/i.test(msg)) return 'A Google még nem ismeri fel a bővítményt (beállítás alatt) – próbáld újra néhány perc múlva.';
+  if (/access_denied/i.test(msg)) return 'A Google-fiók nem engedte a hozzáférést.';
+  return msg;
 }
 
 async function validToken() {
@@ -195,14 +203,37 @@ function render(data) {
 
 // ------------------------------------------------------------ indulás
 
-async function refresh(interactive) {
+let running = null;
+
+/** Betöltés (egyszerre csak egy fut; ha közben újat kérnek, a futót várjuk meg). */
+function refresh(interactive) {
+  if (running && !interactive) return running;
+  running = doRefresh(interactive).finally(() => { running = null; });
+  return running;
+}
+
+async function doRefresh(interactive) {
   show('error', false);
   const btn = $('refresh');
   btn.classList.add('spin');
   try {
-    let token = interactive ? await signIn(true) : await validToken();
+    let token;
+    if (interactive) {
+      // Bejelentkezés közben az ablak bezárulhat; az eredményt a háttér elmenti
+      $('signin-btn').disabled = true;
+      $('signin-btn').textContent = 'Bejelentkezés folyamatban…';
+      try { token = await signIn(true); } finally {
+        $('signin-btn').disabled = false;
+        $('signin-btn').textContent = 'Bejelentkezés Google-fiókkal';
+      }
+    } else {
+      token = await validToken();
+    }
     if (!token) {
       show('loading', false);
+      // Nincs (érvényes) bejelentkezés: a régi, esetleg más fiókhoz tartozó adatot nem mutatjuk
+      $('list').replaceChildren();
+      ['refresh', 'signout', 'footer', 'empty'].forEach((id) => show(id, false));
       show('signin');
       return;
     }
@@ -213,7 +244,12 @@ async function refresh(interactive) {
     } catch (e) {
       if (!e.auth) throw e;
       token = await validToken();
-      if (!token) { show('signin'); return; }
+      if (!token) {
+        $('list').replaceChildren();
+        ['refresh', 'signout', 'footer', 'empty'].forEach((id) => show(id, false));
+        show('signin');
+        return;
+      }
       data = await loadFile(token);
     }
     await store.set({ data });
@@ -222,7 +258,7 @@ async function refresh(interactive) {
     render(data);
   } catch (e) {
     show('loading', false);
-    $('error').textContent = `Nem sikerült betölteni: ${e.message}`;
+    $('error').textContent = interactive ? e.message : `Nem sikerült betölteni: ${e.message}`;
     show('error');
   } finally {
     btn.classList.remove('spin');
@@ -233,7 +269,7 @@ async function start() {
   // Ha a bejelentkezés a háttérben befejeződik, amíg ez az ablak nyitva van, frissítünk
   if (hasChrome) {
     chrome.storage.onChanged.addListener((changes) => {
-      if (changes.token && changes.token.newValue) refresh(false);
+      if (changes.token && changes.token.newValue && !running) refresh(false);
       if (changes.authError && changes.authError.newValue) {
         $('error').textContent = `A bejelentkezés nem sikerült: ${changes.authError.newValue}`;
         show('error');
@@ -243,11 +279,20 @@ async function start() {
   $('signin-btn').addEventListener('click', () => refresh(true));
   $('refresh').addEventListener('click', () => refresh(false));
   $('signout').addEventListener('click', async () => {
-    await store.remove(['token', 'expires', 'data']);
+    // A hozzáférést a Google-nél is visszavonjuk, különben a következő megnyitáskor csendben visszalépne
+    await chrome.runtime.sendMessage({ type: 'signout' });
     $('list').replaceChildren();
     ['refresh', 'signout', 'footer', 'empty', 'error'].forEach((id) => show(id, false));
     show('signin');
   });
+
+  // Ha a mappába újabb verzió került, mint ami most fut, újratöltjük a bővítményt
+  if (hasChrome && !demo) {
+    try {
+      const onDisk = (await (await fetch('manifest.json?t=' + Date.now(), { cache: 'no-store' })).json()).version;
+      if (onDisk && onDisk !== chrome.runtime.getManifest().version) { chrome.runtime.reload(); return; }
+    } catch { /* nem baj */ }
+  }
 
   if (demo) {
     show('refresh'); show('signout');
