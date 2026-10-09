@@ -81,7 +81,8 @@ internal fun PriceChart(w: Watch, currency: String, modifier: Modifier = Modifie
             val strong = TextStyle(fontSize = 11.sp, color = textColor)
             val bottomBand = 18.dp.toPx()          // dátumok helye alul
             val topPad = 16.dp.toPx()              // a legmagasabb ár felirata fölött
-            val chartH = size.height - bottomBand - topPad
+            val minLabelPad = 16.dp.toPx()         // a legalacsonyabb ár felirata alatt (ne lógjon a dátumokra)
+            val chartH = size.height - bottomBand - topPad - minLabelPad
             val pts = data.all
             val prices = pts.map { it.price }
             val lo = minOf(prices.min(), data.target).toFloat()
@@ -142,20 +143,24 @@ internal fun PriceChart(w: Watch, currency: String, modifier: Modifier = Modifie
 
             // Dátumok alul: az eleje, a határ és a vége
             val dateY = size.height - bottomBand + 3.dp.toPx()
-            val marks = buildList {
-                add(t0)
-                data.boundary?.let { if (it != t0 && it != pts.last().time) add(it) }
-                add(pts.last().time)
-            }.distinct()
-            marks.forEachIndexed { i, t ->
-                val text = Instant.ofEpochMilli(t).atZone(ZoneId.systemDefault()).toLocalDate().format(chartDay)
-                val layout = measurer.measure(text, small)
-                val raw = when (i) {
-                    0 -> 0f
-                    marks.lastIndex -> size.width - layout.size.width
-                    else -> x(t) - layout.size.width / 2f
+            fun dayText(t: Long) = Instant.ofEpochMilli(t).atZone(ZoneId.systemDefault()).toLocalDate().format(chartDay)
+            val first = measurer.measure(dayText(t0), small)
+            val last = measurer.measure(dayText(pts.last().time), small)
+            val placed = mutableListOf(0f to first.size.width.toFloat(), (size.width - last.size.width) to size.width)
+            drawText(first, topLeft = Offset(0f, dateY))
+            if (dayText(pts.last().time) != dayText(t0)) drawText(last, topLeft = Offset(size.width - last.size.width, dateY))
+            // A határ dátuma csak akkor, ha elfér a két szélső között (különben egymásra csúsznának)
+            data.boundary?.let { b ->
+                val text = dayText(b)
+                if (text != dayText(t0) && text != dayText(pts.last().time)) {
+                    val layout = measurer.measure(text, small)
+                    val left = (x(b) - layout.size.width / 2f).coerceIn(0f, size.width - layout.size.width)
+                    val right = left + layout.size.width
+                    val gap = 6.dp.toPx()
+                    if (placed.none { (l, r) -> left < r + gap && right > l - gap }) {
+                        drawText(layout, topLeft = Offset(left, dateY))
+                    }
                 }
-                drawText(layout, topLeft = Offset(raw.coerceIn(0f, size.width - layout.size.width), dateY))
             }
         }
         // Jelmagyarázat
