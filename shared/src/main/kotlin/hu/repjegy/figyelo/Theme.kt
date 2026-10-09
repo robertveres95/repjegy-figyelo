@@ -90,31 +90,33 @@ data class AppPalette(
 )
 
 val NightPalette = AppPalette(
-    background = Color(0xFF000000),
-    surface = Color(0xFF060B07),
-    surfaceHigh = Color(0xFF0B120C),
-    accent = Color(0xFF39FF14),
-    accentSoft = Color(0xFF8CFF6B),
-    mint = Color(0xFF00FFA3),
-    text = Color(0xFFD5F5CC),
-    textDim = Color(0xFF7DAF75),
-    line = Color(0xFF1B4D20),
-    error = Color(0xFFFF4D8D),
-    warn = Color(0xFFFFD23F),
-    glow = true,
+    // Nyugodt éjkék: mély, kékes fekete háttér, tompított égszínkék kiemelés, izzás nélkül
+    // (a korábbi neonzöld hosszabb nézésnél fárasztotta a szemet)
+    background = Color(0xFF0A0F16),
+    surface = Color(0xFF101824),
+    surfaceHigh = Color(0xFF16212F),
+    accent = Color(0xFF5EA8F2),
+    accentSoft = Color(0xFF8FC3F7),
+    mint = Color(0xFF4CC9B8),
+    text = Color(0xFFDDE6F0),
+    textDim = Color(0xFF8D9DB0),
+    line = Color(0xFF243447),
+    error = Color(0xFFF2788A),
+    warn = Color(0xFFE9C46A),
+    glow = false,
     isLight = false,
 )
 
 val DayPalette = AppPalette(
-    background = Color(0xFFF5F8F3),
+    background = Color(0xFFF4F7FB),
     surface = Color(0xFFFFFFFF),
-    surfaceHigh = Color(0xFFEDF3EA),
-    accent = Color(0xFF1E7A2C),
-    accentSoft = Color(0xFF2E7D32),
+    surfaceHigh = Color(0xFFE9EFF7),
+    accent = Color(0xFF1F5FA8),
+    accentSoft = Color(0xFF2B6CB0),
     mint = Color(0xFF00796B),
-    text = Color(0xFF14201A),
-    textDim = Color(0xFF52665A),
-    line = Color(0xFFB4CDB6),
+    text = Color(0xFF14202E),
+    textDim = Color(0xFF55657A),
+    line = Color(0xFFBCCADB),
     error = Color(0xFFC2185B),
     warn = Color(0xFFA15C00),
     glow = false,
@@ -146,7 +148,7 @@ const val THEME_EYE = "eye"
 val THEMES = listOf(
     THEME_AUTO to "Automatikus (rendszer szerint)",
     THEME_DAY to "Nappali",
-    THEME_NIGHT to "Éjszakai (neon)",
+    THEME_NIGHT to "Éjszakai (kék)",
     THEME_EYE to "Szemkímélő",
 )
 

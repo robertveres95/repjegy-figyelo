@@ -61,13 +61,13 @@ class RefiWidget : GlanceAppWidget() {
 
     @Composable
     private fun Content(rows: List<Row4>) {
-        val green = ColorProvider(Color(0xFF39FF88))
-        val text = ColorProvider(Color(0xFFE8F2EC))
-        val dim = ColorProvider(Color(0xFF8A9A92))
+        val green = ColorProvider(Color(0xFF5EA8F2))
+        val text = ColorProvider(Color(0xFFDDE6F0))
+        val dim = ColorProvider(Color(0xFF8D9DB0))
         Column(
             modifier = GlanceModifier
                 .fillMaxSize()
-                .background(Color(0xFF050807))
+                .background(Color(0xFF0A0F16))
                 .padding(12.dp)
                 .clickable(actionStartActivity<MainActivity>()),
         ) {
