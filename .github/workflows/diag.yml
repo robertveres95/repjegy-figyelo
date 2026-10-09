@@ -37,7 +37,9 @@ jobs:
 
       - name: Android lint
         continue-on-error: true
-        run: gradle :app:lintDebug --no-daemon 2>&1 | tail -20
+        run: |
+          gradle :app:checkReleaseAarMetadata --no-daemon 2>&1 | tee aar.log | tail -5
+          gradle :app:lintDebug --no-daemon 2>&1 | tail -20
 
       - name: Jelentés összeállítása és feltöltése
         if: always()
@@ -61,6 +63,9 @@ jobs:
             cat desktop/build/screens/hibak.txt 2>/dev/null || true
             grep -E "FAILED|Exception|Error|error:|e: " screens.log 2>/dev/null | head -60 || true
             tail -25 screens.log 2>/dev/null || true
+            echo
+            echo "### ANDROID FÜGGŐSÉGEK"
+            grep -v "^\s*$" aar.log 2>/dev/null | grep -iE "requires|depend|compileSdk|AGP|error|wrong" | head -40 || true
             echo
             echo "### ANDROID LINT"
             cat app/build/reports/lint-results-debug.txt 2>/dev/null || echo "(nincs lint-jelentés)"
