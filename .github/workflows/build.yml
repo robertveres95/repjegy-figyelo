@@ -145,13 +145,23 @@ jobs:
           "$BT/apksigner" lineage --in /tmp/dry.apk --print-certs | grep -c "Signer" | xargs -I{} echo "lánc tagjai: {}"
           echo "::notice::Kulcscsere-próba rendben"
 
+      - name: Chrome-bővítmény csomagolása
+        shell: bash
+        run: |
+          cd chrome-extension
+          zip -r -q ../REFI-Chrome.zip . -x 'test/*'
+          cd ..
+          unzip -l REFI-Chrome.zip | tail -1
+
       - name: Kiadás létrehozása
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: ${{ steps.meta.outputs.name }}
-          body: ${{ steps.meta.outputs.publish == 'true' && 'Töltsd le a REFI.apk fájlt a telefonodra, és telepítsd.' || 'Teszt-build, csak kipróbálásra. A telepített appok nem ajánlják fel frissítésként.' }}
-          files: REFI.apk
+          body: ${{ steps.meta.outputs.publish == 'true' && 'Töltsd le a REFI.apk fájlt a telefonodra, és telepítsd. Chrome-bővítmény: REFI-Chrome.zip (telepítés: lásd a leírást a tárolóban).' || 'Teszt-build, csak kipróbálásra. A telepített appok nem ajánlják fel frissítésként.' }}
+          files: |
+            REFI.apk
+            REFI-Chrome.zip
           prerelease: ${{ steps.meta.outputs.publish != 'true' }}
           # Csak akkor lesz „legfrissebb”, ha a Windows-telepítő is felkerült (lásd lent):
           # így egyik platform sem kap félkész kiadást

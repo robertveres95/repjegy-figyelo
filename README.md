@@ -64,3 +64,16 @@ Kotlin + Jetpack Compose (Android), Compose Multiplatform Desktop (Windows), Wor
 - **Heti egészségellenőrzés:** hétfőnként élesben kipróbálja az árforrásokat; ha valamelyik elromlik, hibajegyet nyit (erről a GitHub e-mailt küld). Nyilvános repóban a GitHub 60 nap tétlenség után szünetelteti az ütemezett futást – ilyenkor az Actions lapon újra kell engedélyezni.
 - **Diagnosztika:** a „Diagnosztika” workflow kézzel indítható: egységtesztek, éles árforrás-próba és Android lint; az eredmény a rejtett „diagnostics” vázlat-kiadás `diag.txt` fájljába kerül.
 - A frissítésfigyelő a GitHub „legfrissebb kiadását” nézi (a teszt-buildeket nem), ezért a repónak nyilvánosnak kell maradnia.
+
+## Chrome-bővítmény (gyors áttekintés)
+
+A Chrome eszköztárán egy REFI ikon: rákattintva látszanak a figyelések (aktuális legjobb ár, célár, árgörbe, link a foglaláshoz). Csak olvas – az adat ugyanabból a Google-fiókos szinkronból jön, mint az appban.
+
+**Telepítés (családi használatra, a Chrome Web Store nélkül):**
+1. Töltsd le a legfrissebb kiadásból a `REFI-Chrome.zip` fájlt, és csomagold ki egy állandó helyre (pl. `Dokumentumok\REFI-Chrome`) – ezt a mappát később ne töröld.
+2. A Chrome-ban nyisd meg: `chrome://extensions`
+3. Jobb felül kapcsold be a **Fejlesztői mód** kapcsolót.
+4. Kattints a **Kicsomagolt bővítmény betöltése** gombra, és válaszd ki a kicsomagolt mappát.
+5. A puzzle-ikon (Bővítmények) menüben tűzd ki a REFI-t, majd kattints rá, és jelentkezz be ugyanazzal a Google-fiókkal, amit az appban használsz.
+
+Frissítéskor: az új zip tartalmát másold a régi mappa helyére, majd a `chrome://extensions` oldalon nyomd meg a REFI melletti frissítés (↻) gombot.
