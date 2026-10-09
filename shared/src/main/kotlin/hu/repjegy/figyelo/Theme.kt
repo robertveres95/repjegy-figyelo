@@ -419,8 +419,11 @@ fun BellToggle(on: Boolean, onToggle: () -> Unit) {
  * hogy ne jusson át az alatta lévő, nem látható képernyőre.
  */
 fun Modifier.blockInput(): Modifier = this.pointerInput(Unit) {
+    // Nem nyeljük el (consume) az eseményt: a réteg saját gombjai és görgetése így működnek (Androidon
+    // az ujj apró elmozdulása különben megszakítaná a koppintást); az alatta lévő képernyő pedig eleve
+    // nem kapja meg, mert a találat ennél a rétegnél megáll
     awaitPointerEventScope {
-        while (true) awaitPointerEvent().changes.forEach { it.consume() }
+        while (true) awaitPointerEvent()
     }
 }
 

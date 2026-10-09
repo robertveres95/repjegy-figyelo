@@ -130,10 +130,10 @@ private sealed interface Screen {
 private val dateFormat = DateTimeFormatter.ofPattern("yyyy. MMM d., EEE", HU)
 private val typedDateFormat = DateTimeFormatter.ofPattern("yyyy.MM.dd")
 
-/** Begépelt dátum: 2026.10.16, 2026-10-16, 2026/10/16, 2026.10.16. vagy 2026. 10. 16. */
 /** A legkésőbbi megadható utazási nap (a légitársaságok kb. egy évre előre árulnak). */
 internal fun maxTravelDate(today: LocalDate): LocalDate = today.plusMonths(18)
 
+/** Begépelt dátum: 2026.10.16, 2026-10-16, 2026/10/16, 2026.10.16. vagy 2026. 10. 16. */
 internal fun parseTypedDate(raw: String): LocalDate? {
     val nums = raw.split('.', '-', '/', ' ').filter { it.isNotBlank() }
     if (nums.size != 3 || nums[0].length != 4) return null
@@ -158,7 +158,7 @@ fun AppRoot() {
     val sync by Sync.state.collectAsState()
     // Ha a bejelentkezés nem sikerül (pl. nincs net, nincs Google Play), egy hiba után erre az
     // indításra tovább lehet lépni – a figyelések addig is használhatók; a következő indításkor újra kéri
-    var loginSkipped by remember { mutableStateOf(false) }
+    var loginSkipped by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val loginGate = !showSplash && !sync.enabled && !loginSkipped
     // Ami alatta van, csak akkor reagálhat (pl. megosztott kód), ha semmi sem takarja
     val uncovered = !showSplash && !loginGate && update == null

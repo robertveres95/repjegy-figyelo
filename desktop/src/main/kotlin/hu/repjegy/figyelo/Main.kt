@@ -70,7 +70,7 @@ object DesktopPrefs : Prefs {
                         props.putAll(fresh)
                     }.isSuccess
                     if (ok) break
-                    Thread.sleep(400L * attempt)
+                    if (attempt < 5) Thread.sleep(400L * attempt)
                 }
                 if (!ok) {
                     readOnly = true
@@ -234,7 +234,8 @@ object BackgroundLoop {
                     // után gyakran még nincs net – ilyenkor 10 perc múlva újrapróbálja, nem csak órák múlva
                     val active = Store.watches.value.filter { !it.isExpired() }
                     val anyAnswer = active.isEmpty() || active.any { w ->
-                        (w.lastChecked ?: 0L) >= now && w.sourceStatus.any { it.ok }
+                        // A részleges válasz (talált ajánlatot, de nem minden kérése sikerült) is válasz
+                        (w.lastChecked ?: 0L) >= now && w.sourceStatus.any { it.ok || it.text.contains("részleges") }
                     }
                     if (anyAnswer) Store.prefs.edit { putLong("lastAutoCheck", now) }
                 }

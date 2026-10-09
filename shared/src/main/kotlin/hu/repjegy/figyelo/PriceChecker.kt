@@ -175,7 +175,8 @@ object PriceChecker {
                         shouldNotify -> best.price
                         // Ha visszament a célár fölé, a következő eséskor újra szólunk (csak teljes válasznál:
                         // egy hibázó forrás miatti „drágulás” ne okozzon dupla értesítést)
-                        comparable && allAnswered && best.price > cur.targetPrice -> null
+                        comparable && best.price > cur.targetPrice &&
+                            (allAnswered || statuses.any { s -> s.ok && s.source == cur.offers.firstOrNull()?.source }) -> null
                         else -> cur.lastNotifiedPrice
                     },
                 )
@@ -203,7 +204,7 @@ object PriceChecker {
         if (pairs.size <= 1 && w.flexDays == 0) return search(w)
         val ctx = kotlin.coroutines.coroutineContext
         // ne zúdítsunk egyszerre sok kérést a forrásra; leállításkor (pl. háttérmunka vége) itt megáll
-        return collectOffers(pairs, betweenEach = { Thread.sleep(400); ctx.ensureActive() }) { pair ->
+        return collectOffers(pairs, betweenEach = { kotlinx.coroutines.delay(400); ctx.ensureActive() }) { pair ->
             search(w.copy(outboundDate = pair.first, returnDate = pair.second, flexDays = 0))
         }
     }
