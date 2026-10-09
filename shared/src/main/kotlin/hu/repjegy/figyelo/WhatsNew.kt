@@ -29,6 +29,7 @@ object WhatsNew {
             "Kevesebb fölösleges értesítés: ugyanarról az árról nem szólunk kétszer.",
             "Figyelés törlése és kijelentkezés előtt az app rákérdez.",
             "Ha a bejelentkezés nem sikerül (pl. nincs internet), akkor is tovább tudsz lépni.",
+            "Tippek és trükkök a figyelés készítésekor – és egy varázsló, ami végigvezet az ingyenes kulcsok beállításán (még több ár).",
             "Sok apró hibajavítás a háttérben.",
         ),
     )

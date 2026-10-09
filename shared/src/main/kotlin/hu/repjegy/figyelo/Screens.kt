@@ -850,6 +850,7 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
     val newId = remember { UUID.randomUUID().toString() }
     var saved by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var guide by remember { mutableStateOf<KeyProvider?>(null) }
     // Ha közben egy másik eszközön törölték, a második Mentés újként menti
     var recreate by remember { mutableStateOf(false) }
 
@@ -956,6 +957,9 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            // Tippek és trükkök (pl. ingyenes kulcs a több árhoz – végigvezetünk rajta)
+            TipBubble(onOpenGuide = { guide = it })
+            guide?.let { p -> KeyGuideDialog(p, onClose = { guide = null }) }
             SectionTitle("Útvonal")
             AirportField("Honnan", fromPlace) { fromPlace = it }
             AirportField("Hova", toPlace) { toPlace = it }
@@ -1076,6 +1080,7 @@ internal fun SettingsScreen(onDone: () -> Unit) {
     var ignavOn by remember { mutableStateOf(initial.ignavOn) }
     var apiKey by remember { mutableStateOf(initial.apiKey) }
     var ignavKey by remember { mutableStateOf(initial.ignavKey) }
+    var keyGuide by remember { mutableStateOf<KeyProvider?>(null) }
     var currency by remember { mutableStateOf(initial.currency) }
     var interval by remember { mutableStateOf(initial.intervalHours) }
     var themeMode by remember { mutableStateOf(initial.themeMode) }
@@ -1138,21 +1143,36 @@ internal fun SettingsScreen(onDone: () -> Unit) {
             SwitchRow("Ryanair (közvetlenül)", ryanairOn) { ryanairOn = it }
             SwitchRow("Wizz Air (közvetlenül)", wizzOn) { wizzOn = it }
 
-            SectionTitle("Opcionális tartalékok – kulccsal")
-            SwitchRow("SerpApi (Google Flights)", serpOn) { serpOn = it }
-            if (serpOn) {
-                TextButton(onClick = { Platform.current.openUrl("https://serpapi.com/manage-api-key") }) {
-                    Text("Kulcs: serpapi.com (havi 250 ingyenes)")
-                }
-                SecretField("SerpApi API-kulcs", apiKey) { apiKey = it }
+            SectionTitle("Még több ár – ingyenes kulccsal")
+            Text(
+                "Két további kereső, ingyenes kulccsal. Nem kell hozzá szakértőnek lenni: a varázsló lépésről " +
+                    "lépésre végigvezet (regisztráció, kulcs kimásolása, kipróbálás).",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            keyGuide?.let { p ->
+                KeyGuideDialog(p, onClose = { keyGuide = null }, onSaved = { k ->
+                    // A varázsló már elmentette; a képernyő vázlata is frissüljön, hogy a Mentés ne írja felül
+                    when (p) {
+                        KeyProvider.SERPAPI -> { apiKey = k; serpOn = true }
+                        KeyProvider.IGNAV -> { ignavKey = k; ignavOn = true }
+                    }
+                })
             }
-            SwitchRow("Ignav", ignavOn) { ignavOn = it }
-            if (ignavOn) {
-                TextButton(onClick = { Platform.current.openUrl("https://ignav.com") }) {
-                    Text("Kulcs: ignav.com (1000 ingyenes kérés)")
+            SwitchRow("SerpApi (megbízhatóbb Google-árak · havi 250 ingyenes)", serpOn) { serpOn = it }
+            if (serpOn || apiKey.isBlank()) {
+                OutlinedButton(onClick = { keyGuide = KeyProvider.SERPAPI }) {
+                    Text(if (apiKey.isBlank()) "Kulcs szerzése lépésről lépésre" else "Új kulcs beállítása (varázsló)")
                 }
-                SecretField("Ignav API-kulcs", ignavKey) { ignavKey = it }
             }
+            if (serpOn) SecretField("SerpApi API-kulcs", apiKey) { apiKey = it }
+            SwitchRow("Ignav (saját adatforrás · 1000 ingyenes)", ignavOn) { ignavOn = it }
+            if (ignavOn || ignavKey.isBlank()) {
+                OutlinedButton(onClick = { keyGuide = KeyProvider.IGNAV }) {
+                    Text(if (ignavKey.isBlank()) "Kulcs szerzése lépésről lépésre" else "Új kulcs beállítása (varázsló)")
+                }
+            }
+            if (ignavOn) SecretField("Ignav API-kulcs", ignavKey) { ignavKey = it }
             if (serpOn || ignavOn) {
                 Text(
                     "A kulcsok csak ezen a ${Platform.current.deviceWord} tárolódnak.",
