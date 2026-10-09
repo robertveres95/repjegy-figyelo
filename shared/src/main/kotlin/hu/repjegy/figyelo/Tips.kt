@@ -146,16 +146,18 @@ internal fun TipBubble(onOpenGuide: (KeyProvider) -> Unit) {
                 }
             }
             Text(t.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (t.action != null && t.provider != null) {
-                    TextButton(onClick = { onOpenGuide(t.provider) }) { Text(t.action, fontWeight = FontWeight.Bold) }
-                }
-                Spacer(Modifier.weight(1f))
+            if (t.action != null && t.provider != null) {
+                androidx.compose.material3.Button(
+                    onClick = { onOpenGuide(t.provider) },
+                    modifier = Modifier.padding(top = 8.dp, end = 10.dp).fillMaxWidth(),
+                ) { Text(t.action, fontWeight = FontWeight.Bold) }
+            }
+            Row(horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 TextButton(onClick = { tip = runCatching { Tips.next() }.getOrNull(); if (tip == null) visible = false }) {
                     Text("Következő tipp")
                 }
                 TextButton(onClick = { Tips.hide(t.id); visible = false }) {
-                    Text("Ne mutasd", color = Neon.TextDim)
+                    Text("Ne mutasd többé", color = Neon.TextDim)
                 }
             }
         }
