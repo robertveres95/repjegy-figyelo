@@ -140,7 +140,12 @@ object Store {
         remote: List<Watch>,
         remoteTomb: Map<String, Long>,
         dropLocalOnlyBefore: Long? = null,
+        expectedCurrency: String? = null,
     ): Pair<List<Watch>, Map<String, Long>> {
+        // Közben pénznemet váltott: a felhőből jött (a régi pénznemre átváltott) árakat most nem keverjük be
+        if (expectedCurrency != null && settings.value.currency != expectedCurrency) {
+            throw java.io.IOException("pénznemváltás közben – a következő szinkronizálás rendezi")
+        }
         val merged = Sync.merge(_watches.value, tombstones(), remote, remoteTomb, dropLocalOnlyBefore)
         if (merged.first != _watches.value) persist(merged.first)
         saveTombstones(merged.second)
@@ -186,34 +191,64 @@ object Store {
         saveSettings(_settings.value.copy(currency = to))
     }
 
-    /** A kulcsos források beállítása (szinkronizáláshoz): kulcsok és be/ki kapcsolók. */
-    data class SyncedKeys(val serpKey: String, val serpOn: Boolean, val ignavKey: String, val ignavOn: Boolean, val editedAt: Long)
+    /**
+     * A kulcsos források beállítása (szinkronizáláshoz), forrásonként külön időbélyeggel: így ha az
+     * egyik eszközön a SerpApi-, a másikon az Ignav-kulcsot állítják be, egyik sem írja felül a másikat.
+     */
+    data class SyncedKeys(
+        val serpKey: String, val serpOn: Boolean, val serpEditedAt: Long,
+        val ignavKey: String, val ignavOn: Boolean, val ignavEditedAt: Long,
+    ) {
+        val editedAt: Long get() = maxOf(serpEditedAt, ignavEditedAt)
+    }
 
     @Synchronized
     fun keys(): SyncedKeys = settings.value.let {
+        val legacy = prefs.getLong("keysEditedAt", 0L)
         // Korábbi verzióban megadott (még időbélyeg nélküli) kulcs is felkerüljön – de bármely valódi módosítás felülírja
-        val t = prefs.getLong("keysEditedAt", 0L).takeIf { t -> t > 0 }
-            ?: if (it.apiKey.isNotBlank() || it.ignavKey.isNotBlank()) 1L else 0L
-        SyncedKeys(it.apiKey, it.serpOn, it.ignavKey, it.ignavOn, t)
+        fun t(name: String, key: String) = prefs.getLong(name, 0L).takeIf { v -> v > 0 }
+            ?: legacy.takeIf { v -> v > 0 } ?: if (key.isNotBlank()) 1L else 0L
+        SyncedKeys(it.apiKey, it.serpOn, t("serpEditedAt", it.apiKey), it.ignavKey, it.ignavOn, t("ignavEditedAt", it.ignavKey))
     }
 
-    /** A felhőből jött (újabb) kulcsok átvétele; az időbélyeg is átjön, hogy ne pattogjon oda-vissza. */
+    /**
+     * A felhőben lévő kulcsok összefésülése a helyiekkel (forrásonként a később módosított nyer), egy
+     * lépésben, a zár alatt – így egy közben végzett helyi módosítás sem vész el. Visszaadja a feltöltendőt.
+     */
     @Synchronized
-    internal fun applySyncedKeys(k: SyncedKeys) {
-        val cur = settings.value
-        writeSettings(cur.copy(apiKey = k.serpKey, serpOn = k.serpOn, ignavKey = k.ignavKey, ignavOn = k.ignavOn))
-        prefs.edit { putLong("keysEditedAt", k.editedAt) }
+    internal fun adoptSyncedKeys(remote: SyncedKeys?): SyncedKeys {
+        val local = keys()
+        remote ?: return local
+        val serp = remote.serpEditedAt > local.serpEditedAt
+        val ignav = remote.ignavEditedAt > local.ignavEditedAt
+        if (!serp && !ignav) return local
+        val merged = SyncedKeys(
+            if (serp) remote.serpKey else local.serpKey, if (serp) remote.serpOn else local.serpOn,
+            maxOf(local.serpEditedAt, remote.serpEditedAt),
+            if (ignav) remote.ignavKey else local.ignavKey, if (ignav) remote.ignavOn else local.ignavOn,
+            maxOf(local.ignavEditedAt, remote.ignavEditedAt),
+        )
+        writeSettings(settings.value.copy(apiKey = merged.serpKey, serpOn = merged.serpOn, ignavKey = merged.ignavKey, ignavOn = merged.ignavOn))
+        prefs.edit {
+            putLong("serpEditedAt", merged.serpEditedAt)
+            putLong("ignavEditedAt", merged.ignavEditedAt)
+        }
+        return merged
     }
 
     @Synchronized
     fun saveSettings(settings: Settings) {
         val old = _settings.value
         writeSettings(settings)
-        // Ha a kulcsok változtak, a többi eszközre is átmennek (a legutóbbi módosítás nyer)
-        if (old.apiKey != settings.apiKey || old.serpOn != settings.serpOn ||
-            old.ignavKey != settings.ignavKey || old.ignavOn != settings.ignavOn
-        ) {
-            prefs.edit { putLong("keysEditedAt", stamp(prefs.getLong("keysEditedAt", 0L))) }
+        // Ha a kulcsok változtak, a többi eszközre is átmennek (forrásonként a legutóbbi módosítás nyer)
+        val serpChanged = old.apiKey != settings.apiKey || old.serpOn != settings.serpOn
+        val ignavChanged = old.ignavKey != settings.ignavKey || old.ignavOn != settings.ignavOn
+        if (serpChanged || ignavChanged) {
+            val k = keys()
+            prefs.edit {
+                if (serpChanged) putLong("serpEditedAt", stamp(k.serpEditedAt))
+                if (ignavChanged) putLong("ignavEditedAt", stamp(k.ignavEditedAt))
+            }
             Sync.scheduleSoon()
         }
     }
@@ -250,10 +285,12 @@ object Store {
             val list = _watches.value.toMutableList()
             var added = 0
             var updated = 0
-            val now = System.currentTimeMillis()
+            val tomb = tombstones()
             for (w0 in converted) {
-                val w = w0.copy(editedAt = now)
-                val i = list.indexOfFirst { it.id == w.id }
+                val i = list.indexOfFirst { it.id == w0.id }
+                // Az időbélyeg a korábbi változat és egy esetleges törlésjel után legyen (eltérő órájú
+                // eszközök mellett is ez a visszaállított változat nyerjen)
+                val w = w0.copy(editedAt = stamp(maxOf(list.getOrNull(i)?.editedAt ?: 0L, tomb[w0.id] ?: 0L)))
                 if (i >= 0) {
                     // A meglévő eredmények maradnak, ha a keresés ugyanaz
                     val old = list[i]

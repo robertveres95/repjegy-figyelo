@@ -98,13 +98,22 @@ internal suspend fun testKey(p: KeyProvider, key: String, currency: String): Str
     when (p) {
         KeyProvider.SERPAPI -> {
             // A fiókadatok lekérése ingyenes, nem fogy tőle a keret
-            val res = Http.request(
-                "https://serpapi.com/account.json?api_key=" + URLEncoder.encode(key, "UTF-8"),
-                headers = mapOf("Accept" to "application/json"), timeoutMs = 20_000,
-            )
+            val res = try {
+                Http.request(
+                    "https://serpapi.com/account.json?api_key=" + URLEncoder.encode(key, "UTF-8"),
+                    headers = mapOf("Accept" to "application/json"), timeoutMs = 20_000,
+                )
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                throw IOException("Most nem sikerült kipróbálni – nézd meg az internetet, és próbáld újra.")
+            }
             val json = runCatching { JSONObject(res.body) }.getOrNull()
-            if (res.code == 401 || json?.has("error") == true || res.code !in 200..299) {
+            // Csak a valóban elutasított kulcs „rossz”; szerverhiba (5xx, 429) esetén újrapróbálást kérünk
+            if (res.code == 401 || res.code == 403 || json?.has("error") == true) {
                 throw IOException("Ez a kulcs nem jó – ellenőrizd, hogy az egészet kimásoltad-e (szóköz nélkül).")
+            }
+            if (res.code !in 200..299) {
+                throw IOException("A SerpApi most nem válaszol rendesen (${res.code}). Próbáld újra pár perc múlva.")
             }
             val left = json?.optInt("total_searches_left", -1)?.takeIf { it >= 0 }
                 ?: json?.optInt("plan_searches_left", -1)?.takeIf { it >= 0 }
@@ -122,7 +131,8 @@ internal suspend fun testKey(p: KeyProvider, key: String, currency: String): Str
             } catch (e: FatalSourceException) {
                 throw IOException("Ez a kulcs nem jó – ellenőrizd, hogy az egészet kimásoltad-e (szóköz nélkül).")
             } catch (e: Exception) {
-                throw IOException("Most nem sikerült kipróbálni (${e.message?.take(80)}). Nézd meg az internetet, és próbáld újra.")
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                throw IOException("Most nem sikerült kipróbálni – nézd meg az internetet, és próbáld újra.")
             }
             "Működik! Az Ignav mostantól a többi forrással együtt keres."
         }
@@ -137,8 +147,8 @@ internal suspend fun testKey(p: KeyProvider, key: String, currency: String): Str
 fun KeyGuideDialog(provider: KeyProvider, onClose: () -> Unit, onSaved: (String) -> Unit = {}) {
     val steps = remember(provider) { stepsFor(provider) }
     val total = steps.size + 1
-    var step by remember { mutableStateOf(0) }
-    var key by remember { mutableStateOf("") }
+    var step by androidx.compose.runtime.saveable.rememberSaveable(provider) { mutableStateOf(0) }
+    var key by androidx.compose.runtime.saveable.rememberSaveable(provider) { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var success by remember { mutableStateOf<String?>(null) }

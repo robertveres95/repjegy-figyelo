@@ -226,7 +226,7 @@ internal fun DiscoverScreen(
                     Modifier
                         .fillMaxWidth()
                         .border(0.6.dp, Neon.Line, RoundedCornerShape(14.dp))
-                        .clickable { onPick(Discover.templateFor(r, adults, from?.city)) }
+                        .clickable { onPick(Discover.templateFor(r, adults, Airports.placeFor(r.fromCode, null).city)) }
                         .padding(14.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {

@@ -27,13 +27,17 @@ object GoogleFlights {
 
     private class Fetched(val offers: List<Offer>, val seen: Int, val errorStatus: Boolean)
 
-    fun search(w: Watch, currency: String, allowFallback: Boolean = true): List<Offer> {
+    /**
+     * [storeInsight]: az útvonal árelőzményét csak a figyelés „fő” keresésénél tesszük félre (a rugalmas
+     * dátumok és a repterenkénti tartalék kérései nem kellenek, és csak foglalnák a tárolót).
+     */
+    fun search(w: Watch, currency: String, allowFallback: Boolean = true, storeInsight: Boolean = false): List<Offer> {
         // Élő próbák: a Google néha hibajelzést („errorHasStatus”) ad, főleg több repteres
         // oda-vissza keresésre. Ilyenkor egyszer újrapróbáljuk, majd repterenként kérdezünk.
-        val first = fetch(w, currency)
+        val first = fetch(w, currency, storeInsight)
         if (!first.errorStatus) return first.offers
         Thread.sleep(1500)
-        val again = fetch(w, currency)
+        val again = fetch(w, currency, storeInsight)
         if (!again.errorStatus) return again.offers
         val pairs = pairsOf(w)
         if (pairs.size > 1 && allowFallback) {
@@ -89,7 +93,7 @@ object GoogleFlights {
         return null
     }
 
-    private fun fetch(w: Watch, currency: String): Fetched {
+    private fun fetch(w: Watch, currency: String, storeInsight: Boolean = false): Fetched {
         // Az EU-s beleegyezési oldal átugrása
         Http.setCookie("www.google.com", ".google.com", "SOCS", "CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg")
         Http.setCookie("www.google.com", ".google.com", "CONSENT", "YES+")
@@ -113,8 +117,10 @@ object GoogleFlights {
         }
         val payload = JSONArray(data)
         // Az útvonal árelőzménye (ha a Google ad hozzá): a keresés címével tároljuk, az ellenőrző innen veszi
-        if (insights.size > 50) insights.clear()
-        runCatching { findInsight(payload) }.getOrNull()?.let { insights[url] = it }
+        if (storeInsight) {
+            if (insights.size > 30) insights.clear() // el nem vitt régiek (pl. közben törölt figyelés)
+            runCatching { findInsight(payload) }.getOrNull()?.let { insights[url] = it }
+        }
 
         val offers = mutableListOf<Offer>()
         var seen = 0

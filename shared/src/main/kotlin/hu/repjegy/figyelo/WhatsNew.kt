@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -23,7 +24,7 @@ object WhatsNew {
     val notes: List<Pair<String, List<String>>> = listOf(
         "1.3.3" to listOf(
             "Windowson a frissítés egy kattintás: a REFI maga tölti le és telepíti az új verziót.",
-            "Beállítható, hogy a REFI elinduljon-e a Windowszal.",
+            "Beállítható, hogy a REFI elinduljon-e a Windows-zal.",
             "Még megbízhatóbb szinkronizálás, ha több eszközön is használod.",
             "Pontosabb Wizz Air-keresés és apró javítások.",
         ),
@@ -83,6 +84,7 @@ internal fun WhatsNewOverlay(items: List<Pair<String, List<String>>>, onClose: (
             .fillMaxSize()
             .blockInput()
             .background(Neon.Black.copy(alpha = 0.96f))
+            .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing)
             .padding(24.dp),
     ) {
         NeonCard(modifier = Modifier.fillMaxWidth().enterAnimation()) {

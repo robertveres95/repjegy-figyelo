@@ -79,6 +79,8 @@ object Sync {
         Store.prefs.edit {
             putBoolean("syncOn", false)
             putString("syncAccount", "")
+            // Másik fióknál a „régen szinkronizált” szabály ne törölhessen helyi figyelést
+            putLong("syncLast", 0L)
         }
         runCatching { Platform.current.googleSignOut() }
         state.value = State()
@@ -103,8 +105,9 @@ object Sync {
             if (!state.value.enabled) return@withLock false
             state.update { it.copy(running = true) }
             try {
-                syncOnce()
+                // A kezdés ideje számít: ami ezután készült, az még nem biztos, hogy felkerült
                 val now = System.currentTimeMillis()
+                syncOnce()
                 Store.prefs.edit { putLong("syncLast", now) }
                 state.update { it.copy(lastSync = now, error = null) }
                 true
@@ -180,22 +183,21 @@ object Sync {
         // nála meglévő, azóta nem módosított figyelések máshol már törölve lettek: ezeket nem hozzuk vissza
         val last = state.value.lastSync
         val dropBefore = if (remote != null && last != null && System.currentTimeMillis() - last > 100L * 24 * 3_600_000L) last else null
-        val merged = Store.mergeFromSync(remoteWatches.orEmpty(), remote?.tombstones.orEmpty(), dropBefore)
-        // Ha egy-egy figyelés nem volt beolvasható, a feltöltés kihagyná őket: inkább nem töltünk fel
+        // Ha egy-egy figyelés nem volt beolvasható, se összefésülés, se feltöltés (különben elveszhetne)
         if (remote != null && remote.skipped > 0) {
             throw IOException("${remote.skipped} figyelés a felhőben nem olvasható – frissítsd a REFI-t a legújabb verzióra")
         }
+        val merged = Store.mergeFromSync(remoteWatches.orEmpty(), remote?.tombstones.orEmpty(), dropBefore, expectedCurrency = currency)
 
         // A kulcsok: a később módosított változat nyer (új eszközön a felhőben lévő)
-        val localKeys = Store.keys()
-        val keys = remote?.keys?.takeIf { it.editedAt > localKeys.editedAt }?.also { Store.applySyncedKeys(it) } ?: localKeys
+        val keys = Store.adoptSyncedKeys(remote?.keys)
 
         // 3. Feltöltés (csak ha változott a felhőben lévőhöz képest)
         val body = serialize(merged.first, merged.second, currency, keys)
         if (remote != null && remote.currency == currency &&
             remote.watches.associateBy { it.id } == merged.first.associateBy { it.id } &&
             remote.tombstones == merged.second &&
-            (remote.keys ?: Store.SyncedKeys("", false, "", false, 0L)).editedAt >= keys.editedAt
+            (remote.keys == keys || (remote.keys == null && keys.editedAt == 0L))
         ) return
         val res = if (fileId == null) {
             val boundary = "refi" + System.nanoTime()
@@ -258,8 +260,9 @@ object Sync {
             // A kulcsos források (SerpApi, Ignav) kulcsai: csak a saját, rejtett Drive-területen
             .apply {
                 if (keys != null && keys.editedAt > 0) put("keys", JSONObject()
-                    .put("serpKey", keys.serpKey).put("serpOn", keys.serpOn)
-                    .put("ignavKey", keys.ignavKey).put("ignavOn", keys.ignavOn)
+                    .put("serpKey", keys.serpKey).put("serpOn", keys.serpOn).put("serpEditedAt", keys.serpEditedAt)
+                    .put("ignavKey", keys.ignavKey).put("ignavOn", keys.ignavOn).put("ignavEditedAt", keys.ignavEditedAt)
+                    // a korábbi (1.3.2-es) appok ezt az egy időbélyeget nézik
                     .put("editedAt", keys.editedAt))
             }
             .toString()
@@ -277,10 +280,10 @@ object Sync {
         val tomb = t?.keys()?.asSequence()?.associateWith { t.optLong(it, 0L) }.orEmpty()
         val cur = json.optString("currency", "HUF").takeIf { c -> CURRENCIES.any { it.first == c } } ?: "HUF"
         val k = json.optJSONObject("keys")?.let {
+            val legacy = it.optLong("editedAt", 0L)
             Store.SyncedKeys(
-                it.optString("serpKey", "").take(200), it.optBoolean("serpOn", false),
-                it.optString("ignavKey", "").take(200), it.optBoolean("ignavOn", false),
-                it.optLong("editedAt", 0L),
+                it.optString("serpKey", "").take(200), it.optBoolean("serpOn", false), it.optLong("serpEditedAt", legacy),
+                it.optString("ignavKey", "").take(200), it.optBoolean("ignavOn", false), it.optLong("ignavEditedAt", legacy),
             )
         }
         return Snapshot(list, tomb, cur, skipped = arr.length() - list.size, keys = k)

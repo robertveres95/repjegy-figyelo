@@ -28,7 +28,13 @@ object PriceChecker {
             .forEach { w ->
                 attempts[w.id] = System.currentTimeMillis()
                 saveAttempts(attempts)
-                checkOne(w.id)
+                // Egy figyelés váratlan hibája ne vigye el a többit
+                try {
+                    checkOne(w.id)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                }
             }
     }
 
@@ -74,6 +80,8 @@ object PriceChecker {
             if (Store.checking.compareAndSet(cur, cur + id)) break
         }
         try {
+            // A kulcsos források és az árelőzmény a rugalmas tartomány első érvényes (nem múltbeli) napjára
+            val single = watch.datePairs().first().let { (o, r) -> watch.copy(outboundDate = o, returnDate = r, flexDays = 0) }
             val runs = buildList {
                 // Rugalmas dátumnál a kulcs nélküli források minden dátumpárt lekérdeznek
                 // (a kulcsos SerpApi/Ignav csak a pontos dátumot – azok keretét ne égessük el)
@@ -82,7 +90,12 @@ object PriceChecker {
                 val flex = watch.flexDays > 0
                 val pairsCap = if (flex) MAX_PAIRS_FLEX else MAX_PAIRS
                 if (settings.googleOn) add(SourceRun(GoogleFlights.NAME) {
-                    flexSearch(watch) { GoogleFlights.search(it, currency, allowFallback = !flex) }
+                    flexSearch(watch) {
+                        GoogleFlights.search(
+                            it, currency, allowFallback = !flex,
+                            storeInsight = it.outboundDate == single.outboundDate && it.returnDate == single.returnDate,
+                        )
+                    }
                 })
                 if (settings.ryanairOn) add(SourceRun(Ryanair.NAME) {
                     airlineAllowed(watch, "Ryanair")
@@ -92,9 +105,7 @@ object PriceChecker {
                     airlineAllowed(watch, "Wizz Air")
                     flexSearch(watch) { WizzAir.search(it, currency, pairsCap) }
                 })
-                // A kulcsos források csak egy dátumot kérdeznek: a rugalmas tartomány első
-                // érvényes (nem múltbeli) napját – így a keretük nem fogy el
-                val single = watch.datePairs().first().let { (o, r) -> watch.copy(outboundDate = o, returnDate = r, flexDays = 0) }
+                // A kulcsos források csak egy dátumot kérdeznek (a keretük így nem fogy el)
                 if (settings.useSerpApi) add(SourceRun(SerpApi.NAME) { SerpApi.search(single, settings.apiKey, currency) })
                 if (settings.useIgnav) add(SourceRun(Ignav.NAME) { Ignav.search(single, settings.ignavKey, currency) })
             }
@@ -123,7 +134,10 @@ object PriceChecker {
                 )
             }
             // A Google árelőzménye a pontos (rugalmasság nélküli) keresésre, ha most jött
-            val market = runCatching { GoogleFlights.takeInsight(watch, currency) }.getOrNull()
+            val market = runCatching { GoogleFlights.takeInsight(single, currency) }.getOrNull()
+            // Ha a rendszer letiltotta az értesítéseket, nem jegyezzük fel, hogy „szóltunk” – különben
+            // visszakapcsolás után erről az árról már sosem kapna értesítést
+            val notificationsBlocked = runCatching { Platform.current.notificationsBlocked() }.getOrDefault(false)
             val allOffers = outcomes.flatMap { (_, r) ->
                 r.getOrNull() ?: (r.exceptionOrNull() as? PartialSourceException)?.offers.orEmpty()
             }
@@ -163,8 +177,10 @@ object PriceChecker {
                 val comparable = cur.comparable(best)
                 // Ha nem minden forrás válaszolt, és a talált ár drágább a korábbinál, lehet, hogy épp a
                 // hiányzó forrás tudta az olcsóbbat: ilyenkor nem kerül hamis „drágulás” az árgörbére
-                val trusted = allAnswered || cur.lastPrice == null || best.price <= cur.lastPrice
-                val shouldNotify = comparable && cur.notify && best.price <= cur.targetPrice &&
+                // (a viszonyítás az utolsó megbízható pont az árgörbén, nem a – akár hiányos – legutóbbi ár)
+                val ref = cur.history.lastOrNull()?.price
+                val trusted = allAnswered || ref == null || best.price <= ref
+                val shouldNotify = comparable && cur.notify && !notificationsBlocked && best.price <= cur.targetPrice &&
                     (cur.lastNotifiedPrice == null || best.price.toLong() * 100 <= cur.lastNotifiedPrice.toLong() * 98)
                 val next = cur.copy(
                     lastPrice = best.price,

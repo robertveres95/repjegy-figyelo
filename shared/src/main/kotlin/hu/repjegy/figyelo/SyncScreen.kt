@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.Button
@@ -97,6 +98,7 @@ internal fun LoginGate(onSkip: () -> Unit = {}) {
             .fillMaxSize()
             .blockInput()
             .background(Neon.Black)
+            .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing)
             .padding(24.dp),
     ) {
         NeonCard(modifier = androidx.compose.ui.Modifier.fillMaxWidth().enterAnimation()) {

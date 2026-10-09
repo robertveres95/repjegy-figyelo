@@ -60,6 +60,8 @@ object DesktopPrefs : Prefs {
     @Synchronized
     private fun p(): Properties {
         if (!loaded) {
+            val bak = File(file.parentFile, file.name + ".bak")
+            if (!file.exists() && bak.exists()) runCatching { Files.copy(bak.toPath(), file.toPath()) }
             if (file.exists()) {
                 var ok = false
                 for (attempt in 1..5) {
@@ -96,16 +98,22 @@ object DesktopPrefs : Prefs {
             override fun putInt(key: String, value: Int) { props.setProperty(key, value.toString()) }
             override fun putLong(key: String, value: Long) { props.setProperty(key, value.toString()) }
         }.block()
-        if (readOnly) return
+        if (readOnly && !recover(props)) return
         // Előbb ideiglenes fájlba, aztán csere: áramszünetnél se sérüljön.
         // Ha a mappa nem írható (pl. teli lemez), az app ne omoljon össze: a változás
         // a memóriában megmarad, és a következő sikeres mentéskor kiíródik.
         val tmp = File(file.parentFile, file.name + ".tmp")
         try {
-            tmp.writer(Charsets.UTF_8).use { props.store(it, "REFI") }
+            java.io.FileOutputStream(tmp).use { out ->
+                out.writer(Charsets.UTF_8).let { w -> props.store(w, "REFI"); w.flush() }
+                // A lemezre kerülés kivárása: így áramszünetnél sem marad üres/csonka fájl
+                out.fd.sync()
+            }
         } catch (_: Exception) {
             return
         }
+        // Az előző jó állapot megmarad tartaléknak
+        if (file.exists()) runCatching { Files.copy(file.toPath(), File(file.parentFile, file.name + ".bak").toPath(), StandardCopyOption.REPLACE_EXISTING) }
         // Windowson a renameTo nem ír felül létező fájlt, ezért Files.move kell
         val src = tmp.toPath()
         val dst = file.toPath()
@@ -114,6 +122,21 @@ object DesktopPrefs : Prefs {
         } catch (_: Exception) {
             runCatching { Files.move(src, dst, StandardCopyOption.REPLACE_EXISTING) }
         }
+    }
+
+    /**
+     * Ha induláskor nem tudtuk beolvasni a fájlt, mentéskor újra megpróbáljuk: sikerülés esetén a
+     * fájl tartalmára rátesszük az azóta a memóriában történt változásokat, és újra írhatunk.
+     */
+    private fun recover(mem: Properties): Boolean {
+        val fresh = Properties()
+        val ok = runCatching { file.reader(Charsets.UTF_8).use { fresh.load(it) } }.isSuccess
+        if (!ok) return false
+        fresh.putAll(mem)
+        mem.clear()
+        mem.putAll(fresh)
+        readOnly = false
+        return true
     }
 
     /** Az app adatmappája (%APPDATA%\REFI). */
@@ -258,7 +281,7 @@ object Autostart {
         if (!System.getProperty("os.name", "").startsWith("Windows")) return
         runCatching {
             ProcessBuilder(
-                "reg", "add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                sys32("reg.exe"), "add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
                 // A reg.exe-nek az idézőjeleket \"-ként kell átadni, különben szóközös útvonalnál
                 // (pl. C:\Users\Kiss Anna\...) elvesznek, és az automatikus indítás nem működik
                 "/v", "REFI", "/t", "REG_SZ", "/d", "\\\"$exe\\\" --tray", "/f",
@@ -270,13 +293,20 @@ object Autostart {
     fun disable() {
         if (!System.getProperty("os.name", "").startsWith("Windows")) return
         runCatching {
-            ProcessBuilder("reg", "delete", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "REFI", "/f")
+            ProcessBuilder(sys32("reg.exe"), "delete", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "REFI", "/f")
                 .redirectErrorStream(true).start().waitFor()
         }
     }
 }
 
 // ---------------------------------------------------------------- Platform
+
+/** A Windows saját programjai teljes útvonallal (ne egy, a munkamappában lévő azonos nevű fájl fusson). */
+internal fun sys32(exe: String): String {
+    val root = System.getenv("SystemRoot")?.takeIf { it.isNotBlank() } ?: "C:\\Windows"
+    val f = File(root, "System32\\$exe")
+    return if (f.exists()) f.path else exe
+}
 
 object DesktopPlatform : PlatformApi {
     private val versionProps: Properties by lazy {
@@ -333,10 +363,12 @@ object DesktopPlatform : PlatformApi {
         }
         if (msi.length() < 1_000_000 || (total > 0 && msi.length() != total)) return false
         progress(1f)
-        ProcessBuilder("msiexec", "/i", msi.absolutePath, "/passive", "/norestart").start()
+        // Napló a telepítésről (ha valami félremenne, ebből kiderül)
+        val log = File(dir, "telepites.log")
+        ProcessBuilder(sys32("msiexec.exe"), "/i", msi.absolutePath, "/passive", "/norestart", "/l*v", log.absolutePath).start()
         // A telepítő csak a kilépésünk után cserélheti a fájlokat
         Thread {
-            Thread.sleep(1500)
+            Thread.sleep(800)
             kotlin.system.exitProcess(0)
         }.start()
         return true
@@ -371,7 +403,7 @@ object DesktopPlatform : PlatformApi {
                 Desktop.getDesktop().browse(uri); true
             } else false
         }.getOrDefault(false)
-        if (!ok) runCatching { ProcessBuilder("rundll32", "url.dll,FileProtocolHandler", uri.toASCIIString()).start() }
+        if (!ok) runCatching { ProcessBuilder(sys32("rundll32.exe"), "url.dll,FileProtocolHandler", uri.toASCIIString()).start() }
     }
 
     override fun openAsset(name: String): InputStream =

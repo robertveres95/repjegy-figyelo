@@ -86,23 +86,12 @@ object GoogleAuthAndroid {
     }
 
     /**
-     * Kijelentkezés: a hozzáférés visszavonása a Google-nél (különben a következő bejelentkezés
-     * fiókválasztó nélkül ugyanazt a fiókot adná vissza), majd a token törlése.
+     * Kijelentkezés ezen a telefonon: a token törlése. A hozzáférést szándékosan nem vonjuk vissza a
+     * Google-nél, mert az a REFI többi eszközén (számítógép, Chrome-bővítmény) is kijelentkeztetne.
      */
     suspend fun signOut(context: Context) {
         val t = runCatching { token(context, interactive = false) }.getOrNull()
-        if (t != null) {
-            withContext(Dispatchers.IO) {
-                runCatching {
-                    Http.request(
-                    "https://oauth2.googleapis.com/revoke", method = "POST",
-                    headers = mapOf("Content-Type" to "application/x-www-form-urlencoded"),
-                        body = "token=" + java.net.URLEncoder.encode(t, "UTF-8"), timeoutMs = 20_000,
-                    )
-                }
-                runCatching { GoogleAuthUtil.clearToken(context, t) }
-            }
-        }
+        if (t != null) withContext(Dispatchers.IO) { runCatching { GoogleAuthUtil.clearToken(context, t) } }
         invalidate(context)
     }
 

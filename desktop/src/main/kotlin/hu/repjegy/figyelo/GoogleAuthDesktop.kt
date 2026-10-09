@@ -54,20 +54,14 @@ object GoogleAuthDesktop {
         expiresAt = 0
     }
 
+    /**
+     * Kijelentkezés ezen a gépen: a frissítő kulcs törlése. A Google-nél szándékosan nem vonjuk vissza
+     * a hozzáférést, mert az a REFI többi eszközén (telefon, Chrome-bővítmény) is kijelentkeztetne.
+     * (A fiókválasztót a következő bejelentkezés úgyis megmutatja.)
+     */
     fun signOut() {
-        val refresh = DesktopPrefs.getString("googleRefresh", null)
         invalidate()
         DesktopPrefs.edit { putString("googleRefresh", "") }
-        // A hozzáférés visszavonása a Google-nél is (ha nem sikerül, a fiókbeállításokban visszavonható)
-        if (!refresh.isNullOrBlank()) {
-            runCatching {
-                Http.request(
-                    "https://oauth2.googleapis.com/revoke", method = "POST",
-                    headers = mapOf("Content-Type" to "application/x-www-form-urlencoded"),
-                    body = "token=" + URLEncoder.encode(refresh, "UTF-8"), timeoutMs = 15_000,
-                )
-            }
-        }
     }
 
     private fun refreshAccess(refresh: String): String? {
@@ -79,8 +73,11 @@ object GoogleAuthDesktop {
                 timeoutMs = 20_000,
             )
         }.getOrNull() ?: return null
-        if (res.code == 400 || res.code == 401) {
-            // Visszavont vagy lejárt frissítő kulcs: újra be kell jelentkezni
+        val revoked = res.code == 401 ||
+            (res.code == 400 && runCatching { JSONObject(res.body).optString("error") }.getOrNull() == "invalid_grant")
+        if (revoked) {
+            // Visszavont vagy lejárt frissítő kulcs: újra be kell jelentkezni (más 400-as hibánál – pl. egy
+            // proxy miatt – megtartjuk, és később újrapróbáljuk)
             DesktopPrefs.edit { putString("googleRefresh", "") }
             return null
         }

@@ -80,7 +80,7 @@ internal object Tips {
                 "Ha túl alacsony a célár, lehet, hogy sosem szól a REFI.",
         ))
         add(Tip(
-            "weekday", "Hétköznap gyakran olcsóbb",
+            "weekday", "Nem mindegy, melyik nap indulsz",
             "Kedden, szerdán vagy szombaton indulni sokszor olcsóbb, mint pénteken vagy vasárnap, amikor a " +
                 "legtöbben utaznak. Ha teheted, próbálj ki több napot (vagy használd a rugalmasságot).",
         ))
@@ -94,6 +94,18 @@ internal object Tips {
     private fun hidden(): Set<String> =
         Store.prefs.getString(HIDDEN, "")?.split(',')?.filter { it.isNotBlank() }?.toSet().orEmpty()
 
+    private const val ALL_OFF = "tipsAllOff"
+
+    /** Az összes tipp kikapcsolása (a beállítás-képernyőről vagy a buborékból). */
+    var allOff: Boolean
+        get() = Store.prefs.getBoolean(ALL_OFF, false)
+        set(v) { Store.prefs.edit { putBoolean(ALL_OFF, v) } }
+
+    /** A korábban elrejtett tippek újra jöhetnek. */
+    fun showAgain() {
+        Store.prefs.edit { putString(HIDDEN, "") }
+    }
+
     fun hide(id: String) {
         Store.prefs.edit { putString(HIDDEN, (hidden() + id).joinToString(",")) }
     }
@@ -103,6 +115,7 @@ internal object Tips {
      * minden második alkalommal a kulcsos tipp jön, mert az segít a legtöbbet.
      */
     fun next(s: Settings = Store.settings.value): Tip? {
+        if (allOff) return null
         val list = all(s).filter { it.id !in hidden() }
         if (list.isEmpty()) return null
         val n = Store.prefs.getInt(COUNTER, 0)
@@ -157,7 +170,12 @@ internal fun TipBubble(onOpenGuide: (KeyProvider) -> Unit) {
                     Text("Következő tipp")
                 }
                 TextButton(onClick = { Tips.hide(t.id); visible = false }) {
-                    Text("Ne mutasd többé", color = Neon.TextDim)
+                    Text("Ezt a tippet ne mutasd", color = Neon.TextDim)
+                }
+            }
+            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                TextButton(onClick = { Tips.allOff = true; visible = false }) {
+                    Text("Egyik tippet se mutasd", color = Neon.TextDim)
                 }
             }
         }

@@ -22,6 +22,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -187,7 +189,9 @@ private fun colorSchemeFor(p: AppPalette) = if (p.isLight) {
         surfaceVariant = p.surfaceHigh, onSurfaceVariant = p.textDim,
         surfaceContainer = p.surface, surfaceContainerLow = p.surface, surfaceContainerLowest = p.surface,
         surfaceContainerHigh = p.surfaceHigh, surfaceContainerHighest = p.surfaceHigh,
-        outline = p.line, outlineVariant = p.line,
+        // A keretek (kapcsoló „ki” állása, beviteli mezők) jól látszódjanak: legalább 3:1 kontraszt
+        outline = androidx.compose.ui.graphics.lerp(p.line, p.textDim, 0.65f), outlineVariant = p.line,
+        secondaryContainer = p.surfaceHigh, onSecondaryContainer = p.accent,
         error = p.error, onError = Color.White,
     )
 } else {
@@ -201,7 +205,9 @@ private fun colorSchemeFor(p: AppPalette) = if (p.isLight) {
         surfaceVariant = p.surfaceHigh, onSurfaceVariant = p.textDim,
         surfaceContainer = p.surface, surfaceContainerLow = p.surface, surfaceContainerLowest = p.background,
         surfaceContainerHigh = p.surfaceHigh, surfaceContainerHighest = p.surfaceHigh,
-        outline = p.line, outlineVariant = p.line,
+        // A keretek (kapcsoló „ki” állása, beviteli mezők) jól látszódjanak: legalább 3:1 kontraszt
+        outline = androidx.compose.ui.graphics.lerp(p.line, p.textDim, 0.65f), outlineVariant = p.line,
+        secondaryContainer = p.surfaceHigh, onSecondaryContainer = p.accent,
         error = p.error, onError = p.background,
     )
 }
@@ -378,11 +384,19 @@ fun BellToggle(on: Boolean, onToggle: () -> Unit) {
 
     Row(
         Modifier
+            // Elég nagy érintési felület (48 dp), és a képernyőolvasónak kapcsolóként jelenik meg
+            .minimumInteractiveComponentSize()
             .scale(scale)
             .clip(shape)
             .border(1.dp, borderColor, shape)
             .background(if (on) Neon.Green.copy(alpha = 0.12f) else Color.Transparent)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onToggle() }
+            .toggleable(
+                value = on,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = androidx.compose.ui.semantics.Role.Switch,
+                onValueChange = { onToggle() },
+            )
             .padding(horizontal = 10.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

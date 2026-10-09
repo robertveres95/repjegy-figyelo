@@ -70,7 +70,7 @@ internal fun PriceChart(w: Watch, currency: String, modifier: Modifier = Modifie
     val measurer = rememberTextMeasurer()
     val ownColor = Neon.Green
     val marketColor = Neon.TextDim
-    val targetColor = Neon.Pink.copy(alpha = 0.75f)
+    val targetColor = Neon.Pink
     val labelColor = Neon.TextDim
     val textColor = Neon.Text
     val draw = remember(data.all.size) { Animatable(0f) }
@@ -78,6 +78,7 @@ internal fun PriceChart(w: Watch, currency: String, modifier: Modifier = Modifie
 
     Column(modifier) {
         Canvas(Modifier.fillMaxWidth().height(150.dp)) {
+            if (size.width < 40f || size.height < 40f) return@Canvas // első elrendezés / animáció közben
             val small = TextStyle(fontSize = 11.sp, color = labelColor)
             val strong = TextStyle(fontSize = 11.sp, color = textColor)
             val bottomBand = 18.dp.toPx()          // dátumok helye alul
@@ -155,7 +156,7 @@ internal fun PriceChart(w: Watch, currency: String, modifier: Modifier = Modifie
                 val text = dayText(b)
                 if (text != dayText(t0) && text != dayText(pts.last().time)) {
                     val layout = measurer.measure(text, small)
-                    val left = (x(b) - layout.size.width / 2f).coerceIn(0f, size.width - layout.size.width)
+                    val left = (x(b) - layout.size.width / 2f).coerceIn(0f, maxOf(0f, size.width - layout.size.width))
                     val right = left + layout.size.width
                     val gap = 6.dp.toPx()
                     if (placed.none { (l, r) -> left < r + gap && right > l - gap }) {
@@ -200,7 +201,8 @@ private fun DrawScope.label(
 ) {
     val layout = measurer.measure(text, style)
     val gap = 4.dp.toPx()
-    val left = (if (centered) at.x - layout.size.width / 2f else at.x).coerceIn(0f, size.width - layout.size.width)
-    val top = (if (above) at.y - gap - layout.size.height else at.y + gap).coerceIn(0f, size.height - layout.size.height)
+    // (a felirat szélesebb is lehet a rajzterületnél – nagy betűméret, keskeny ablak –, ilyenkor 0-tól indul)
+    val left = (if (centered) at.x - layout.size.width / 2f else at.x).coerceIn(0f, maxOf(0f, size.width - layout.size.width))
+    val top = (if (above) at.y - gap - layout.size.height else at.y + gap).coerceIn(0f, maxOf(0f, size.height - layout.size.height))
     drawText(layout, topLeft = Offset(left, top))
 }

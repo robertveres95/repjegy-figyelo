@@ -20,7 +20,14 @@ class FatalSourceException(message: String) : IOException(message)
  * az ajánlatok használhatók, de a forrás nem „válaszolt teljesen” – így egy hiányzó (lehet, hogy
  * épp a legolcsóbb) ár miatt nem töröljük a korábbit, és nem szólunk újra ugyanarról az árról.
  */
-class PartialSourceException(val offers: List<Offer>, val failed: Int, val total: Int, cause: Exception?) :
+class PartialSourceException(
+    val offers: List<Offer>,
+    val failed: Int,
+    val total: Int,
+    cause: Exception?,
+    /** Letiltás miatt maradt félbe: a külső ciklus (pl. rugalmas dátumok) se próbálkozzon tovább. */
+    val fatal: Boolean = false,
+) :
     IOException("részleges válasz: $failed/$total kérés hibázott" + (cause?.message?.let { " ($it)" } ?: "").take(120), cause)
 
 /** Több kérés (reptérpár vagy dátum) eredményének összegzése: hiba, részleges vagy teljes. */
@@ -39,12 +46,13 @@ internal inline fun <K> collectOffers(keys: List<K>, betweenEach: () -> Unit = {
             ok++
             failed++
             if (firstError == null) firstError = e
+            if (e.fatal) throw PartialSourceException(results, failed + keys.size - index - 1, keys.size, e, fatal = true)
         } catch (e: SkipSourceException) {
             throw e
         } catch (e: FatalSourceException) {
             // Letiltásnál a többit nem próbáljuk; ha volt már találat, az részleges eredmény
             if (ok == 0) throw e
-            throw PartialSourceException(results, failed + keys.size - index, keys.size, e)
+            throw PartialSourceException(results, failed + keys.size - index, keys.size, e, fatal = true)
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             failed++

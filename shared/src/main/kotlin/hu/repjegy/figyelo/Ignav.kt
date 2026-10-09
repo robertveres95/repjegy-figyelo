@@ -109,7 +109,9 @@ object Ignav {
                 returnArrival = segmentTime(inSegs?.let { it.optJSONObject(it.length() - 1) }, "arriv"),
                 returnStops = inSegs?.let { it.length() - 1 },
                 url = url,
-                bagsIncluded = true,
+                // Az Ignav csak „legalább 1” kézi/feladott poggyászra szűr: több poggyásznál vagy több
+                // utasnál feladott poggyásszal az ára nem összevethető a többiével (nem riaszt tévesen)
+                bagsIncluded = !(w.bags > 1 || (w.checkedBag && w.seatedPassengers > 1)),
             )
         }
         return offers

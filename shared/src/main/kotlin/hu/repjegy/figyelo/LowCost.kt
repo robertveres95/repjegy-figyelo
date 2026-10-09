@@ -219,6 +219,8 @@ object WizzAir {
                 throw IOException("a Wizz Air elutasította a kérést (${codes.joinToString().ifEmpty { "ismeretlen ok" }.take(80)})")
             }
             if (retry) return searchPair(w, origin, destination, currency, retry = false)
+            // 401/403 = letiltás (a többi párt sem érdemes kérdezni); egy furcsa 400 csak ennél a párnál hiba
+            if (res.code == 400) throw IOException("a Wizz Air elutasította a kérést (HTTP 400)")
             throw FatalSourceException("a Wizz Air elutasította a kérést (HTTP ${res.code})")
         }
         if (res.code !in 200..299) throw IOException("HTTP ${res.code}")
@@ -271,6 +273,7 @@ object WizzAir {
     internal fun cheapest(flights: JSONArray?, date: String, depFrom: Int?, depTo: Int?): DayFare? {
         flights ?: return null
         var best: DayFare? = null
+        var unknownTime = false
         for (i in 0 until flights.length()) {
             val f = flights.optJSONObject(i) ?: continue
             if (!f.optString("departureDate").startsWith(date)) continue
@@ -286,7 +289,11 @@ object WizzAir {
             }
             if (depFrom != null || depTo != null) {
                 val minutes = time?.let { t -> runCatching { java.time.LocalDateTime.parse(t) }.getOrNull() }
-                    ?.let { it.hour * 60 + it.minute } ?: continue
+                    ?.let { it.hour * 60 + it.minute }
+                if (minutes == null) {
+                    unknownTime = true
+                    continue
+                }
                 if (depFrom != null && minutes < depFrom * 60) continue
                 if (depTo != null && minutes > depTo * 60) continue
             }
@@ -298,6 +305,8 @@ object WizzAir {
                 )
             }
         }
+        // Időablaknál ismeretlen indulási idő: ez nem „nincs járat”, hanem hiányzó adat
+        if (best == null && unknownTime) throw IOException("a Wizz Air nem adta meg az indulás idejét")
         return best
     }
 }

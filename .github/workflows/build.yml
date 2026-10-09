@@ -15,8 +15,9 @@ on:
         type: boolean
         default: false
 
+# Alapból csak olvasás; írni (kiadást készíteni) csak a legvégső „release” lépés tud
 permissions:
-  contents: write
+  contents: read
 
 # Éles kiadások sorban futnak (a „legfrissebb” jelölés ne cserélődhessen fel). A teszt-buildek
 # mindegyike saját csoportot kap, így egy push nem dobhat el várakozó éles kiadást.
@@ -28,12 +29,15 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 40
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
       name: ${{ steps.meta.outputs.name }}
       publish: ${{ steps.meta.outputs.publish }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
@@ -47,13 +51,23 @@ jobs:
       - name: Verzió és kiadás típusa
         id: meta
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           VERSION=$(grep '^VERSION_NAME=' version.properties | cut -d= -f2 | tr -d '[:space:]')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           if [[ "${{ github.ref_type }}" == "tag" || "${{ inputs.publish }}" == "true" ]]; then
             # Éles kiadáshoz kötelező az „Újdonságok” szövege ehhez a verzióhoz (WhatsNew.kt)
-            if ! grep -qF "\"$VERSION\" to listOf(" shared/src/main/kotlin/hu/repjegy/figyelo/WhatsNew.kt; then
-              echo "::error::Hiányzik a(z) $VERSION verzió újdonság-szövege a WhatsNew.kt-ból"
+            # …és a lista első (legújabb) eleme legyen
+            FIRST=$(grep -oE '^ *"[0-9]+\.[0-9]+\.[0-9]+" to listOf\(' shared/src/main/kotlin/hu/repjegy/figyelo/WhatsNew.kt | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+            if [[ "$FIRST" != "$VERSION" ]]; then
+              echo "::error::A WhatsNew.kt első bejegyzése ($FIRST) nem egyezik a verzióval ($VERSION)"
+              exit 1
+            fi
+            # Az új verzió legyen nagyobb a legutóbbi éles kiadásnál (különben az appok nem ajánlják fel)
+            LAST=$(gh release list --repo "${{ github.repository }}" --exclude-pre-releases --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // ""' | sed -E 's/^v([0-9.]+)-.*/\1/')
+            if [[ -n "$LAST" && "$(printf '%s\n%s\n' "$LAST" "$VERSION" | sort -V | tail -1)" != "$VERSION" || "$LAST" == "$VERSION" ]]; then
+              echo "::error::A verzió ($VERSION) nem nagyobb a legutóbbi kiadásnál ($LAST) – emeld a version.properties-ben"
               exit 1
             fi
             echo "publish=true" >> "$GITHUB_OUTPUT"
@@ -153,26 +167,25 @@ jobs:
           cd ..
           unzip -l REFI-Chrome.zip | tail -1
 
-      - name: Kiadás létrehozása
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+      - name: Fájlok átadása a kiadás-lépésnek
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ steps.meta.outputs.tag }}
-          name: ${{ steps.meta.outputs.name }}
-          body: ${{ steps.meta.outputs.publish == 'true' && 'Töltsd le a REFI.apk fájlt a telefonodra, és telepítsd. A Chrome-bővítmény a REFI-Chrome.zip (telepítése a tároló leírásában).' || 'Teszt-build, csak kipróbálásra. A telepített appok nem ajánlják fel frissítésként.' }}
-          files: |
+          name: android-chrome
+          path: |
             REFI.apk
             REFI-Chrome.zip
-          prerelease: ${{ steps.meta.outputs.publish != 'true' }}
-          # Csak akkor lesz „legfrissebb”, ha a Windows-telepítő is felkerült (lásd lent):
-          # így egyik platform sem kap félkész kiadást
-          make_latest: false
+          if-no-files-found: error
+          retention-days: 7
 
   # Windows-változat: ugyanabba a kiadásba kerül a REFI-Setup.msi
   windows:
     needs: build
-    runs-on: windows-latest
+    runs-on: windows-2025
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
@@ -213,20 +226,38 @@ jobs:
         shell: bash
         run: cp desktop/build/compose/binaries/main/msi/*.msi REFI-Setup.msi
 
-      - name: Feltöltés a kiadáshoz
+      - name: Telepítő átadása a kiadás-lépésnek
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: REFI-Setup.msi
+          if-no-files-found: error
+          retention-days: 7
+
+  # A kiadás csak akkor jön létre, ha MINDEN platform elkészült: így senki nem kap félkész kiadást
+  release:
+    needs: [build, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Kiadás létrehozása
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ needs.build.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           name: ${{ needs.build.outputs.name }}
-          files: REFI-Setup.msi
+          body: ${{ needs.build.outputs.publish == 'true' && 'Töltsd le a REFI.apk fájlt a telefonodra (vagy a REFI-Setup.msi fájlt Windowsra), és telepítsd. A Chrome-bővítmény a REFI-Chrome.zip (telepítése a tároló leírásában).' || 'Teszt-build, csak kipróbálásra. A telepített appok nem ajánlják fel frissítésként.' }}
+          files: |
+            dist/REFI.apk
+            dist/REFI-Chrome.zip
+            dist/REFI-Setup.msi
+          fail_on_unmatched_files: true
           prerelease: ${{ needs.build.outputs.publish != 'true' }}
           make_latest: ${{ needs.build.outputs.publish == 'true' }}
-
-      - name: Kiadás megjelölése legfrissebbként
-        if: needs.build.outputs.publish == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          id=$(gh api "repos/${{ github.repository }}/releases/tags/${{ needs.build.outputs.tag }}" --jq .id)
-          gh api -X PATCH "repos/${{ github.repository }}/releases/$id" -f make_latest=true --jq '.tag_name'

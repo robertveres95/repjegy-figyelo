@@ -118,7 +118,7 @@ class SyncTest {
     }
 
     @Test fun keysTravelInSyncFile() {
-        val k = Store.SyncedKeys("serp-123", true, "ign-456", false, 42L)
+        val k = Store.SyncedKeys("serp-123", true, 42L, "ign-456", false, 7L)
         val back = assertNotNull(Sync.parse(Sync.serialize(listOf(w("a")), emptyMap(), "HUF", k)))
         assertEquals(k, back.keys)
         // Kulcs nélkül (vagy ha sosem volt beállítva) nem kerül a fájlba

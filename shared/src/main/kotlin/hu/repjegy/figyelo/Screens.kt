@@ -42,6 +42,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -131,11 +132,16 @@ private val dateFormat = DateTimeFormatter.ofPattern("yyyy. MMM d., EEE", HU)
 private val typedDateFormat = DateTimeFormatter.ofPattern("yyyy.MM.dd")
 
 /** A legkésőbbi megadható utazási nap (a légitársaságok kb. egy évre előre árulnak). */
-internal fun maxTravelDate(today: LocalDate): LocalDate = today.plusMonths(18)
+internal fun maxTravelDate(today: LocalDate): LocalDate = today.plusMonths(12)
 
 /** Begépelt dátum: 2026.10.16, 2026-10-16, 2026/10/16, 2026.10.16. vagy 2026. 10. 16. */
 internal fun parseTypedDate(raw: String): LocalDate? {
-    val nums = raw.split('.', '-', '/', ' ').filter { it.isNotBlank() }
+    val t = raw.trim()
+    // 20261016 (elválasztó nélkül) is jó
+    if (t.length == 8 && t.all { it.isDigit() }) {
+        return runCatching { LocalDate.of(t.take(4).toInt(), t.substring(4, 6).toInt(), t.takeLast(2).toInt()) }.getOrNull()
+    }
+    val nums = t.split('.', '-', '/', ' ').filter { it.isNotBlank() }
     if (nums.size != 3 || nums[0].length != 4) return null
     return runCatching { LocalDate.of(nums[0].toInt(), nums[1].toInt(), nums[2].toInt()) }.getOrNull()
 }
@@ -147,10 +153,6 @@ fun AppRoot() {
     var screen by remember { mutableStateOf<Screen>(Screen.Home) }
     val update by Updater.available.collectAsState()
     var showSplash by remember { mutableStateOf(AppScope.splashPending) }
-    Platform.current.BackHandler(enabled = screen != Screen.Home) {
-        screen = (screen as? Screen.Edit)?.back ?: Screen.Home
-    }
-
     LaunchedEffect(Unit) { AppScope.scope.launch { Updater.check() } }
     // Szinkronizálás induláskor és minden visszatéréskor (a másik eszköz módosításai)
     val resumes by AppScope.resumeCount.collectAsState()
@@ -160,14 +162,26 @@ fun AppRoot() {
     // indításra tovább lehet lépni – a figyelések addig is használhatók; a következő indításkor újra kéri
     var loginSkipped by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val loginGate = !showSplash && !sync.enabled && !loginSkipped
-    // Ami alatta van, csak akkor reagálhat (pl. megosztott kód), ha semmi sem takarja
-    val uncovered = !showSplash && !loginGate && update == null
+    // A kötelező frissítés csak a főoldalon jön elő: egy félig kitöltött figyelést nem takar le
+    // (a háttérben érkező frissítéskeresés közben épp szerkeszthet)
+    val showUpdate = update != null && !showSplash && screen == Screen.Home
     // Új verzió első megnyitásakor: mi változott (a bejelentkezés után, frissítési kérés nélkül)
-    var whatsNew by remember { mutableStateOf(runCatching { WhatsNew.pending() }.getOrDefault(emptyList())) }
+    val whatsNew = remember { runCatching { WhatsNew.pending() }.getOrDefault(emptyList()) }
+    var whatsNewOpen by remember { mutableStateOf(whatsNew.isNotEmpty()) }
+    val showWhatsNew = whatsNewOpen && !showSplash && !loginGate && !showUpdate
+    // Ami alatta van, csak akkor reagálhat (pl. megosztott kód), ha semmi sem takarja
+    val uncovered = !showSplash && !loginGate && !showUpdate && !showWhatsNew
+
+    // A Vissza gomb a látható képernyőn dolgozzon, ne a letakart alatta lévőn
+    Platform.current.BackHandler(enabled = screen != Screen.Home && uncovered) {
+        screen = (screen as? Screen.Edit)?.back ?: Screen.Home
+    }
 
     Box(Modifier.fillMaxSize().background(Neon.Black)) {
         AnimatedContent(
             targetState = screen,
+            // Letakarva a képernyőolvasó (TalkBack) se érje el az alatta lévő gombokat
+            modifier = if (uncovered) Modifier else Modifier.clearAndSetSemantics { },
             transitionSpec = {
                 val forward = targetState != Screen.Home
                 val dir = if (forward) 1 else -1
@@ -200,15 +214,15 @@ fun AppRoot() {
             LoginGate(onSkip = { loginSkipped = true })
         }
 
-        AnimatedVisibility(visible = uncovered && whatsNew.isNotEmpty(), enter = fadeIn(tween(500)), exit = fadeOut(tween(300))) {
+        AnimatedVisibility(visible = showWhatsNew, enter = fadeIn(tween(500)), exit = fadeOut(tween(300))) {
             WhatsNewOverlay(whatsNew) {
-                WhatsNew.markSeen()
-                whatsNew = emptyList()
+                if (whatsNewOpen) WhatsNew.markSeen()
+                whatsNewOpen = false
             }
         }
 
         // A kötelező frissítés mindennél előrébb való (régi verzióval a bejelentkezés sem biztos, hogy működik)
-        AnimatedVisibility(visible = update != null && !showSplash, enter = fadeIn(tween(400)), exit = fadeOut()) {
+        AnimatedVisibility(visible = showUpdate, enter = fadeIn(tween(400)), exit = fadeOut()) {
             update?.let { UpdateOverlay(it) }
         }
 
@@ -235,6 +249,7 @@ private fun UpdateOverlay(release: Updater.Release) {
             .fillMaxSize()
             .blockInput()
             .background(Neon.Black.copy(alpha = 0.96f))
+            .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing)
             .padding(24.dp),
     ) {
         NeonCard(pulse = true, modifier = Modifier.fillMaxWidth().enterAnimation()) {
@@ -876,6 +891,7 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
     var saved by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var guide by remember { mutableStateOf<KeyProvider?>(null) }
+    var tipRound by remember { mutableStateOf(0) }
     // Ha közben egy másik eszközön törölték, a második Mentés újként menti
     var recreate by remember { mutableStateOf(false) }
 
@@ -983,8 +999,9 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // Tippek és trükkök (pl. ingyenes kulcs a több árhoz – végigvezetünk rajta)
-            TipBubble(onOpenGuide = { guide = it })
-            guide?.let { p -> KeyGuideDialog(p, onClose = { guide = null }) }
+            // Sikeres kulcsbeállítás után új tipp jön (a kulcsos tipp már nem aktuális)
+            androidx.compose.runtime.key(tipRound) { TipBubble(onOpenGuide = { guide = it }) }
+            guide?.let { p -> KeyGuideDialog(p, onClose = { guide = null }, onSaved = { tipRound++ }) }
             SectionTitle("Útvonal")
             AirportField("Honnan", fromPlace) { fromPlace = it }
             AirportField("Hova", toPlace) { toPlace = it }
@@ -1053,7 +1070,7 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
                     target = whole.filter(Char::isDigit).take(9)
                 },
                 label = { Text("Célár (${currencySymbol(currency)})") },
-                supportingText = { Text("Szólunk, ha a teljes ár (minden utassal) eddig vagy ez alá esik") },
+                supportingText = { Text("Szólunk, ha a teljes ár (minden utassal) erre az összegre vagy ez alá csökken") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth(),
@@ -1120,6 +1137,46 @@ internal fun SettingsScreen(onDone: () -> Unit) {
         quietOn = quietOn, quietFrom = quietFrom, quietTo = quietTo,
     )
 
+    // A mentendő beállítások. A pénznemet csak a háttérbeli átváltás írja (a célárakkal együtt), így egy még
+    // futó korábbi váltást sem írunk vissza a régire. A kulcsoknál mezőnként csak azt, amit itt módosított:
+    // közben a szinkron vagy a varázsló már frissíthette a többit. A téma és a betűméret azonnal mentődik.
+    fun effective(stored: Settings): Settings = draft.copy(
+        currency = stored.currency,
+        apiKey = if (apiKey != initial.apiKey) apiKey else stored.apiKey,
+        serpOn = if (serpOn != initial.serpOn) serpOn else stored.serpOn,
+        ignavKey = if (ignavKey != initial.ignavKey) ignavKey else stored.ignavKey,
+        ignavOn = if (ignavOn != initial.ignavOn) ignavOn else stored.ignavOn,
+        themeMode = stored.themeMode,
+        textScale = stored.textScale,
+    )
+
+    fun saveAll() {
+        Store.saveSettings(effective(Store.settings.value))
+        if (currency != initial.currency) {
+            val to = currency
+            AppScope.scope.launch { Store.switchCurrency(to) }
+        }
+        if (interval != initial.intervalHours) Platform.current.reschedule()
+    }
+
+    // Vissza a mentés nélkül módosított beállításokkal: rákérdezünk
+    val stored by Store.settings.collectAsState()
+    val dirty = effective(stored) != stored || currency != initial.currency
+    var confirmLeave by remember { mutableStateOf(false) }
+    fun leave() { if (dirty) confirmLeave = true else onDone() }
+    Platform.current.BackHandler(enabled = dirty) { confirmLeave = true }
+    if (confirmLeave) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmLeave = false },
+            title = { Text("Mented a változásokat?") },
+            text = { Text("Módosítottál a beállításokon, de még nem mentetted el őket.") },
+            confirmButton = {
+                TextButton(onClick = { confirmLeave = false; if (draft.isReady) { saveAll(); onDone() } }) { Text("Mentés") }
+            },
+            dismissButton = { TextButton(onClick = { confirmLeave = false; onDone() }) { Text("Elvetés") } },
+        )
+    }
+
     val watches by Store.watches.collectAsState()
     val activeWatches = watches.filter { !it.isExpired() }
     val checksPerMonth = if (interval > 0) (24 / interval) * 30 else 0
@@ -1133,7 +1190,7 @@ internal fun SettingsScreen(onDone: () -> Unit) {
     Scaffold(
         containerColor = Neon.Black,
         topBar = {
-            NeonTopBar("BEÁLLÍTÁSOK", onBack = onDone)
+            NeonTopBar("BEÁLLÍTÁSOK", onBack = { leave() })
         },
     ) { padding ->
         Column(
@@ -1225,9 +1282,19 @@ internal fun SettingsScreen(onDone: () -> Unit) {
 
             if (Platform.current.autostartSupported) {
                 var auto by remember { mutableStateOf(Platform.current.autostart) }
-                SwitchRow("Indítás a Windowszal (a tálcán, a háttérben figyel)", auto) {
+                SwitchRow("Indítás a Windows-zal (a tálcán, a háttérben figyel)", auto) {
                     auto = it
-                    Platform.current.autostart = it
+                    // (a rendszerleíró-adatbázis írása lassú lehet: ne akassza meg az ablakot)
+                    AppScope.scope.launch { Platform.current.autostart = it }
+                }
+            }
+
+            run {
+                var tipsOn by remember { mutableStateOf(!Tips.allOff) }
+                SwitchRow("Tippek a figyelés szerkesztésekor", tipsOn) {
+                    tipsOn = it
+                    Tips.allOff = !it
+                    if (it) Tips.showAgain()
                 }
             }
 
@@ -1295,23 +1362,7 @@ internal fun SettingsScreen(onDone: () -> Unit) {
 
             Button(
                 onClick = {
-                    // A pénznemet csak a háttérbeli átváltás írja (a célárakkal együtt); itt mindig a tárolt
-                    // marad, így egy még futó korábbi váltást sem írunk vissza a régire
-                    val stored = Store.settings.value
-                    // A kulcsokat csak akkor írjuk, ha itt módosította őket – közben a szinkron vagy a
-                    // varázsló már frissíthette (különben a régi vázlat visszaírná a régit)
-                    val keysTouched = apiKey != initial.apiKey || serpOn != initial.serpOn ||
-                        ignavKey != initial.ignavKey || ignavOn != initial.ignavOn
-                    Store.saveSettings(
-                        draft.copy(currency = stored.currency).let {
-                            if (keysTouched) it else it.copy(apiKey = stored.apiKey, serpOn = stored.serpOn, ignavKey = stored.ignavKey, ignavOn = stored.ignavOn)
-                        }
-                    )
-                    if (currency != initial.currency) {
-                        val to = currency
-                        AppScope.scope.launch { Store.switchCurrency(to) }
-                    }
-                    if (interval != initial.intervalHours) Platform.current.reschedule()
+                    saveAll()
                     onDone()
                 },
                 enabled = draft.isReady,
