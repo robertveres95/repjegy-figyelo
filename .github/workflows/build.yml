@@ -67,7 +67,7 @@ jobs:
             # Az új verzió legyen nagyobb a legutóbbi éles kiadásnál (különben az appok nem ajánlják fel)
             LAST=$(gh release list --repo "${{ github.repository }}" --exclude-pre-releases --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // ""' | sed -E 's/^v([0-9.]+)-.*/\1/')
             if [[ -n "$LAST" && "$(printf '%s\n%s\n' "$LAST" "$VERSION" | sort -V | tail -1)" != "$VERSION" || "$LAST" == "$VERSION" ]]; then
-              echo "::error::A verzió ($VERSION) nem nagyobb a legutóbbi kiadásnál ($LAST) – emeld a version.properties-ben"
+              echo "::error::A verzió ($VERSION) nem nagyobb a legutóbbi kiadásnál ($LAST) – emeld a version.properties-ben (egy már kiadott futást csak a „Re-run failed jobs” gombbal lehet újraindítani)"
               exit 1
             fi
             echo "publish=true" >> "$GITHUB_OUTPUT"
@@ -168,7 +168,7 @@ jobs:
           unzip -l REFI-Chrome.zip | tail -1
 
       - name: Fájlok átadása a kiadás-lépésnek
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: android-chrome
           path: |
@@ -227,7 +227,7 @@ jobs:
         run: cp desktop/build/compose/binaries/main/msi/*.msi REFI-Setup.msi
 
       - name: Telepítő átadása a kiadás-lépésnek
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows
           path: REFI-Setup.msi
@@ -242,7 +242,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: dist
           merge-multiple: true

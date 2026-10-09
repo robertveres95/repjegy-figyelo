@@ -189,6 +189,8 @@ object Store {
             }
         })
         saveSettings(_settings.value.copy(currency = to))
+        // Az átváltott célárak és az új pénznem minél előbb a többi eszközre is kerüljenek
+        Sync.scheduleSoon()
     }
 
     /**

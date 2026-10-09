@@ -98,7 +98,7 @@ object DesktopPrefs : Prefs {
             override fun putInt(key: String, value: Int) { props.setProperty(key, value.toString()) }
             override fun putLong(key: String, value: Long) { props.setProperty(key, value.toString()) }
         }.block()
-        if (readOnly && !recover(props)) return
+        if (readOnly) return
         // Előbb ideiglenes fájlba, aztán csere: áramszünetnél se sérüljön.
         // Ha a mappa nem írható (pl. teli lemez), az app ne omoljon össze: a változás
         // a memóriában megmarad, és a következő sikeres mentéskor kiíródik.
@@ -122,21 +122,6 @@ object DesktopPrefs : Prefs {
         } catch (_: Exception) {
             runCatching { Files.move(src, dst, StandardCopyOption.REPLACE_EXISTING) }
         }
-    }
-
-    /**
-     * Ha induláskor nem tudtuk beolvasni a fájlt, mentéskor újra megpróbáljuk: sikerülés esetén a
-     * fájl tartalmára rátesszük az azóta a memóriában történt változásokat, és újra írhatunk.
-     */
-    private fun recover(mem: Properties): Boolean {
-        val fresh = Properties()
-        val ok = runCatching { file.reader(Charsets.UTF_8).use { fresh.load(it) } }.isSuccess
-        if (!ok) return false
-        fresh.putAll(mem)
-        mem.clear()
-        mem.putAll(fresh)
-        readOnly = false
-        return true
     }
 
     /** Az app adatmappája (%APPDATA%\REFI). */

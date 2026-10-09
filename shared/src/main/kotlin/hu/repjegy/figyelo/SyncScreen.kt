@@ -1,6 +1,8 @@
 package hu.repjegy.figyelo
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -98,7 +100,7 @@ internal fun LoginGate(onSkip: () -> Unit = {}) {
             .fillMaxSize()
             .blockInput()
             .background(Neon.Black)
-            .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(24.dp),
     ) {
         NeonCard(modifier = androidx.compose.ui.Modifier.fillMaxWidth().enterAnimation()) {

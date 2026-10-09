@@ -1,6 +1,8 @@
 package hu.repjegy.figyelo
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -84,7 +86,7 @@ internal fun WhatsNewOverlay(items: List<Pair<String, List<String>>>, onClose: (
             .fillMaxSize()
             .blockInput()
             .background(Neon.Black.copy(alpha = 0.96f))
-            .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(24.dp),
     ) {
         NeonCard(modifier = Modifier.fillMaxWidth().enterAnimation()) {

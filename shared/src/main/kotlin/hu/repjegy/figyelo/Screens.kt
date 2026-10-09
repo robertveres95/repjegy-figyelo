@@ -31,6 +31,8 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -114,6 +116,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -145,6 +148,8 @@ internal fun parseTypedDate(raw: String): LocalDate? {
     if (nums.size != 3 || nums[0].length != 4) return null
     return runCatching { LocalDate.of(nums[0].toInt(), nums[1].toInt(), nums[2].toInt()) }.getOrNull()
 }
+/** A Windows-indítás kapcsolásai sorban fussanak (gyors ki-be kapcsolásnál se cserélődjenek fel). */
+private val autostartLock = kotlinx.coroutines.sync.Mutex()
 private val shortDate = DateTimeFormatter.ofPattern("MMM d.", HU)
 private val timeFormat = DateTimeFormatter.ofPattern("MMM d. HH:mm", HU)
 
@@ -249,7 +254,7 @@ private fun UpdateOverlay(release: Updater.Release) {
             .fillMaxSize()
             .blockInput()
             .background(Neon.Black.copy(alpha = 0.96f))
-            .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(24.dp),
     ) {
         NeonCard(pulse = true, modifier = Modifier.fillMaxWidth().enterAnimation()) {
@@ -1285,7 +1290,7 @@ internal fun SettingsScreen(onDone: () -> Unit) {
                 SwitchRow("Indítás a Windows-zal (a tálcán, a háttérben figyel)", auto) {
                     auto = it
                     // (a rendszerleíró-adatbázis írása lassú lehet: ne akassza meg az ablakot)
-                    AppScope.scope.launch { Platform.current.autostart = it }
+                    AppScope.scope.launch { autostartLock.withLock { Platform.current.autostart = auto } }
                 }
             }
 
