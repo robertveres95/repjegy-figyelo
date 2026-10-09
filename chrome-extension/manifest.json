@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "REFI – repjegy-árfigyelő",
+  "short_name": "REFI",
+  "version": "1.0.0",
+  "description": "Gyors áttekintés a REFI-ben figyelt repülőjegyekről: aktuális ár, célár, árgörbe.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvHPjJOC/kTPsV1z8cKRNA07VkjS7dQ31PvmpCS2qGqTIDQygc96FFCsEsRV9YPb3IhSq8+xTZDKmVq7JlsluVWaRN9mthHo1Zsm4QzzXisUCqO+wyDWwTnh1gldAT//4IzUY6r8sPaZckZUsSr+O/epFiOB9QasEnjzhbLZaK16JGNQJ/vpCXMukQWzrBuR3smwKdsLzV/MO7vJ6F1ZK4DL17tUF9o4a//Vevpw7dRfrPisNA7UnkDJtzGg3KzyDi/JZ5ne7WM60kNryxBpMctpVucQ6ZxX1xnNyyMknjPSqWptz1RfpwKw4hS9rw27YMZRDAzuvWyavGorF9dIz+QIDAQAB",
+  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "action": {
+    "default_title": "REFI – figyelt repjegyek",
+    "default_popup": "popup.html",
+    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png" }
+  },
+  "permissions": ["identity", "storage"],
+  "host_permissions": ["https://www.googleapis.com/*"]
+}

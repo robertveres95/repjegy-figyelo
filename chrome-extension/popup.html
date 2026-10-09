@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8">
+  <title>REFI</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <img src="icons/icon32.png" alt="" width="22" height="22">
+      <span>REFI</span>
+    </div>
+    <div class="actions">
+      <button id="refresh" class="icon" title="Frissítés" aria-label="Frissítés" hidden>⟳</button>
+      <button id="signout" class="link" hidden>Kijelentkezés</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section id="signin" class="center" hidden>
+      <p class="lead">Jelentkezz be ugyanazzal a Google-fiókkal, amit a REFI appban használsz.</p>
+      <button id="signin-btn" class="primary">Bejelentkezés Google-fiókkal</button>
+      <p class="muted small">A bővítmény csak olvassa a figyeléseidet a REFI rejtett Drive-területéről – mást nem lát, és nem módosít semmit.</p>
+    </section>
+
+    <section id="loading" class="center" hidden>
+      <div class="spinner" aria-hidden="true"></div>
+      <p class="muted">Figyelések betöltése…</p>
+    </section>
+
+    <section id="empty" class="center" hidden>
+      <p class="lead">Még nincs figyelésed.</p>
+      <p class="muted">Az új figyeléseket a REFI appban (telefonon vagy számítógépen) készítheted – itt automatikusan megjelennek.</p>
+    </section>
+
+    <p id="error" class="error" hidden></p>
+    <ul id="list" class="list"></ul>
+  </main>
+
+  <footer id="footer" class="muted small" hidden></footer>
+  <script src="config.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
