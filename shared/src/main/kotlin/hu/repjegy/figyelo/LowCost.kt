@@ -209,7 +209,15 @@ object WizzAir {
         if (res.code == 400 || res.code == 401 || res.code == 403) {
             // Nincs ilyen útvonal: ezt nem érdemes új munkamenettel újrapróbálni
             if (res.code == 400) lastRejection = "$origin→$destination ${w.outboundDate}: ${res.body.take(400)}"
-            if (res.code == 400 && res.body.contains("validationCodes")) return emptyList()
+            if (res.code == 400 && res.body.contains("validationCodes")) {
+                val codes = runCatching {
+                    JSONObject(res.body).optJSONArray("validationCodes")?.let { a -> (0 until a.length()).map { a.optString(it) } }
+                }.getOrNull().orEmpty()
+                // „InvalidMarket” = ezen az útvonalon a Wizz nem repül → valóban nincs járat.
+                // Minden más elutasítás (pl. utasszám, dátum, megváltozott kérés) hiba, nem „nincs járat”.
+                if (codes.isNotEmpty() && codes.all { it == "InvalidMarket" }) return emptyList()
+                throw IOException("a Wizz Air elutasította a kérést (${codes.joinToString().ifEmpty { "ismeretlen ok" }.take(80)})")
+            }
             if (retry) return searchPair(w, origin, destination, currency, retry = false)
             throw FatalSourceException("a Wizz Air elutasította a kérést (HTTP ${res.code})")
         }
