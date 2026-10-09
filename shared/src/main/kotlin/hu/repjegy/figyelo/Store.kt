@@ -182,8 +182,40 @@ object Store {
         saveSettings(_settings.value.copy(currency = to))
     }
 
+    /** A kulcsos források beállítása (szinkronizáláshoz): kulcsok és be/ki kapcsolók. */
+    data class SyncedKeys(val serpKey: String, val serpOn: Boolean, val ignavKey: String, val ignavOn: Boolean, val editedAt: Long)
+
+    @Synchronized
+    fun keys(): SyncedKeys = settings.value.let {
+        // Korábbi verzióban megadott (még időbélyeg nélküli) kulcs is felkerüljön – de bármely valódi módosítás felülírja
+        val t = prefs.getLong("keysEditedAt", 0L).takeIf { t -> t > 0 }
+            ?: if (it.apiKey.isNotBlank() || it.ignavKey.isNotBlank()) 1L else 0L
+        SyncedKeys(it.apiKey, it.serpOn, it.ignavKey, it.ignavOn, t)
+    }
+
+    /** A felhőből jött (újabb) kulcsok átvétele; az időbélyeg is átjön, hogy ne pattogjon oda-vissza. */
+    @Synchronized
+    internal fun applySyncedKeys(k: SyncedKeys) {
+        val cur = settings.value
+        writeSettings(cur.copy(apiKey = k.serpKey, serpOn = k.serpOn, ignavKey = k.ignavKey, ignavOn = k.ignavOn))
+        prefs.edit { putLong("keysEditedAt", k.editedAt) }
+    }
+
     @Synchronized
     fun saveSettings(settings: Settings) {
+        val old = _settings.value
+        writeSettings(settings)
+        // Ha a kulcsok változtak, a többi eszközre is átmennek (a legutóbbi módosítás nyer)
+        if (old.apiKey != settings.apiKey || old.serpOn != settings.serpOn ||
+            old.ignavKey != settings.ignavKey || old.ignavOn != settings.ignavOn
+        ) {
+            prefs.edit { putLong("keysEditedAt", stamp(prefs.getLong("keysEditedAt", 0L))) }
+            Sync.scheduleSoon()
+        }
+    }
+
+    @Synchronized
+    private fun writeSettings(settings: Settings) {
         prefs.edit {
             putBoolean("googleOn", settings.googleOn)
             putBoolean("ryanairOn", settings.ryanairOn)

@@ -220,8 +220,7 @@ fun KeyGuideDialog(provider: KeyProvider, onClose: () -> Unit, onSaved: (String)
                         }
                     }
                     Text(
-                        "A kulcs csak ezen a ${Platform.current.deviceWord} tárolódik. A másik eszközödön ugyanezt a " +
-                            "kulcsot kell beírnod (nem kell újra regisztrálni).",
+                        "A kulcs a Google-fiókodon keresztül a többi eszközödre is magától átkerül – ott nem kell újra beírni.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

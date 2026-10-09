@@ -160,11 +160,16 @@ object Sync {
             throw IOException("${remote.skipped} figyelés a felhőben nem olvasható – frissítsd a REFI-t a legújabb verzióra")
         }
 
+        // A kulcsok: a később módosított változat nyer (új eszközön a felhőben lévő)
+        val localKeys = Store.keys()
+        val keys = remote?.keys?.takeIf { it.editedAt > localKeys.editedAt }?.also { Store.applySyncedKeys(it) } ?: localKeys
+
         // 3. Feltöltés (csak ha változott a felhőben lévőhöz képest)
-        val body = serialize(merged.first, merged.second, currency)
+        val body = serialize(merged.first, merged.second, currency, keys)
         if (remote != null && remote.currency == currency &&
             remote.watches.associateBy { it.id } == merged.first.associateBy { it.id } &&
-            remote.tombstones == merged.second
+            remote.tombstones == merged.second &&
+            (remote.keys ?: Store.SyncedKeys("", false, "", false, 0L)).editedAt >= keys.editedAt
         ) return
         val res = if (fileId == null) {
             val boundary = "refi" + System.nanoTime()
@@ -206,9 +211,15 @@ object Sync {
 
     // ------------------------------------------------------------ formátum és összefésülés
 
-    internal class Snapshot(val watches: List<Watch>, val tombstones: Map<String, Long>, val currency: String, val skipped: Int = 0)
+    internal class Snapshot(
+        val watches: List<Watch>,
+        val tombstones: Map<String, Long>,
+        val currency: String,
+        val skipped: Int = 0,
+        val keys: Store.SyncedKeys? = null,
+    )
 
-    internal fun serialize(watches: List<Watch>, tombstones: Map<String, Long>, currency: String): String =
+    internal fun serialize(watches: List<Watch>, tombstones: Map<String, Long>, currency: String, keys: Store.SyncedKeys? = null): String =
         JSONObject()
             .put("format", FORMAT)
             .put("version", 1)
@@ -216,6 +227,13 @@ object Sync {
             .put("updatedAt", System.currentTimeMillis())
             .put("watches", JSONArray().apply { watches.forEach { put(it.toJson()) } })
             .put("tombstones", JSONObject().apply { tombstones.forEach { (k, v) -> put(k, v) } })
+            // A kulcsos források (SerpApi, Ignav) kulcsai: csak a saját, rejtett Drive-területen
+            .apply {
+                if (keys != null && keys.editedAt > 0) put("keys", JSONObject()
+                    .put("serpKey", keys.serpKey).put("serpOn", keys.serpOn)
+                    .put("ignavKey", keys.ignavKey).put("ignavOn", keys.ignavOn)
+                    .put("editedAt", keys.editedAt))
+            }
             .toString()
 
     internal fun parse(text: String): Snapshot? {
@@ -230,7 +248,14 @@ object Sync {
         val t = json.optJSONObject("tombstones")
         val tomb = t?.keys()?.asSequence()?.associateWith { t.optLong(it, 0L) }.orEmpty()
         val cur = json.optString("currency", "HUF").takeIf { c -> CURRENCIES.any { it.first == c } } ?: "HUF"
-        return Snapshot(list, tomb, cur, skipped = arr.length() - list.size)
+        val k = json.optJSONObject("keys")?.let {
+            Store.SyncedKeys(
+                it.optString("serpKey", "").take(200), it.optBoolean("serpOn", false),
+                it.optString("ignavKey", "").take(200), it.optBoolean("ignavOn", false),
+                it.optLong("editedAt", 0L),
+            )
+        }
+        return Snapshot(list, tomb, cur, skipped = arr.length() - list.size, keys = k)
     }
 
     /** Más pénznemben tárolt figyelések célárának átváltása (az árak törlődnek, a következő ellenőrzés frissíti). */

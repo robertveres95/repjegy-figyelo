@@ -1175,7 +1175,7 @@ internal fun SettingsScreen(onDone: () -> Unit) {
             if (ignavOn) SecretField("Ignav API-kulcs", ignavKey) { ignavKey = it }
             if (serpOn || ignavOn) {
                 Text(
-                    "A kulcsok csak ezen a ${Platform.current.deviceWord} tárolódnak.",
+                    "A kulcsok a Google-fiókod rejtett REFI-területén keresztül a többi eszközödre is átkerülnek.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1264,7 +1264,16 @@ internal fun SettingsScreen(onDone: () -> Unit) {
                 onClick = {
                     // A pénznemet csak a háttérbeli átváltás írja (a célárakkal együtt); itt mindig a tárolt
                     // marad, így egy még futó korábbi váltást sem írunk vissza a régire
-                    Store.saveSettings(draft.copy(currency = Store.settings.value.currency))
+                    val stored = Store.settings.value
+                    // A kulcsokat csak akkor írjuk, ha itt módosította őket – közben a szinkron vagy a
+                    // varázsló már frissíthette (különben a régi vázlat visszaírná a régit)
+                    val keysTouched = apiKey != initial.apiKey || serpOn != initial.serpOn ||
+                        ignavKey != initial.ignavKey || ignavOn != initial.ignavOn
+                    Store.saveSettings(
+                        draft.copy(currency = stored.currency).let {
+                            if (keysTouched) it else it.copy(apiKey = stored.apiKey, serpOn = stored.serpOn, ignavKey = stored.ignavKey, ignavOn = stored.ignavOn)
+                        }
+                    )
                     if (currency != initial.currency) {
                         val to = currency
                         AppScope.scope.launch { Store.switchCurrency(to) }

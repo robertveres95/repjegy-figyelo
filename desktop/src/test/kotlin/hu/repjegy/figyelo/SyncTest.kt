@@ -104,6 +104,14 @@ class SyncTest {
         assertEquals(1, snap.skipped)
     }
 
+    @Test fun keysTravelInSyncFile() {
+        val k = Store.SyncedKeys("serp-123", true, "ign-456", false, 42L)
+        val back = assertNotNull(Sync.parse(Sync.serialize(listOf(w("a")), emptyMap(), "HUF", k)))
+        assertEquals(k, back.keys)
+        // Kulcs nélkül (vagy ha sosem volt beállítva) nem kerül a fájlba
+        assertNull(assertNotNull(Sync.parse(Sync.serialize(listOf(w("a")), emptyMap(), "HUF"))).keys)
+    }
+
     @Test fun stampIsMonotonicEvenWithFutureClock() {
         // Egy siető órájú eszköz „jövőbeli” módosítása után a mostani módosítás is későbbi legyen
         val future = System.currentTimeMillis() + 3_600_000L
