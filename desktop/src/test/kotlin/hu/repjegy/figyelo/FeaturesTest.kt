@@ -75,7 +75,7 @@ class FeaturesTest {
     @Test fun googleInsightParsing() {
         // A Google válaszának valós szerkezete (rövidítve): [szint, [null, ár], …, [[ms, ár], …]]
         val snippet = JSONArray("""[[null,[1,2]],["x",[2,[null,29160],[null,34094],[null,4934],[null,25500],[null,51000],1,null,null,null,
-            [[1786226400000,30380],[1786312800000,34180],[1786399200000,32001]]]]]""")
+            [[[1786226400000,30380],[1786312800000,34180],[1786399200000,32001]]],[[1,2,3]],"Barcelona"]]]""")
         val m = assertNotNull(GoogleFlights.findInsight(snippet))
         assertEquals(3, m.points.size)
         assertEquals(30380, m.points.first().price)

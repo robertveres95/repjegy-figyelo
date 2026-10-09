@@ -61,12 +61,15 @@ object GoogleFlights {
 
     /**
      * Az „árbetekintés” blokk megkeresése a válaszban:
-     * [szint, [null, mostani], [null, …], [null, eltérés], [null, szokásos alsó], [null, szokásos felső], …, [[időbélyeg ms, ár], …]]
+     * [szint, [null, mostani], [null, …], [null, eltérés], [null, szokásos alsó], [null, szokásos felső], …, [[[időbélyeg ms, ár], …]], …]
+     * (a ds:1 adat 5. eleme; a helye változhat, ezért keressük)
      */
     internal fun findInsight(node: Any?, depth: Int = 0): MarketInsight? {
         if (node !is JSONArray || depth > 14) return null
         if (node.length() >= 11) {
-            val pts = node.optJSONArray(10)
+            // A pontlista egy további tömbbe csomagolva jön: [[[ms, ár], …]] (a régebbi alakot is elfogadjuk)
+            val raw = node.optJSONArray(10)
+            val pts = raw?.optJSONArray(0)?.takeIf { it.optJSONArray(0) != null } ?: raw
             fun money(i: Int) = node.optJSONArray(i)?.takeIf { it.length() == 2 && it.isNull(0) }?.optInt(1, 0)?.takeIf { it > 0 }
             if (pts != null && pts.length() >= 2 && money(1) != null) {
                 val parsed = (0 until pts.length()).mapNotNull { i ->
