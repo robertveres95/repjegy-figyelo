@@ -158,7 +158,7 @@ jobs:
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: ${{ steps.meta.outputs.name }}
-          body: ${{ steps.meta.outputs.publish == 'true' && 'Töltsd le a REFI.apk fájlt a telefonodra, és telepítsd. Chrome-bővítmény: REFI-Chrome.zip (telepítés: lásd a leírást a tárolóban).' || 'Teszt-build, csak kipróbálásra. A telepített appok nem ajánlják fel frissítésként.' }}
+          body: ${{ steps.meta.outputs.publish == 'true' && 'Töltsd le a REFI.apk fájlt a telefonodra, és telepítsd. A Chrome-bővítmény a REFI-Chrome.zip (telepítése a tároló leírásában).' || 'Teszt-build, csak kipróbálásra. A telepített appok nem ajánlják fel frissítésként.' }}
           files: |
             REFI.apk
             REFI-Chrome.zip
