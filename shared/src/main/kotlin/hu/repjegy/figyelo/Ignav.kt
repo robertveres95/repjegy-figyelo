@@ -18,21 +18,7 @@ object Ignav {
 
     fun search(w: Watch, apiKey: String, currency: String): List<Offer> {
         val pairs = w.from.split(',').flatMap { o -> w.to.split(',').map { d -> o to d } }.take(MAX_PAIRS)
-        val offers = mutableListOf<Offer>()
-        var lastError: Exception? = null
-        var anySuccess = false
-        for ((origin, destination) in pairs) {
-            try {
-                offers += searchPair(w, origin, destination, apiKey, currency)
-                anySuccess = true
-            } catch (e: FatalSourceException) {
-                throw e
-            } catch (e: Exception) {
-                lastError = e
-            }
-        }
-        if (!anySuccess && lastError != null) throw lastError
-        return offers
+        return collectOffers(pairs) { (origin, destination) -> searchPair(w, origin, destination, apiKey, currency) }
     }
 
     private fun searchPair(

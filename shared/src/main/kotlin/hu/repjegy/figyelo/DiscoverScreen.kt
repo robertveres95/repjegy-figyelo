@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 // ---------------------------------------------------------------- Kód beillesztése
@@ -127,33 +128,43 @@ internal fun DiscoverScreen(
     var tripType by remember { mutableStateOf(mem.tripType) }
     var adults by remember { mutableStateOf(mem.adults) }
     var maxPrice by remember { mutableStateOf(mem.maxPrice) }
-    var loading by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    val loading by mem.busy.collectAsState()
+    val error by mem.lastError.collectAsState()
+    var formError by remember { mutableStateOf<String?>(null) }
+    val stored by mem.lastResults.collectAsState()
     // A korábbi találatok csak ugyanabban a pénznemben érvényesek
-    var results by remember { mutableStateOf(initialResults ?: mem.results?.takeIf { mem.currency == currency }) }
+    val results = initialResults ?: stored?.takeIf { mem.currency == currency }
 
     fun startSearch() {
         val origin = from
         if (origin == null) {
-            error = "Válassz indulási helyet."
+            formError = "Válassz indulási helyet."
             return
         }
-        loading = true
-        error = null
-        AppScope.scope.launch {
+        formError = null
+        mem.lastError.value = null
+        mem.period = period
+        mem.tripType = tripType
+        mem.adults = adults
+        mem.maxPrice = maxPrice
+        mem.fromCodes = origin.codes
+        // Egy korábbi, még futó keresés eredménye ne írja felül az újat
+        mem.job?.cancel()
+        mem.busy.value = true
+        mem.job = AppScope.scope.launch {
             val r = runCatching {
                 Discover.search(origin.codes, period, tripType, maxPrice.toIntOrNull()?.takeIf { it > 0 }, currency)
             }
-            results = r.getOrNull()
-            error = r.exceptionOrNull()?.let { "Nem sikerült a keresés: ${it.message?.take(120)}" }
-            loading = false
-            mem.period = period
-            mem.tripType = tripType
-            mem.adults = adults
-            mem.maxPrice = maxPrice
-            mem.fromCodes = origin.codes
-            mem.currency = currency
-            mem.results = r.getOrNull()
+            // Közben újabb keresés indult (ez a lekérés nem szakítható meg, csak az eredményét dobjuk el)
+            if (!isActive) return@launch
+            r.onSuccess {
+                mem.currency = currency
+                mem.results = it
+                mem.lastResults.value = it
+            }
+            // Hibánál a korábbi találatok maradnak
+            mem.lastError.value = r.exceptionOrNull()?.let { "Nem sikerült a keresés: ${it.message?.take(120)}" }
+            mem.busy.value = false
         }
     }
 
@@ -197,7 +208,7 @@ internal fun DiscoverScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    error?.let { StatusText(it, true) }
+                    (formError ?: error)?.let { StatusText(it, true) }
                     if (loading) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Neon.Green)

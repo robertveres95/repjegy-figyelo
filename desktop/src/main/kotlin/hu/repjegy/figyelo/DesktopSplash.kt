@@ -84,6 +84,8 @@ fun DesktopSplash(onFinished: () -> Unit) {
     Box(
         Modifier
             .fillMaxSize()
+            // Az animáció alatt a kattintás ne jusson el a mögötte lévő képernyőre
+            .blockInput()
             .graphicsLayer { this.alpha = alpha }
             .background(Color.Black),
     ) {

@@ -15,6 +15,47 @@ class SkipSourceException(message: String) : Exception(message)
 /** Olyan hiba, aminél nincs értelme a többi repülőtér-párral próbálkozni (pl. rossz kulcs, letiltás). */
 class FatalSourceException(message: String) : IOException(message)
 
+/**
+ * A forrás egyes kérései (reptérpárok, rugalmas dátumok) hibáztak, de a többi talált valamit:
+ * az ajánlatok használhatók, de a forrás nem „válaszolt teljesen” – így egy hiányzó (lehet, hogy
+ * épp a legolcsóbb) ár miatt nem töröljük a korábbit, és nem szólunk újra ugyanarról az árról.
+ */
+class PartialSourceException(val offers: List<Offer>, val failed: Int, val total: Int, cause: Exception?) :
+    IOException("részleges válasz: $failed/$total kérés hibázott" + (cause?.message?.let { " ($it)" } ?: "").take(120), cause)
+
+/** Több kérés (reptérpár vagy dátum) eredményének összegzése: hiba, részleges vagy teljes. */
+internal inline fun <K> collectOffers(keys: List<K>, betweenEach: () -> Unit = {}, search: (K) -> List<Offer>): List<Offer> {
+    val results = mutableListOf<Offer>()
+    var firstError: Exception? = null
+    var failed = 0
+    var ok = 0
+    for ((index, key) in keys.withIndex()) {
+        if (index > 0) betweenEach()
+        try {
+            results += search(key)
+            ok++
+        } catch (e: PartialSourceException) {
+            results += e.offers
+            ok++
+            failed++
+            if (firstError == null) firstError = e
+        } catch (e: SkipSourceException) {
+            throw e
+        } catch (e: FatalSourceException) {
+            // Letiltásnál a többit nem próbáljuk; ha volt már találat, az részleges eredmény
+            if (ok == 0) throw e
+            throw PartialSourceException(results, failed + keys.size - index, keys.size, e)
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            failed++
+            if (firstError == null) firstError = e
+        }
+    }
+    if (ok == 0 && firstError != null) throw firstError
+    if (failed > 0) throw PartialSourceException(results, failed, keys.size, firstError)
+    return results
+}
+
 /** Egyszerű HTTP-kliens böngészőszerű fejlécekkel és közös sütitárral. */
 object Http {
     const val USER_AGENT =
@@ -38,7 +79,9 @@ object Http {
         val conn = URL(url).openConnection() as HttpURLConnection
         conn.requestMethod = method
         conn.instanceFollowRedirects = true
-        conn.connectTimeout = timeoutMs
+        // Kapcsolódásra elég 15 mp (ami addig nem jön létre, nem is fog); így egy elérhetetlen
+        // szerver nem emészti fel a háttérfutás idejét
+        conn.connectTimeout = minOf(timeoutMs, 15_000)
         conn.readTimeout = timeoutMs
         conn.setRequestProperty("User-Agent", USER_AGENT)
         conn.setRequestProperty("Accept-Language", "en-GB,en;q=0.9,hu;q=0.8")

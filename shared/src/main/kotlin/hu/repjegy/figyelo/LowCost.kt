@@ -42,23 +42,8 @@ private fun lowCostNote(w: Watch): String? {
     return parts.takeIf { it.isNotEmpty() }?.joinToString(", ")
 }
 
-private fun <T> searchPairs(w: Watch, maxPairs: Int, block: (String, String) -> List<T>): List<T> {
-    val results = mutableListOf<T>()
-    var lastError: Exception? = null
-    var anySuccess = false
-    for ((origin, destination) in pairsOf(w, maxPairs)) {
-        try {
-            results += block(origin, destination)
-            anySuccess = true
-        } catch (e: FatalSourceException) {
-            throw e
-        } catch (e: Exception) {
-            lastError = e
-        }
-    }
-    if (!anySuccess && lastError != null) throw lastError
-    return results
-}
+private fun searchPairs(w: Watch, maxPairs: Int, block: (String, String) -> List<Offer>): List<Offer> =
+    collectOffers(pairsOf(w, maxPairs)) { (o, d) -> block(o, d) }
 
 // ---------------------------------------------------------------- Ryanair
 
@@ -117,8 +102,9 @@ object Ryanair {
                 price = ceil(total).toInt(),
                 source = NAME,
                 airline = "Ryanair",
-                fromCode = out.optJSONObject("departureAirport")?.optString("iataCode") ?: origin,
-                toCode = out.optJSONObject("arrivalAirport")?.optString("iataCode") ?: destination,
+                // optString hiányzó mezőnél üres szöveget ad (nem nullt): csak érvényes kódot fogadunk el
+                fromCode = out.optJSONObject("departureAirport")?.optString("iataCode")?.takeIf { it.length == 3 } ?: origin,
+                toCode = out.optJSONObject("arrivalAirport")?.optString("iataCode")?.takeIf { it.length == 3 } ?: destination,
                 departure = trimTime(out.optString("departureDate")),
                 arrival = trimTime(out.optString("arrivalDate")),
                 stops = 0,
@@ -231,8 +217,10 @@ object WizzAir {
         val outbound = cheapest(json.optJSONArray("outboundFlights"), w.outboundDate, w.depFrom, w.depTo) ?: return emptyList()
         val inbound = w.returnDate?.let { cheapest(json.optJSONArray("returnFlights"), it, null, null) ?: return emptyList() }
 
+        // Ismeretlen pénznem (pl. ALL, MKD) vagy elérhetetlen árfolyam: ez a pár hibás, a többi megmarad
         val perPerson = Rates.convert(outbound.amount, outbound.currency, currency) +
             (inbound?.let { Rates.convert(it.amount, it.currency, currency) } ?: 0.0)
+        if (!perPerson.isFinite() || perPerson <= 0) throw IOException("érvénytelen Wizz-ár")
         return listOf(
             Fees.apply(Offer(
                 price = ceil(perPerson * w.seatedPassengers).toInt(),

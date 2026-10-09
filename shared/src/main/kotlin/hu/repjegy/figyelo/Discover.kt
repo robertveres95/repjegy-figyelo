@@ -26,6 +26,11 @@ object Discover {
         var fromCodes: String? = null
         var currency: String? = null
         var results: List<Result>? = null
+        /** A futó keresés: a képernyő elhagyása után visszatérve is látszik, és egy új keresés leállítja. */
+        var job: kotlinx.coroutines.Job? = null
+        val busy = kotlinx.coroutines.flow.MutableStateFlow(false)
+        val lastResults = kotlinx.coroutines.flow.MutableStateFlow<List<Result>?>(null)
+        val lastError = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
     }
 
     /** Út típusa: csak oda, hosszú hétvége (2–4 éj), egy hét (5–9 éj). */

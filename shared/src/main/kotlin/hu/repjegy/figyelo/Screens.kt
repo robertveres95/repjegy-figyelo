@@ -109,6 +109,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
@@ -119,7 +122,7 @@ import java.util.UUID
 
 private sealed interface Screen {
     data object Home : Screen
-    data class Edit(val id: String?, val template: Watch? = null) : Screen
+    data class Edit(val id: String?, val template: Watch? = null, val back: Screen = Home) : Screen
     data object Options : Screen
     data object Explore : Screen
 }
@@ -128,6 +131,9 @@ private val dateFormat = DateTimeFormatter.ofPattern("yyyy. MMM d., EEE", HU)
 private val typedDateFormat = DateTimeFormatter.ofPattern("yyyy.MM.dd")
 
 /** Begépelt dátum: 2026.10.16, 2026-10-16, 2026/10/16, 2026.10.16. vagy 2026. 10. 16. */
+/** A legkésőbbi megadható utazási nap (a légitársaságok kb. egy évre előre árulnak). */
+internal fun maxTravelDate(today: LocalDate): LocalDate = today.plusMonths(18)
+
 internal fun parseTypedDate(raw: String): LocalDate? {
     val nums = raw.split('.', '-', '/', ' ').filter { it.isNotBlank() }
     if (nums.size != 3 || nums[0].length != 4) return null
@@ -141,13 +147,21 @@ fun AppRoot() {
     var screen by remember { mutableStateOf<Screen>(Screen.Home) }
     val update by Updater.available.collectAsState()
     var showSplash by remember { mutableStateOf(AppScope.splashPending) }
-    Platform.current.BackHandler(enabled = screen != Screen.Home) { screen = Screen.Home }
+    Platform.current.BackHandler(enabled = screen != Screen.Home) {
+        screen = (screen as? Screen.Edit)?.back ?: Screen.Home
+    }
 
     LaunchedEffect(Unit) { AppScope.scope.launch { Updater.check() } }
     // Szinkronizálás induláskor és minden visszatéréskor (a másik eszköz módosításai)
     val resumes by AppScope.resumeCount.collectAsState()
     LaunchedEffect(resumes) { AppScope.scope.launch { Sync.syncNow() } }
     val sync by Sync.state.collectAsState()
+    // Ha a bejelentkezés nem sikerül (pl. nincs net, nincs Google Play), egy hiba után erre az
+    // indításra tovább lehet lépni – a figyelések addig is használhatók; a következő indításkor újra kéri
+    var loginSkipped by remember { mutableStateOf(false) }
+    val loginGate = !showSplash && !sync.enabled && !loginSkipped
+    // Ami alatta van, csak akkor reagálhat (pl. megosztott kód), ha semmi sem takarja
+    val uncovered = !showSplash && !loginGate && update == null
 
     Box(Modifier.fillMaxSize().background(Neon.Black)) {
         AnimatedContent(
@@ -168,19 +182,20 @@ fun AppRoot() {
                     onEdit = { screen = Screen.Edit(it) },
                     onSettings = { screen = Screen.Options },
                     onExplore = { screen = Screen.Explore },
+                    acceptIncoming = uncovered,
                 )
-                is Screen.Edit -> EditScreen(s.id, s.template, onDone = { screen = Screen.Home })
+                is Screen.Edit -> EditScreen(s.id, s.template, onDone = { screen = s.back })
                 Screen.Options -> SettingsScreen(onDone = { screen = Screen.Home })
                 Screen.Explore -> DiscoverScreen(
                     onBack = { screen = Screen.Home },
-                    onPick = { template -> screen = Screen.Edit(null, template) },
+                    onPick = { template -> screen = Screen.Edit(null, template, back = Screen.Explore) },
                 )
             }
         }
 
         // A repülő után kötelező a Google-bejelentkezés (adattárolás és szinkronizálás)
-        AnimatedVisibility(visible = !showSplash && !sync.enabled, enter = fadeIn(tween(500)), exit = fadeOut(tween(300))) {
-            LoginGate()
+        AnimatedVisibility(visible = loginGate, enter = fadeIn(tween(500)), exit = fadeOut(tween(300))) {
+            LoginGate(onSkip = { loginSkipped = true })
         }
 
         // A kötelező frissítés mindennél előrébb való (régi verzióval a bejelentkezés sem biztos, hogy működik)
@@ -206,12 +221,12 @@ private fun UpdateOverlay(release: Updater.Release) {
     val pulse by transition.animateFloat(
         0.95f, 1.05f, infiniteRepeatable(tween(1100, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "p",
     )
-    Box(
+    CenteredScroll(
         Modifier
             .fillMaxSize()
+            .blockInput()
             .background(Neon.Black.copy(alpha = 0.96f))
             .padding(24.dp),
-        contentAlignment = Alignment.Center,
     ) {
         NeonCard(pulse = true, modifier = Modifier.fillMaxWidth().enterAnimation()) {
             Text(
@@ -288,14 +303,18 @@ internal fun HomeScreen(
     onEdit: (String) -> Unit,
     onSettings: () -> Unit,
     onExplore: () -> Unit = {},
+    acceptIncoming: Boolean = true,
 ) {
     val watches by Store.watches.collectAsState()
     val settings by Store.settings.collectAsState()
     val checking by Store.checking.collectAsState()
     // Rövid visszajelzés (pl. „Vágólapra másolva”, „3 figyelés visszaállítva”)
     var toast by remember { mutableStateOf<String?>(null) }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     LaunchedEffect(toast) {
         if (toast != null) {
+            // Az üzenet a lista tetején jelenik meg: odagörgetünk, hogy lejjebb görgetve is látszódjon
+            listState.animateScrollToItem(0)
             kotlinx.coroutines.delay(4500)
             toast = null
         }
@@ -304,8 +323,8 @@ internal fun HomeScreen(
     var codeDialog by remember { mutableStateOf<String?>(null) }
     // Más appból megosztott szöveg (pl. a néni által küldött REFI-kód)
     val incoming by AppScope.incomingText.collectAsState()
-    LaunchedEffect(incoming) {
-        incoming?.let {
+    LaunchedEffect(incoming, acceptIncoming) {
+        if (acceptIncoming) incoming?.let {
             codeDialog = it
             AppScope.incomingText.value = null
         }
@@ -429,6 +448,7 @@ internal fun HomeScreen(
         },
     ) { padding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -859,33 +879,49 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
     var error by remember { mutableStateOf<String?>(null) }
     var outValid by remember { mutableStateOf(true) }
     var retValid by remember { mutableStateOf(true) }
+    // Egy azonosító a szerkesztő egész életére: dupla koppintásnál sem lesz két egyforma figyelés
+    val newId = remember { UUID.randomUUID().toString() }
+    var saved by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    // Ha közben egy másik eszközön törölték, a második Mentés újként menti
+    var recreate by remember { mutableStateOf(false) }
 
     val maxBags = adults + children + infantsInSeat
     if (bags > maxBags) bags = maxBags
     if (infantsOnLap > adults) infantsOnLap = adults
 
     fun save() {
+        if (saved) return
         val targetValue = target.toIntOrNull()
         val from = fromPlace
         val to = toPlace
         error = when {
-            !outValid || (roundTrip && !retValid) -> "Javítsd a hibás dátumot (formátum: 2026.10.16)."
+            !outValid || (roundTrip && !retValid) -> "Javítsd a pirossal jelölt dátumot."
             from == null -> "Válaszd ki az indulási repülőteret a listából."
             to == null -> "Válaszd ki az érkezési repülőteret a listából."
             from.codes.split(',').any { it in to.codes.split(',') } ->
                 "Az indulási és érkezési hely nem lehet ugyanaz."
             // Rugalmas dátumnál elég, ha a tartomány még nem múlt el
             outDate.plusDays(flexDays.toLong()).isBefore(today) -> "Az indulás dátuma nem lehet a múltban."
+            outDate.isAfter(maxTravelDate(today)) || (roundTrip && retDate.isAfter(maxTravelDate(today))) ->
+                "Legfeljebb ${maxTravelDate(today).format(typedDateFormat)}-ig lehet dátumot megadni."
             roundTrip && retDate.isBefore(outDate) -> "A visszaút nem lehet az indulás előtt."
             adults + children + infantsInSeat + infantsOnLap > 9 -> "Legfeljebb 9 utas adható meg."
-            targetValue == null || targetValue <= 0 -> "Adj meg egy célárat."
+            targetValue == null -> "Adj meg egy célárat."
+            targetValue <= 0 -> "A célár legyen nagyobb 0-nál."
             depFrom != null && depTo != null && depTo!! <= depFrom!! -> "Az indulási időablak vége legyen későbbi, mint az eleje."
             else -> null
         }
         if (error != null || targetValue == null || from == null || to == null) return
+        val stillThere = existing != null && Store.watches.value.any { it.id == existing.id }
+        if (existing != null && !stillThere && !recreate) {
+            error = "Ezt a figyelést közben törölték (pl. a másik eszközödön). Ha mégis kell, nyomd meg újra a Mentést."
+            recreate = true
+            return
+        }
 
         val fresh = Watch(
-            id = existing?.id ?: UUID.randomUUID().toString(),
+            id = if (stillThere) existing!!.id else newId,
             from = from.codes,
             to = to.codes,
             fromLabel = from.city,
@@ -907,19 +943,27 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
             depTo = depTo,
             airlines = airlines.trim(),
         )
-        val sameSearch = existing != null && existing.searchKey() == fresh.searchKey()
+        val sameSearch = stillThere && existing!!.searchKey() == fresh.searchKey()
+        saved = true
         if (sameSearch) {
+            val alertChanged = existing!!.targetPrice != targetValue || existing.notify != notify
             // A tárolt, legfrissebb állapotból: ha közben lefutott egy ellenőrzés,
             // annak eredményét nem írjuk felül a szerkesztő megnyitásakori példánnyal
-            Store.userUpdate(existing!!.id) {
+            Store.userUpdate(existing.id) {
                 it.copy(
                     targetPrice = targetValue,
                     notify = notify,
                     // Csak akkor szólunk újra ugyanarról az árról, ha a célár vagy az értesítés változott
                     lastNotifiedPrice = if (it.targetPrice != targetValue || it.notify != notify) null else it.lastNotifiedPrice,
+                    // Az „add meg újra a célárat” figyelmeztetés az új célárral megoldódott
+                    lastError = it.lastError?.takeUnless { e -> e.startsWith(PriceChecker.CURRENCY_HINT_PREFIX) },
                     fromLabel = from.city,
                     toLabel = to.city,
                 )
+            }
+            // Új célárnál azonnal kiderül, alatta van-e már az ár (nem csak a következő ütemezett ellenőrzéskor)
+            if (alertChanged && Store.settings.value.isReady) {
+                AppScope.scope.launch { PriceChecker.checkOne(existing.id) }
             }
         } else {
             Store.userUpsert(fresh)
@@ -1023,13 +1067,27 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
             error?.let {
                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
             }
-            Button(onClick = { save() }, modifier = Modifier.fillMaxWidth()) { Text("Mentés") }
+            Button(onClick = { save() }, enabled = !saved, modifier = Modifier.fillMaxWidth()) { Text("Mentés") }
+            if (confirmDelete && existing != null) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { confirmDelete = false },
+                    title = { Text("Törlöd a figyelést?") },
+                    text = { Text("${existing.routeTitle} – az árelőzményekkel együtt, minden eszközödről.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            confirmDelete = false
+                            saved = true
+                            Store.delete(existing.id)
+                            onDone()
+                        }) { Text("Törlés", color = MaterialTheme.colorScheme.error) }
+                    },
+                    dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Mégse") } },
+                )
+            }
             if (existing != null) {
                 OutlinedButton(
-                    onClick = {
-                        Store.delete(existing.id)
-                        onDone()
-                    },
+                    onClick = { confirmDelete = true },
+                    enabled = !saved,
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Figyelés törlése") }
@@ -1217,13 +1275,12 @@ internal fun SettingsScreen(onDone: () -> Unit) {
 
             Button(
                 onClick = {
+                    // A pénznemet csak a háttérbeli átváltás írja (a célárakkal együtt); itt mindig a tárolt
+                    // marad, így egy még futó korábbi váltást sem írunk vissza a régire
+                    Store.saveSettings(draft.copy(currency = Store.settings.value.currency))
                     if (currency != initial.currency) {
-                        // A pénznem a célárak átváltásával együtt, a háttérben vált
-                        Store.saveSettings(draft.copy(currency = Store.settings.value.currency))
                         val to = currency
                         AppScope.scope.launch { Store.switchCurrency(to) }
-                    } else {
-                        Store.saveSettings(draft)
                     }
                     if (interval != initial.intervalHours) Platform.current.reschedule()
                     onDone()
@@ -1359,8 +1416,12 @@ private fun Stepper(label: String, hint: String?, value: Int, range: IntRange, o
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        FilledTonalIconButton(onClick = { onChange(value - 1) }, enabled = value > range.first) {
-            Text("−", style = MaterialTheme.typography.titleLarge)
+        FilledTonalIconButton(
+            onClick = { onChange(value - 1) },
+            enabled = value > range.first,
+            modifier = Modifier.semantics { contentDescription = "$label: kevesebb" },
+        ) {
+            Text("−", style = MaterialTheme.typography.titleLarge, modifier = Modifier.clearAndSetSemantics { })
         }
         Text(
             "$value",
@@ -1369,7 +1430,7 @@ private fun Stepper(label: String, hint: String?, value: Int, range: IntRange, o
             modifier = Modifier.width(36.dp),
         )
         FilledTonalIconButton(onClick = { onChange(value + 1) }, enabled = value < range.last) {
-            Icon(Icons.Filled.Add, contentDescription = "Több")
+            Icon(Icons.Filled.Add, contentDescription = "$label: több")
         }
     }
 }
@@ -1404,6 +1465,7 @@ private fun DateField(
     label: String,
     date: LocalDate,
     minDate: LocalDate,
+    maxDate: LocalDate = maxTravelDate(LocalDate.now()),
     onValidChange: (Boolean) -> Unit = {},
     onPick: (LocalDate) -> Unit,
 ) {
@@ -1420,7 +1482,7 @@ private fun DateField(
         if (typed != date) {
             text = date.format(typedDateFormat)
             error = null
-        } else if (error != null && !date.isBefore(minDate)) {
+        } else if (error != null && !date.isBefore(minDate) && !date.isAfter(maxDate)) {
             error = null
         }
     }
@@ -1433,9 +1495,10 @@ private fun DateField(
             error = when {
                 parsed == null -> "Formátum: 2026.10.16"
                 parsed.isBefore(minDate) -> "Legkorábban: ${minDate.format(typedDateFormat)}"
+                parsed.isAfter(maxDate) -> "Legkésőbb: ${maxDate.format(typedDateFormat)}"
                 else -> null
             }
-            if (parsed != null && !parsed.isBefore(minDate)) onPick(parsed)
+            if (parsed != null && !parsed.isBefore(minDate) && !parsed.isAfter(maxDate)) onPick(parsed)
         },
         label = { Text(label) },
         placeholder = { Text("éééé.hh.nn") },
@@ -1454,10 +1517,16 @@ private fun DateField(
     )
     if (open) {
         val minMillis = minDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        val hi = if (maxDate.isBefore(minDate)) minDate else maxDate
+        val maxMillis = hi.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        // Az évtartománynak a kijelölt dátumot is tartalmaznia kell, különben a naptár összeomlik
+        val shown = date.coerceIn(minDate, hi)
         val state = rememberDatePickerState(
-            initialSelectedDateMillis = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+            initialSelectedDateMillis = shown.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+            yearRange = minDate.year..hi.year,
             selectableDates = object : SelectableDates {
-                override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis >= minMillis
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis in minMillis..maxMillis
+                override fun isSelectableYear(year: Int): Boolean = year in minDate.year..hi.year
             },
         )
         DatePickerDialog(

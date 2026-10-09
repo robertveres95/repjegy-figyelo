@@ -77,22 +77,40 @@ object Store {
 
     @Synchronized
     fun delete(id: String) {
-        persist(_watches.value.filterNot { it.id == id })
-        // Törlésjel: a szinkronizálás így a másik eszközön is törli
+        val gone = _watches.value.find { it.id == id }
+        val list = _watches.value.filterNot { it.id == id }
+        // Törlésjel: a szinkronizálás így a másik eszközön is törli. Legalább az utolsó módosítás
+        // utánra kerül (ha egy másik eszköz órája siet, a törlés akkor is nyerjen).
         val t = tombstones().toMutableMap()
-        t[id] = System.currentTimeMillis()
-        saveTombstones(t)
+        t[id] = stamp(gone?.editedAt ?: 0L)
+        // Egy írásban: ha közben leállna az app, ne maradjon törlésjel nélküli törlés
+        val cutoff = System.currentTimeMillis() - 120L * 24 * 3_600_000L
+        val obj = org.json.JSONObject()
+        t.filterValues { it > cutoff }.forEach { (k, v) -> obj.put(k, v) }
+        val arr = JSONArray()
+        list.forEach { arr.put(it.toJson()) }
+        prefs.edit {
+            putString("watches", arr.toString())
+            putString("tombstones", obj.toString())
+        }
+        _watches.value = list
+        runCatching { Platform.current.watchesChanged() }
         Sync.scheduleSoon()
     }
+
+    /** Módosítási időbélyeg: most, de mindig az előző után (eltérő órájú eszközök között is). */
+    internal fun stamp(previous: Long): Long = maxOf(System.currentTimeMillis(), previous + 1)
 
     /** Felhasználói módosítás (szerkesztés, csengő): megjelöljük az időpontját a szinkronizáláshoz. */
     fun userUpdate(id: String, transform: (Watch) -> Watch) {
-        update(id) { transform(it).copy(editedAt = System.currentTimeMillis()) }
+        update(id) { transform(it).copy(editedAt = stamp(it.editedAt)) }
         Sync.scheduleSoon()
     }
 
+    @Synchronized
     fun userUpsert(watch: Watch) {
-        upsert(watch.copy(editedAt = System.currentTimeMillis()))
+        val prev = _watches.value.find { it.id == watch.id }?.editedAt ?: watch.editedAt
+        upsert(watch.copy(editedAt = stamp(prev)))
         Sync.scheduleSoon()
     }
 

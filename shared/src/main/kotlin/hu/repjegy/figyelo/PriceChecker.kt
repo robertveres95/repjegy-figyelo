@@ -18,12 +18,31 @@ object PriceChecker {
     private class SourceRun(val name: String, val search: suspend () -> List<Offer>)
 
     suspend fun checkAll() {
+        val attempts = loadAttempts()
         Store.watches.value
             .filter { !it.isExpired() }
-            // A legrégebben ellenőrzött először: ha a háttérfutás időkorlátja (Androidon
-            // ~10 perc) közbeszól, a következő futás a kimaradtakkal kezd
-            .sortedBy { it.lastChecked ?: 0L }
-            .forEach { checkOne(it.id) }
+            // A legrégebben ellenőrzött (vagy megkísérelt) először: ha a háttérfutás időkorlátja
+            // (Androidon ~10 perc) egy lassú figyelésnél közbeszól, a következő futás nem ugyanazzal
+            // kezd újra, hanem a kimaradtakkal
+            .sortedBy { maxOf(it.lastChecked ?: 0L, attempts[it.id] ?: 0L) }
+            .forEach { w ->
+                attempts[w.id] = System.currentTimeMillis()
+                saveAttempts(attempts)
+                checkOne(w.id)
+            }
+    }
+
+    private fun loadAttempts(): MutableMap<String, Long> {
+        val o = runCatching { org.json.JSONObject(Store.prefs.getString("checkAttempts", "{}") ?: "{}") }.getOrNull()
+            ?: return mutableMapOf()
+        val ids = Store.watches.value.map { it.id }.toSet()
+        return o.keys().asSequence().filter { it in ids }.associateWith { o.optLong(it, 0L) }.toMutableMap()
+    }
+
+    private fun saveAttempts(m: Map<String, Long>) {
+        val o = org.json.JSONObject()
+        m.forEach { (k, v) -> o.put(k, v) }
+        runCatching { Store.prefs.edit { putString("checkAttempts", o.toString()) } }
     }
 
     suspend fun checkOne(id: String) {
@@ -95,20 +114,25 @@ object PriceChecker {
                     onFailure = { e ->
                         when (e) {
                             is SkipSourceException -> SourceStatus(name, true, e.message ?: "kihagyva")
+                            // Talált ajánlatot, de nem minden kérése sikerült: nem számít teljes válasznak
+                            is PartialSourceException -> SourceStatus(name, false, "${e.offers.size} ajánlat, ${e.message}".take(160))
                             // A szerverek hibaszövege lehet hosszú (akár HTML) – röviden tároljuk
                             else -> SourceStatus(name, false, (e.message ?: e.javaClass.simpleName).take(160))
                         }
                     },
                 )
             }
-            val allOffers = outcomes.flatMap { it.second.getOrNull().orEmpty() }
+            val allOffers = outcomes.flatMap { (_, r) ->
+                r.getOrNull() ?: (r.exceptionOrNull() as? PartialSourceException)?.offers.orEmpty()
+            }
+            // Minden forrás teljesen válaszolt-e (hiányzó válasznál a legolcsóbb ár épp a hiányzó lehet)
+            val allAnswered = statuses.isNotEmpty() && statuses.all { it.ok }
             val offers = rank(watch, allOffers)
 
             if (offers.isEmpty()) {
                 val anyWorked = statuses.any { it.ok }
                 // Csak akkor „nincs járat”, ha minden forrás válaszolt; ha valamelyik hibázott,
                 // a korábbi ár megmarad (lehet, hogy éppen az a forrás ismeri ezt az útvonalat)
-                val allAnswered = statuses.isNotEmpty() && statuses.all { it.ok }
                 Store.update(id) {
                     if (stale(it, watch, currency)) return@update it
                     it.copy(
@@ -134,6 +158,9 @@ object PriceChecker {
                 // Poggyászt kértél, de csak poggyász nélküli fapados alapár jött: ez nem
                 // összevethető a célárral, ezért nem riaszt és nem kerül az árgörbére
                 val comparable = cur.comparable(best)
+                // Ha nem minden forrás válaszolt, és a talált ár drágább a korábbinál, lehet, hogy épp a
+                // hiányzó forrás tudta az olcsóbbat: ilyenkor nem kerül hamis „drágulás” az árgörbére
+                val trusted = allAnswered || cur.lastPrice == null || best.price <= cur.lastPrice
                 val shouldNotify = comparable && cur.notify && best.price <= cur.targetPrice &&
                     (cur.lastNotifiedPrice == null || best.price.toLong() * 100 <= cur.lastNotifiedPrice.toLong() * 98)
                 val next = cur.copy(
@@ -143,11 +170,12 @@ object PriceChecker {
                     lastError = keepCurrencyHint(cur),
                     offers = offers,
                     sourceStatus = statuses,
-                    history = if (comparable) (cur.history + PricePoint(now, best.price)).takeLast(MAX_HISTORY) else cur.history,
+                    history = if (comparable && trusted) (cur.history + PricePoint(now, best.price)).takeLast(MAX_HISTORY) else cur.history,
                     lastNotifiedPrice = when {
                         shouldNotify -> best.price
-                        // Ha visszament a célár fölé, a következő eséskor újra szólunk
-                        comparable && best.price > cur.targetPrice -> null
+                        // Ha visszament a célár fölé, a következő eséskor újra szólunk (csak teljes válasznál:
+                        // egy hibázó forrás miatti „drágulás” ne okozzon dupla értesítést)
+                        comparable && allAnswered && best.price > cur.targetPrice -> null
                         else -> cur.lastNotifiedPrice
                     },
                 )
@@ -173,26 +201,11 @@ object PriceChecker {
     internal suspend fun flexSearch(w: Watch, search: (Watch) -> List<Offer>): List<Offer> {
         val pairs = w.datePairs()
         if (pairs.size <= 1 && w.flexDays == 0) return search(w)
-        val results = mutableListOf<Offer>()
-        var firstError: Exception? = null
-        var anyOk = false
-        for ((index, pair) in pairs.withIndex()) {
-            // ne zúdítsunk egyszerre sok kérést a forrásra; leállításkor (pl. háttérmunka vége) itt megáll
-            if (index > 0) kotlinx.coroutines.delay(400)
-            kotlin.coroutines.coroutineContext.ensureActive()
-            try {
-                results += search(w.copy(outboundDate = pair.first, returnDate = pair.second, flexDays = 0))
-                anyOk = true
-            } catch (e: SkipSourceException) {
-                throw e
-            } catch (e: FatalSourceException) {
-                if (anyOk) break else throw e
-            } catch (e: Exception) {
-                if (firstError == null) firstError = e
-            }
+        val ctx = kotlin.coroutines.coroutineContext
+        // ne zúdítsunk egyszerre sok kérést a forrásra; leállításkor (pl. háttérmunka vége) itt megáll
+        return collectOffers(pairs, betweenEach = { Thread.sleep(400); ctx.ensureActive() }) { pair ->
+            search(w.copy(outboundDate = pair.first, returnDate = pair.second, flexDays = 0))
         }
-        if (!anyOk && firstError != null) throw firstError
-        return results
     }
 
     /** A pénznemváltás miatti „add meg újra a célárat” figyelmeztetés maradjon, amíg az értesítés ki van kapcsolva. */

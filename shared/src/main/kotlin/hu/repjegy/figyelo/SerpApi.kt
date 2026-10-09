@@ -61,14 +61,14 @@ object SerpApi {
                 val first = flights.optJSONObject(0)
                 val last = flights.optJSONObject(flights.length() - 1)
                 val airlines = (0 until flights.length())
-                    .mapNotNull { flights.optJSONObject(it)?.optString("airline")?.takeIf(String::isNotBlank) }
+                    .mapNotNull { flights.optJSONObject(it)?.optString("airline")?.takeIf { it.isNotBlank() && it != "null" } }
                     .distinct()
                 offers += Fees.apply(Offer(
                     price = price,
                     source = NAME,
                     airline = airlines.takeIf { it.isNotEmpty() }?.joinToString(", "),
-                    fromCode = first?.optJSONObject("departure_airport")?.optString("id"),
-                    toCode = last?.optJSONObject("arrival_airport")?.optString("id"),
+                    fromCode = first?.optJSONObject("departure_airport")?.optString("id")?.takeIf { it.length == 3 },
+                    toCode = last?.optJSONObject("arrival_airport")?.optString("id")?.takeIf { it.length == 3 },
                     departure = toIso(first?.optJSONObject("departure_airport")?.optString("time")),
                     arrival = toIso(last?.optJSONObject("arrival_airport")?.optString("time")),
                     stops = if (flights.length() > 0) flights.length() - 1 else null,

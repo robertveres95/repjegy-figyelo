@@ -31,6 +31,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Notifications
@@ -405,6 +410,35 @@ fun BellToggle(on: Boolean, onToggle: () -> Unit) {
             color = tint,
             style = MaterialTheme.typography.labelMedium.copy(fontFamily = AppFont, fontWeight = FontWeight.Bold),
             fontSize = 12.sp,
+        )
+    }
+}
+
+/**
+ * Teljes képernyős takaró réteg (bejelentkezés, frissítés): elnyel minden érintést és görgetést,
+ * hogy ne jusson át az alatta lévő, nem látható képernyőre.
+ */
+fun Modifier.blockInput(): Modifier = this.pointerInput(Unit) {
+    awaitPointerEventScope {
+        while (true) awaitPointerEvent().changes.forEach { it.consume() }
+    }
+}
+
+/**
+ * Középre igazított, de görgethető tartalom: nagy betűméretnél vagy fekvő telefonon sem lóg le
+ * a képernyőről (pl. a bejelentkezés gombja).
+ */
+@Composable
+internal fun CenteredScroll(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
+        val minH = maxHeight
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = minH),
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+            content = content,
         )
     }
 }

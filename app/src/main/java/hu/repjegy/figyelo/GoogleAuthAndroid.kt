@@ -58,6 +58,8 @@ object GoogleAuthAndroid {
         if (activity?.get() !== a) return
         activity = null
         launcher = null
+        // Újraépülésnél (pl. elforgatás a Google ablaka alatt) az új Activity kapja meg az eredményt
+        if (a.isChangingConfigurations) return
         pending?.complete(null)
         pending = null
     }
@@ -81,6 +83,27 @@ object GoogleAuthAndroid {
                 .onFailure { deferred.complete(null) }
         }
         return withTimeoutOrNull(5 * 60_000L) { deferred.await() }
+    }
+
+    /**
+     * Kijelentkezés: a hozzáférés visszavonása a Google-nél (különben a következő bejelentkezés
+     * fiókválasztó nélkül ugyanazt a fiókot adná vissza), majd a token törlése.
+     */
+    suspend fun signOut(context: Context) {
+        val t = runCatching { token(context, interactive = false) }.getOrNull()
+        if (t != null) {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    Http.request(
+                    "https://oauth2.googleapis.com/revoke", method = "POST",
+                    headers = mapOf("Content-Type" to "application/x-www-form-urlencoded"),
+                        body = "token=" + java.net.URLEncoder.encode(t, "UTF-8"), timeoutMs = 20_000,
+                    )
+                }
+                runCatching { GoogleAuthUtil.clearToken(context, t) }
+            }
+        }
+        invalidate(context)
     }
 
     /** Lejárt / visszavont token törlése a Google Play-szolgáltatások gyorsítótárából. */

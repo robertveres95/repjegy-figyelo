@@ -132,7 +132,9 @@ class AndroidPlatform private constructor(private val context: Context) : Platfo
         AppScope.scope.launch { GoogleAuthAndroid.invalidate(context) }
     }
 
-    override fun googleSignOut() = googleInvalidateToken()
+    override fun googleSignOut() {
+        AppScope.scope.launch { GoogleAuthAndroid.signOut(context) }
+    }
 
     override fun googleCancelSignIn() = GoogleAuthAndroid.cancel()
 
@@ -203,12 +205,26 @@ class CheckWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
     override suspend fun doWork(): Result {
         AndroidPlatform.ensure(applicationContext)
         // Előbb a másik eszköz módosításai, utána ellenőrzés, végül a friss árak vissza a felhőbe
-        runCatching { Sync.syncNow() }
-        if (Store.settings.value.intervalHours > 0) PriceChecker.checkAll()
-        runCatching { Sync.syncNow() }
-        Updater.dailyCheck()
-        // A widget frissítése még a háttérmunka vége előtt (utána a folyamat leállhat)
-        runCatching { RefiWidget().updateAll(applicationContext) }
+        try {
+            runCatching { Sync.syncNow() }
+            // Egy váratlan hiba az ellenőrzésben ne vigye el a szinkront, a frissítésfigyelést és a widgetet
+            if (Store.settings.value.intervalHours > 0) {
+                try {
+                    PriceChecker.checkAll()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                }
+            }
+            runCatching { Sync.syncNow() }
+            runCatching { Updater.dailyCheck() }
+        } finally {
+            // A widget frissítése még a háttérmunka vége előtt (utána a folyamat leállhat) – akkor is,
+            // ha a rendszer közben leállította a munkát
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                runCatching { RefiWidget().updateAll(applicationContext) }
+            }
+        }
         return Result.success()
     }
 }

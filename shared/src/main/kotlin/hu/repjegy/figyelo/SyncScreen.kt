@@ -15,6 +15,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -27,6 +30,16 @@ private val syncTime = DateTimeFormatter.ofPattern("MMM d. HH:mm", HU)
 @Composable
 internal fun SyncSection() {
     val s by Sync.state.collectAsState()
+    var confirmLogout by remember { mutableStateOf(false) }
+    if (confirmLogout) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmLogout = false },
+            title = { Text("Kijelentkezel?") },
+            text = { Text("A REFI használatához be kell jelentkezni, így kijelentkezés után rögtön a bejelentkezés jön. A figyeléseid megmaradnak.") },
+            confirmButton = { TextButton(onClick = { confirmLogout = false; Sync.disable() }) { Text("Kijelentkezés") } },
+            dismissButton = { TextButton(onClick = { confirmLogout = false }) { Text("Mégse") } },
+        )
+    }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             "A figyeléseid a Google-fiókodba mentődnek (egy rejtett, csak a REFI által látható helyre), " +
@@ -35,10 +48,10 @@ internal fun SyncSection() {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (!s.enabled) {
-            Button(onClick = { AppScope.scope.launch { Sync.enable() } }, enabled = !s.running) {
-                Text(if (s.running) "Bejelentkezés…" else "Bejelentkezés Google-fiókkal")
+            Button(onClick = { AppScope.scope.launch { Sync.enable() } }, enabled = !s.busy) {
+                Text(if (s.busy) "Bejelentkezés…" else "Bejelentkezés Google-fiókkal")
             }
-            if (s.running) {
+            if (s.busy) {
                 TextButton(onClick = { Platform.current.googleCancelSignIn() }) { Text("Mégse") }
             }
         } else {
@@ -57,16 +70,16 @@ internal fun SyncSection() {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { AppScope.scope.launch { Sync.syncNow() } }, enabled = !s.running) {
+                OutlinedButton(onClick = { AppScope.scope.launch { Sync.syncNow() } }, enabled = !s.busy) {
                     Text("Szinkronizálás most")
                 }
-                TextButton(onClick = { Sync.disable() }) { Text("Kijelentkezés") }
+                TextButton(onClick = { confirmLogout = true }) { Text("Kijelentkezés") }
             }
         }
         s.error?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             if (s.enabled) {
-                TextButton(onClick = { AppScope.scope.launch { Sync.enable() } }, enabled = !s.running) { Text("Újra bejelentkezés") }
+                TextButton(onClick = { AppScope.scope.launch { Sync.enable() } }, enabled = !s.busy) { Text("Újra bejelentkezés") }
             }
         }
     }
@@ -77,14 +90,14 @@ internal fun SyncSection() {
  * (szinkronizálás, és nem vesznek el telefoncserénél). Amíg nincs bejelentkezés, ez takarja az appot.
  */
 @Composable
-internal fun LoginGate() {
+internal fun LoginGate(onSkip: () -> Unit = {}) {
     val s by Sync.state.collectAsState()
-    androidx.compose.foundation.layout.Box(
+    CenteredScroll(
         androidx.compose.ui.Modifier
             .fillMaxSize()
+            .blockInput()
             .background(Neon.Black)
             .padding(24.dp),
-        contentAlignment = androidx.compose.ui.Alignment.Center,
     ) {
         NeonCard(modifier = androidx.compose.ui.Modifier.fillMaxWidth().enterAnimation()) {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -107,12 +120,12 @@ internal fun LoginGate() {
                 )
                 Button(
                     onClick = { AppScope.scope.launch { Sync.enable() } },
-                    enabled = !s.running,
+                    enabled = !s.busy,
                     modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
                 ) {
-                    Text(if (s.running) "Bejelentkezés folyamatban…" else "Bejelentkezés Google-fiókkal")
+                    Text(if (s.busy) "Bejelentkezés folyamatban…" else "Bejelentkezés Google-fiókkal")
                 }
-                if (s.running) {
+                if (s.busy) {
                     Text(
                         "Válaszd ki a fiókodat a megnyíló Google-ablakban.",
                         style = MaterialTheme.typography.bodyMedium,
@@ -122,6 +135,18 @@ internal fun LoginGate() {
                 }
                 s.error?.let {
                     Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                    if (!s.busy) {
+                        // Ha nem megy (nincs internet, nincs Google Play, nem nyílik böngésző), ne zárja ki
+                        // a figyeléseiből: erre az indításra tovább lehet lépni, legközelebb újra kéri
+                        Text(
+                            "Ha most nem sikerül (pl. nincs internet), később a Beállításokban is bejelentkezhetsz.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        OutlinedButton(onClick = onSkip, modifier = androidx.compose.ui.Modifier.fillMaxWidth()) {
+                            Text("Folytatás most bejelentkezés nélkül")
+                        }
+                    }
                 }
                 TextButton(onClick = { Platform.current.openUrl("https://github.com/robertveres95/repjegy-figyelo/blob/main/PRIVACY.md") }) {
                     Text("Adatkezelési tájékoztató")

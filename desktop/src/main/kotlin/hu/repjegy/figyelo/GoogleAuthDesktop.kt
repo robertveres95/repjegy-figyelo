@@ -109,9 +109,17 @@ object GoogleAuthDesktop {
         waiting?.completeExceptionally(java.util.concurrent.CancellationException("új bejelentkezés"))
         waiting = result
         server.createContext("/") { ex ->
-            val params = (ex.requestURI.rawQuery ?: "").split('&').filter { it.contains('=') }.associate {
+            val params = (ex.requestURI.rawQuery ?: "").split('&').filter { it.contains('=') }.mapNotNull {
                 val (k, v) = it.split('=', limit = 2)
-                URLDecoder.decode(k, "UTF-8") to URLDecoder.decode(v, "UTF-8")
+                runCatching { URLDecoder.decode(k, "UTF-8") to URLDecoder.decode(v, "UTF-8") }.getOrNull()
+            }.toMap()
+            // Csak a saját (helyes state-ű) visszahívás számít; egy böngésző-előtöltés, favicon-kérés
+            // vagy más helyi program kérése nem szakíthatja meg a bejelentkezést
+            val ours = params["state"] == state && (params["code"] != null || params["error"] != null)
+            if (!ours) {
+                ex.sendResponseHeaders(404, -1)
+                ex.close()
+                return@createContext
             }
             val ok = params["code"] != null && params["state"] == state
             val html = if (ok) "<h2>REFI: sikeres bejelentkezés.</h2><p>Ezt a lapot bezárhatod, és visszatérhetsz az apphoz.</p>"
@@ -120,7 +128,7 @@ object GoogleAuthDesktop {
             ex.responseHeaders.add("Content-Type", "text/html; charset=utf-8")
             ex.sendResponseHeaders(200, bytes.size.toLong())
             ex.responseBody.use { it.write(bytes) }
-            if (params.isNotEmpty()) result.complete(params)
+            result.complete(params)
         }
         server.start()
         try {
@@ -133,7 +141,8 @@ object GoogleAuthDesktop {
                 "code_challenge" to challenge,
                 "code_challenge_method" to "S256",
                 "access_type" to "offline",
-                "prompt" to "consent",
+                // Fiókválasztó is: kijelentkezés után más fiókkal is be lehessen lépni
+                "prompt" to "select_account consent",
                 "state" to state,
             )
             Platform.current.openUrl(url)

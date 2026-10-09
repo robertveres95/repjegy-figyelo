@@ -37,7 +37,13 @@ class MainActivity : ComponentActivity() {
         AndroidPlatform.ensure(this)
         FileBridge.register(this)
         GoogleAuthAndroid.register(this)
-        handleShare(intent)
+        // Csak friss indításnál: ha a rendszer később újraépíti az appot (vagy az előzményekből nyílik),
+        // a régi megosztás nem jön fel újra
+        if (savedInstanceState == null &&
+            (intent.flags and android.content.Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0
+        ) {
+            handleShare(intent)
+        }
 
         // Csak az első indításkor kérdezünk (újralétrehozáskor ne kérje újra)
         if (savedInstanceState == null && Build.VERSION.SDK_INT >= 33 &&
@@ -59,6 +65,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         handleShare(intent)
     }
 

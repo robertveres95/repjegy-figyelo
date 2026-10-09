@@ -3,6 +3,7 @@ package hu.repjegy.figyelo
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -32,7 +33,11 @@ object Sync {
         val lastSync: Long? = null,
         val running: Boolean = false,
         val error: String? = null,
-    )
+        /** Bejelentkezés folyamatban (a Google ablaka nyitva) – a háttér-szinkron nem írja felül. */
+        val signingIn: Boolean = false,
+    ) {
+        val busy: Boolean get() = running || signingIn
+    }
 
     val state = MutableStateFlow(State())
 
@@ -51,18 +56,22 @@ object Sync {
 
     /** Bejelentkezés (ha kell, a Google ablakával) és az első szinkronizálás. */
     suspend fun enable(): Boolean {
-        state.value = state.value.copy(running = true, error = null)
-        val token = runCatching { Platform.current.googleAccessToken(interactive = true) }.getOrNull()
-        if (token == null) {
-            state.value = state.value.copy(running = false, error = "A bejelentkezés nem sikerült vagy megszakadt.")
-            return false
+        state.update { it.copy(signingIn = true, error = null) }
+        try {
+            val token = runCatching { Platform.current.googleAccessToken(interactive = true) }.getOrNull()
+            if (token == null) {
+                state.update { it.copy(error = "A bejelentkezés nem sikerült vagy megszakadt.") }
+                return false
+            }
+            val email = runCatching { accountEmail(token) }.getOrNull()
+            Store.prefs.edit {
+                putBoolean("syncOn", true)
+                email?.let { putString("syncAccount", it) }
+            }
+            state.update { it.copy(enabled = true, account = email) }
+        } finally {
+            state.update { it.copy(signingIn = false) }
         }
-        val email = runCatching { accountEmail(token) }.getOrNull()
-        Store.prefs.edit {
-            putBoolean("syncOn", true)
-            email?.let { putString("syncAccount", it) }
-        }
-        state.value = state.value.copy(enabled = true, account = email, running = false)
         return syncNow()
     }
 
@@ -90,21 +99,23 @@ object Sync {
     suspend fun syncNow(): Boolean {
         if (!state.value.enabled) return false
         return mutex.withLock {
-            state.value = state.value.copy(running = true)
+            // Közben kijelentkezhetett: akkor már nem töltünk fel semmit
+            if (!state.value.enabled) return@withLock false
+            state.update { it.copy(running = true) }
             try {
                 syncOnce()
                 val now = System.currentTimeMillis()
                 Store.prefs.edit { putLong("syncLast", now) }
-                state.value = state.value.copy(lastSync = now, error = null)
+                state.update { it.copy(lastSync = now, error = null) }
                 true
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // Egy újabb módosítás miatt újraindul – ez nem hiba
                 throw e
             } catch (e: Exception) {
-                state.value = state.value.copy(error = "Szinkronizálási hiba: ${e.message?.take(120)}")
+                state.update { it.copy(error = "Szinkronizálási hiba: ${e.message?.take(120)}") }
                 false
             } finally {
-                state.value = state.value.copy(running = false)
+                state.update { it.copy(running = false) }
             }
         }
     }
@@ -129,7 +140,10 @@ object Sync {
             val dl = Http.request("$API/files/$fileId?alt=media", headers = auth, timeoutMs = 30_000)
             check401(dl.code, dl.body)
             if (dl.code !in 200..299) throw IOException("Drive HTTP ${dl.code}")
+            // Ha a meglévő fájl nem olvasható (sérült, vagy egy újabb app-verzió formátuma),
+            // semmiképp ne írjuk felül a helyi adatokkal – különben a felhőben lévő elveszne
             remote = parse(dl.body)
+                ?: throw IOException("a felhőben lévő adat nem olvasható – frissítsd a REFI-t a legújabb verzióra")
         }
         // A pénznem-átváltás (hálózat) még az összefésülés előtt; ha nem megy, most kihagyjuk,
         // különben a felhőbe a másik eszköz változásai nélkül töltenénk fel
@@ -141,6 +155,10 @@ object Sync {
         // Az összefésülés a tároló zárján belül, a legfrissebb helyi állapottal (közben érkezett
         // szerkesztés, törlés vagy ár nem vész el)
         val merged = Store.mergeFromSync(remoteWatches.orEmpty(), remote?.tombstones.orEmpty())
+        // Ha egy-egy figyelés nem volt beolvasható, a feltöltés kihagyná őket: inkább nem töltünk fel
+        if (remote != null && remote.skipped > 0) {
+            throw IOException("${remote.skipped} figyelés a felhőben nem olvasható – frissítsd a REFI-t a legújabb verzióra")
+        }
 
         // 3. Feltöltés (csak ha változott a felhőben lévőhöz képest)
         val body = serialize(merged.first, merged.second, currency)
@@ -188,7 +206,7 @@ object Sync {
 
     // ------------------------------------------------------------ formátum és összefésülés
 
-    internal class Snapshot(val watches: List<Watch>, val tombstones: Map<String, Long>, val currency: String)
+    internal class Snapshot(val watches: List<Watch>, val tombstones: Map<String, Long>, val currency: String, val skipped: Int = 0)
 
     internal fun serialize(watches: List<Watch>, tombstones: Map<String, Long>, currency: String): String =
         JSONObject()
@@ -203,6 +221,8 @@ object Sync {
     internal fun parse(text: String): Snapshot? {
         val json = runCatching { JSONObject(text) }.getOrNull() ?: return null
         if (json.optString("format") != FORMAT) return null
+        // Újabb, ismeretlen formátumverziót nem fésülünk össze (és nem írunk felül)
+        if (json.optInt("version", 1) > 1) return null
         val arr = json.optJSONArray("watches") ?: JSONArray()
         val list = (0 until arr.length()).mapNotNull { i ->
             arr.optJSONObject(i)?.let { o -> runCatching { Watch.fromJson(o).sanitized() }.getOrNull() }
@@ -210,7 +230,7 @@ object Sync {
         val t = json.optJSONObject("tombstones")
         val tomb = t?.keys()?.asSequence()?.associateWith { t.optLong(it, 0L) }.orEmpty()
         val cur = json.optString("currency", "HUF").takeIf { c -> CURRENCIES.any { it.first == c } } ?: "HUF"
-        return Snapshot(list, tomb, cur)
+        return Snapshot(list, tomb, cur, skipped = arr.length() - list.size)
     }
 
     /** Más pénznemben tárolt figyelések célárának átváltása (az árak törlődnek, a következő ellenőrzés frissíti). */

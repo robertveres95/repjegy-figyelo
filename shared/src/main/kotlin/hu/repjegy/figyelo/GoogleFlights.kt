@@ -39,10 +39,14 @@ object GoogleFlights {
         if (pairs.size > 1 && allowFallback) {
             val results = pairs.take(6).map { (o, d) ->
                 Thread.sleep(700)
-                runCatching { fetch(w.copy(from = o, to = d), currency) }.getOrNull()
+                // Korlátozásnál (429) nem bombázzuk tovább a Google-t
+                try { fetch(w.copy(from = o, to = d), currency) } catch (e: FatalSourceException) { throw e } catch (e: Exception) { null }
             }
             if (results.any { it != null && !it.errorStatus }) {
-                return results.filterNotNull().flatMap { it.offers }
+                val offers = results.filterNotNull().flatMap { it.offers }
+                val failed = results.count { it == null || it.errorStatus }
+                if (failed > 0) throw PartialSourceException(offers, failed, results.size, null)
+                return offers
             }
         }
         // Nem „nincs járat”: a forrás hibázott, így a korábbi ár megmarad

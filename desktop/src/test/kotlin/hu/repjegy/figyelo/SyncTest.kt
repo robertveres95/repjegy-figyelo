@@ -91,4 +91,27 @@ class SyncTest {
         assertNull(Sync.parse("{\"format\":\"más\"}"))
         assertTrue(Sync.parse("szemét") == null)
     }
+
+    @Test fun newerFormatAndBrokenWatchesAreNotSilentlyDropped() {
+        // Egy későbbi app-verzió formátumát nem fésüljük össze (különben a régi app felülírná)
+        val v2 = Sync.serialize(listOf(w("a")), emptyMap(), "HUF").replace("\"version\":1", "\"version\":2")
+        assertNull(Sync.parse(v2))
+        // Egy beolvashatatlan figyelés: számon tartjuk, hogy a feltöltés ne törölje ki a felhőből
+        val broken = Sync.serialize(listOf(w("a"), w("b")), emptyMap(), "HUF")
+            .replaceFirst("\"adults\":1", "\"adults\":0")
+        val snap = assertNotNull(Sync.parse(broken))
+        assertEquals(1, snap.watches.size)
+        assertEquals(1, snap.skipped)
+    }
+
+    @Test fun stampIsMonotonicEvenWithFutureClock() {
+        // Egy siető órájú eszköz „jövőbeli” módosítása után a mostani módosítás is későbbi legyen
+        val future = System.currentTimeMillis() + 3_600_000L
+        assertTrue(Store.stamp(future) > future)
+        val now = System.currentTimeMillis()
+        assertTrue(Store.stamp(0L) >= now)
+        // A törlés így a jövőbeli módosítás után is nyer
+        val (m, _) = Sync.merge(listOf(w("a", edited = future)), emptyMap(), emptyList(), mapOf("a" to Store.stamp(future)))
+        assertTrue(m.isEmpty())
+    }
 }

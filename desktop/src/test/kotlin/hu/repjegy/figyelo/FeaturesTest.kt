@@ -51,13 +51,32 @@ class FeaturesTest {
 
     @Test fun flexSearchMergesAndToleratesPartialFailure() {
         var calls = 0
-        val res = kotlinx.coroutines.runBlocking { PriceChecker.flexSearch(watch(out = LocalDate.now().plusDays(20).toString(), ret = null, flex = 1)) { w ->
+        // Egy nap hibázott: a többi nap ajánlatai megmaradnak, de a forrás „részleges” (nem teljes válasz)
+        val partial = runCatching { kotlinx.coroutines.runBlocking { PriceChecker.flexSearch(watch(out = LocalDate.now().plusDays(20).toString(), ret = null, flex = 1)) { w ->
             calls++
             if (calls == 2) throw java.io.IOException("egy nap hibázott")
             listOf(Offer(1000 + calls, "x", departure = w.outboundDate + "T10:00"))
-        } }
+        } } }.exceptionOrNull()
         assertEquals(3, calls)
-        assertEquals(2, res.size)
+        assertTrue(partial is PartialSourceException)
+        assertEquals(2, (partial as PartialSourceException).offers.size)
+        assertEquals(1, partial.failed)
+    }
+
+    @Test fun collectOffersOutcomes() {
+        // Minden sikerül → sima lista
+        assertEquals(2, collectOffers(listOf(1, 2)) { listOf(Offer(it, "x")) }.size)
+        // Mind hibázik → az első hiba
+        val allFail = runCatching { collectOffers(listOf(1, 2)) { throw java.io.IOException("hiba $it") } }.exceptionOrNull()
+        assertEquals("hiba 1", allFail?.message)
+        // Letiltás az első után → részleges, a maradék is hibásnak számít
+        val fatal = runCatching {
+            collectOffers(listOf(1, 2, 3)) { if (it == 1) listOf(Offer(1, "x")) else throw FatalSourceException("tiltás") }
+        }.exceptionOrNull()
+        assertTrue(fatal is PartialSourceException)
+        assertEquals(2, (fatal as PartialSourceException).failed)
+        // Letiltás rögtön → maga a letiltás
+        assertTrue(runCatching { collectOffers(listOf(1, 2)) { throw FatalSourceException("tiltás") } }.exceptionOrNull() is FatalSourceException)
     }
 
     // ---------------- Szűrők

@@ -50,11 +50,33 @@ object DesktopPrefs : Prefs {
     }
     private val props = Properties()
     private var loaded = false
+    /**
+     * Ha a meglévő fájl nem olvasható be (pl. a vírusirtó épp zárolja induláskor), nem írjuk felül
+     * az üres állapottal – különben minden figyelés és beállítás elveszne. Ilyenkor csak a memóriában
+     * dolgozunk, a fájlról másolat készül, és a következő indítás újra megpróbálja.
+     */
+    private var readOnly = false
 
     @Synchronized
     private fun p(): Properties {
         if (!loaded) {
-            if (file.exists()) runCatching { file.reader(Charsets.UTF_8).use { props.load(it) } }
+            if (file.exists()) {
+                var ok = false
+                for (attempt in 1..5) {
+                    ok = runCatching {
+                        val fresh = Properties()
+                        file.reader(Charsets.UTF_8).use { fresh.load(it) }
+                        props.clear()
+                        props.putAll(fresh)
+                    }.isSuccess
+                    if (ok) break
+                    Thread.sleep(400L * attempt)
+                }
+                if (!ok) {
+                    readOnly = true
+                    runCatching { file.copyTo(File(file.parentFile, "refi.properties.olvashatatlan-${System.currentTimeMillis()}")) }
+                }
+            }
             loaded = true
         }
         return props
@@ -74,6 +96,7 @@ object DesktopPrefs : Prefs {
             override fun putInt(key: String, value: Int) { props.setProperty(key, value.toString()) }
             override fun putLong(key: String, value: Long) { props.setProperty(key, value.toString()) }
         }.block()
+        if (readOnly) return
         // Előbb ideiglenes fájlba, aztán csere: áramszünetnél se sérüljön.
         // Ha a mappa nem írható (pl. teli lemez), az app ne omoljon össze: a változás
         // a memóriában megmarad, és a következő sikeres mentéskor kiíródik.
@@ -159,11 +182,24 @@ object TrayNotifier {
 
 /** Csendes órákban gyűjtött riasztások; a csendes idő végén egyben jelezzük őket. */
 object QuietQueue {
-    private val items = mutableListOf<String>()
+    // Fájlba is mentjük: ha éjjel újraindul a gép (pl. Windows-frissítés), reggel se maradjon el az értesítés
+    private val items: MutableList<String> by lazy {
+        runCatching {
+            val arr = org.json.JSONArray(Store.prefs.getString("quietQueue", "[]") ?: "[]")
+            (0 until arr.length()).map { arr.optString(it) }.filter { it.isNotBlank() }.toMutableList()
+        }.getOrNull() ?: mutableListOf()
+    }
+
+    private fun save() {
+        val arr = org.json.JSONArray()
+        items.takeLast(50).forEach { arr.put(it) }
+        runCatching { Store.prefs.edit { putString("quietQueue", arr.toString()) } }
+    }
 
     @Synchronized
     fun add(title: String) {
         items += title
+        save()
     }
 
     @Synchronized
@@ -172,6 +208,7 @@ object QuietQueue {
         val text = items.takeLast(5).joinToString("\n") + if (items.size > 5) "\n… és még ${items.size - 5}" else ""
         TrayNotifier.send("Éjszaka ${items.size} ár esett a célár alá", text)
         items.clear()
+        save()
     }
 }
 
@@ -189,10 +226,17 @@ object BackgroundLoop {
             while (isActive) {
                 val hours = Store.settings.value.intervalHours
                 val now = System.currentTimeMillis()
-                val last = Store.prefs.getLong("lastAutoCheck", 0L)
+                // A jövőbeli időpont (pl. előreállt, majd visszaállított óra) se akassza meg az ellenőrzést
+                val last = Store.prefs.getLong("lastAutoCheck", 0L).takeIf { it <= now } ?: 0L
                 if (hours > 0 && now - last >= hours * 3_600_000L) {
-                    Store.prefs.edit { putLong("lastAutoCheck", now) }
                     runCatching { PriceChecker.checkAll() }
+                    // Csak akkor számít lefutottnak, ha legalább egy forrás válaszolt: alvásból ébredés
+                    // után gyakran még nincs net – ilyenkor 10 perc múlva újrapróbálja, nem csak órák múlva
+                    val active = Store.watches.value.filter { !it.isExpired() }
+                    val anyAnswer = active.isEmpty() || active.any { w ->
+                        (w.lastChecked ?: 0L) >= now && w.sourceStatus.any { it.ok }
+                    }
+                    if (anyAnswer) Store.prefs.edit { putLong("lastAutoCheck", now) }
                 }
                 runCatching { Updater.dailyCheck() }
                 runCatching { QuietQueue.flushIfAwake() }
