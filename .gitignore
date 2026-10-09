@@ -4,3 +4,6 @@ local.properties
 .idea/
 *.iml
 .DS_Store
+
+# Aláíró kulcsok soha ne kerüljenek a tárolóba (a kiadó kulcs GitHub-titokban van)
+*.jks

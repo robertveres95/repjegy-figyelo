@@ -95,12 +95,13 @@ jobs:
           echo "build-tools: $BT"
           "$BT/zipalign" -f 4 app/build/outputs/apk/release/app-release-unsigned.apk aligned.apk
           OLD=(--ks app/debug.keystore --ks-pass pass:android --ks-key-alias androiddebugkey --key-pass pass:android)
-          # Az aláíró kulcs a GitHub titkai közül jön (nem a nyilvános tárolóból); átmenetileg még a régi helyről is
-          KS=app/refi-release.jks
+          # Az aláíró kulcs a GitHub titkai közül jön (REFI_KEYSTORE_B64), nem a nyilvános tárolóból
+          KS="$RUNNER_TEMP/refi-release.jks"
           if [ -n "${REFI_KEYSTORE_B64:-}" ]; then
-            KS="$RUNNER_TEMP/refi-release.jks"
             printf '%s' "$REFI_KEYSTORE_B64" | tr -d '\r\n ' | base64 -d > "$KS"
-            echo "Aláíró kulcs: GitHub-titokból"
+            echo "::notice::Aláíró kulcs: GitHub-titokból"
+          else
+            REFI_KEYSTORE_PASS=""
           fi
           if [ -n "${REFI_KEYSTORE_PASS:-}" ]; then
             NEW=(--ks "$KS" --ks-pass env:REFI_KEYSTORE_PASS --ks-key-alias refi --key-pass env:REFI_KEYSTORE_PASS)
@@ -112,7 +113,7 @@ jobs:
               --v4-signing-enabled false --out REFI.apk aligned.apk
           else
             if [ "$PUBLISH" = "true" ]; then
-              echo "::error::Hiányzik a REFI_KEYSTORE_PASS titok – éles kiadás csak az új kulccsal készülhet"
+              echo "::error::Hiányzik a REFI_KEYSTORE_PASS vagy a REFI_KEYSTORE_B64 titok – éles kiadás csak az új kulccsal készülhet"
               exit 1
             fi
             echo "::warning::Nincs REFI_KEYSTORE_PASS titok: a teszt-build a régi fejlesztői kulccsal készül"
