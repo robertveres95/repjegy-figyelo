@@ -601,7 +601,7 @@ private fun WatchCard(
                         color = if (belowTarget) good else Neon.Text,
                     )
                     if (belowTarget) {
-                        Text("▼ CÉLÁR ALATT", style = MaterialTheme.typography.labelSmall, color = Neon.Green)
+                        Text("▼ CÉLÁR ALATT", style = MaterialTheme.typography.labelSmall, color = Neon.Mint)
                     }
                 }
                 Column(horizontalAlignment = Alignment.End) {
@@ -624,7 +624,7 @@ private fun WatchCard(
                     v.text,
                     style = MaterialTheme.typography.bodyMedium,
                     color = when (v.tone) {
-                        Verdict.Tone.GOOD -> Neon.Green
+                        Verdict.Tone.GOOD -> Neon.Mint
                         Verdict.Tone.WAIT -> Neon.Amber
                         Verdict.Tone.NEUTRAL -> MaterialTheme.colorScheme.onSurfaceVariant
                     },
