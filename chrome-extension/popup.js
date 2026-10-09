@@ -25,27 +25,11 @@ const store = {
 
 // ------------------------------------------------------------ Google-bejelentkezés
 
-function authUrl(interactive) {
-  const p = new URLSearchParams({
-    client_id: REFI_CONFIG.clientId,
-    response_type: 'token',
-    redirect_uri: chrome.identity.getRedirectURL(),
-    scope: SCOPE,
-    include_granted_scopes: 'true',
-    // Csendes megújításnál nincs ablak; bejelentkezéskor fiókválasztó (a családban több fiók is lehet)
-    prompt: interactive ? 'select_account' : 'none',
-  });
-  return 'https://accounts.google.com/o/oauth2/v2/auth?' + p;
-}
-
+// A bejelentkezést a háttér-szkript végzi (background.js), mert ez az ablak bezárulhat közben
 async function signIn(interactive) {
-  const redirect = await chrome.identity.launchWebAuthFlow({ url: authUrl(interactive), interactive });
-  const params = new URLSearchParams(new URL(redirect).hash.slice(1));
-  const token = params.get('access_token');
-  if (!token) throw new Error(params.get('error') || 'nincs hozzáférés');
-  const expires = Date.now() + (Number(params.get('expires_in') || 3600) - 60) * 1000;
-  await store.set({ token, expires });
-  return token;
+  const r = await chrome.runtime.sendMessage({ type: 'signin', interactive });
+  if (!r || !r.token) throw new Error((r && r.error) || 'nincs hozzáférés');
+  return r.token;
 }
 
 async function validToken() {
@@ -246,6 +230,16 @@ async function refresh(interactive) {
 }
 
 async function start() {
+  // Ha a bejelentkezés a háttérben befejeződik, amíg ez az ablak nyitva van, frissítünk
+  if (hasChrome) {
+    chrome.storage.onChanged.addListener((changes) => {
+      if (changes.token && changes.token.newValue) refresh(false);
+      if (changes.authError && changes.authError.newValue) {
+        $('error').textContent = `A bejelentkezés nem sikerült: ${changes.authError.newValue}`;
+        show('error');
+      }
+    });
+  }
   $('signin-btn').addEventListener('click', () => refresh(true));
   $('refresh').addEventListener('click', () => refresh(false));
   $('signout').addEventListener('click', async () => {
