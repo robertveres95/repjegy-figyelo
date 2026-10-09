@@ -21,6 +21,12 @@ import androidx.compose.ui.unit.dp
  */
 object WhatsNew {
     val notes: List<Pair<String, List<String>>> = listOf(
+        "1.3.3" to listOf(
+            "Windowson a frissítés egy kattintás: a REFI maga tölti le és telepíti az új verziót.",
+            "Beállítható, hogy a REFI elinduljon-e a Windowszal.",
+            "Még megbízhatóbb szinkronizálás, ha több eszközön is használod.",
+            "Pontosabb Wizz Air-keresés és apró javítások.",
+        ),
         "1.3.2" to listOf(
             "Új, szemkímélőbb kék színvilág.",
             "Részletesebb árgörbe: dátumokkal, a legmagasabb és legalacsonyabb árral, poggyász nélküli utaknál a Google 2 hetes árelőzményével is.",
