@@ -51,6 +51,11 @@ jobs:
           VERSION=$(grep '^VERSION_NAME=' version.properties | cut -d= -f2 | tr -d '[:space:]')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           if [[ "${{ github.ref_type }}" == "tag" || "${{ inputs.publish }}" == "true" ]]; then
+            # Éles kiadáshoz kötelező az „Újdonságok” szövege ehhez a verzióhoz (WhatsNew.kt)
+            if ! grep -qF "\"$VERSION\" to listOf(" shared/src/main/kotlin/hu/repjegy/figyelo/WhatsNew.kt; then
+              echo "::error::Hiányzik a(z) $VERSION verzió újdonság-szövege a WhatsNew.kt-ból"
+              exit 1
+            fi
             echo "publish=true" >> "$GITHUB_OUTPUT"
             echo "tag=v$VERSION-build-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
             echo "name=REFI $VERSION" >> "$GITHUB_OUTPUT"

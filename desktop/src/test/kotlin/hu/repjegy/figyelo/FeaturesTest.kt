@@ -63,6 +63,15 @@ class FeaturesTest {
         assertEquals(1, partial.failed)
     }
 
+    @Test fun whatsNewVersionsAndOrder() {
+        assertTrue(WhatsNew.compare("1.3.10", "1.3.9") > 0)
+        assertEquals(0, WhatsNew.compare("1.3", "1.3.0"))
+        // A legújabb verzió legyen elöl, és mindegyiknek legyen szövege
+        val versions = WhatsNew.notes.map { it.first }
+        assertEquals(versions.sortedWith { a, b -> WhatsNew.compare(b, a) }, versions)
+        assertTrue(WhatsNew.notes.all { it.second.isNotEmpty() })
+    }
+
     @Test fun collectOffersOutcomes() {
         // Minden sikerül → sima lista
         assertEquals(2, collectOffers(listOf(1, 2)) { listOf(Offer(it, "x")) }.size)

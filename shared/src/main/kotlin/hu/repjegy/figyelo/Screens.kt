@@ -162,6 +162,8 @@ fun AppRoot() {
     val loginGate = !showSplash && !sync.enabled && !loginSkipped
     // Ami alatta van, csak akkor reagálhat (pl. megosztott kód), ha semmi sem takarja
     val uncovered = !showSplash && !loginGate && update == null
+    // Új verzió első megnyitásakor: mi változott (a bejelentkezés után, frissítési kérés nélkül)
+    var whatsNew by remember { mutableStateOf(runCatching { WhatsNew.pending() }.getOrDefault(emptyList())) }
 
     Box(Modifier.fillMaxSize().background(Neon.Black)) {
         AnimatedContent(
@@ -196,6 +198,13 @@ fun AppRoot() {
         // A repülő után kötelező a Google-bejelentkezés (adattárolás és szinkronizálás)
         AnimatedVisibility(visible = loginGate, enter = fadeIn(tween(500)), exit = fadeOut(tween(300))) {
             LoginGate(onSkip = { loginSkipped = true })
+        }
+
+        AnimatedVisibility(visible = uncovered && whatsNew.isNotEmpty(), enter = fadeIn(tween(500)), exit = fadeOut(tween(300))) {
+            WhatsNewOverlay(whatsNew) {
+                WhatsNew.markSeen()
+                whatsNew = emptyList()
+            }
         }
 
         // A kötelező frissítés mindennél előrébb való (régi verzióval a bejelentkezés sem biztos, hogy működik)

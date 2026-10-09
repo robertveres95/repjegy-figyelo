@@ -101,6 +101,7 @@ class ScreenshotTest {
         )
         shot("06-felfedezes", heightDp = 1400) { DiscoverScreen(onBack = {}, onPick = {}, initialResults = results) }
         shot("08-bejelentkezes") { LoginGate() }
+        shot("09-ujdonsagok") { WhatsNewOverlay(WhatsNew.notes.take(1)) {} }
         val code = ShareCode.message(london, "HUF")
         shot("07-kod-beillesztese") {
             HomeScreen(onAdd = {}, onEdit = {}, onSettings = {})
