@@ -72,6 +72,38 @@ class FeaturesTest {
         assertTrue(WhatsNew.notes.all { it.second.isNotEmpty() })
     }
 
+    @Test fun googleInsightParsing() {
+        // A Google válaszának valós szerkezete (rövidítve): [szint, [null, ár], …, [[ms, ár], …]]
+        val snippet = JSONArray("""[[null,[1,2]],["x",[2,[null,29160],[null,34094],[null,4934],[null,25500],[null,51000],1,null,null,null,
+            [[1786226400000,30380],[1786312800000,34180],[1786399200000,32001]]]]]""")
+        val m = assertNotNull(GoogleFlights.findInsight(snippet))
+        assertEquals(3, m.points.size)
+        assertEquals(30380, m.points.first().price)
+        assertEquals(25500, m.typicalLow)
+        assertEquals(51000, m.typicalHigh)
+        // Mentés és visszaolvasás a figyeléssel együtt
+        val w = watch().copy(market = m)
+        assertEquals(m.points, Watch.fromJson(w.toJson()).market?.points)
+        // Más keresésnél (pl. új dátum) törlődik
+        assertNull(w.clearResults().market)
+        assertNull(GoogleFlights.findInsight(JSONArray("[[1,2,3],[null,5]]")))
+    }
+
+    @Test fun chartShowsTwoWeeksBeforeOwnMeasurements() {
+        val day = 86_400_000L
+        val start = 1_800_000_000_000L
+        val market = (0 until 60).map { PricePoint(start - (60 - it) * day, 1000 + it) }
+        val own = listOf(PricePoint(start, 900), PricePoint(start + day / 4, 950))
+        val d = chartDataFor(watch().copy(history = own, market = MarketInsight(market, null, null, start)), now = start + day)
+        assertTrue(d.market.size in 13..14, "${d.market.size}")
+        assertTrue(d.market.all { it.time < start && it.time >= start - 14 * day })
+        assertEquals(start, d.boundary)
+        // Saját mérés nélkül: a mai napig visszamenő 2 hét
+        val fresh = chartDataFor(watch().copy(market = MarketInsight(market, null, null, start)), now = start)
+        assertTrue(fresh.drawable)
+        assertTrue(fresh.own.isEmpty())
+    }
+
     @Test fun collectOffersOutcomes() {
         // Minden sikerül → sima lista
         assertEquals(2, collectOffers(listOf(1, 2)) { listOf(Offer(it, "x")) }.size)

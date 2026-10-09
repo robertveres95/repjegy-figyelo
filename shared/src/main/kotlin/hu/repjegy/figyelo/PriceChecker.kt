@@ -122,6 +122,8 @@ object PriceChecker {
                     },
                 )
             }
+            // A Google árelőzménye a pontos (rugalmasság nélküli) keresésre, ha most jött
+            val market = runCatching { GoogleFlights.takeInsight(watch, currency) }.getOrNull()
             val allOffers = outcomes.flatMap { (_, r) ->
                 r.getOrNull() ?: (r.exceptionOrNull() as? PartialSourceException)?.offers.orEmpty()
             }
@@ -138,6 +140,7 @@ object PriceChecker {
                     it.copy(
                         lastChecked = now,
                         sourceStatus = statuses,
+                        market = market ?: it.market,
                         offers = if (allAnswered) emptyList() else it.offers,
                         lastPrice = if (allAnswered) null else it.lastPrice,
                         lastError = when {
@@ -170,6 +173,7 @@ object PriceChecker {
                     lastError = keepCurrencyHint(cur),
                     offers = offers,
                     sourceStatus = statuses,
+                    market = market ?: cur.market,
                     history = if (comparable && trusted) (cur.history + PricePoint(now, best.price)).takeLast(MAX_HISTORY) else cur.history,
                     lastNotifiedPrice = when {
                         shouldNotify -> best.price

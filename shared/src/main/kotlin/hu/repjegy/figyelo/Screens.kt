@@ -635,13 +635,8 @@ private fun WatchCard(
                 OfferDetails(best, highlight = true)
             }
 
-            if (w.history.size >= 2) {
-                Sparkline(
-                    points = w.history,
-                    target = w.targetPrice,
-                    modifier = Modifier.fillMaxWidth().height(56.dp).padding(top = 10.dp),
-                )
-            }
+            // Árgörbe: a Google árelőzménye + a saját mérések (ha van mit mutatni)
+            PriceChart(w, currency, Modifier.fillMaxWidth().padding(top = 10.dp))
 
             Spacer(Modifier.height(6.dp))
             when {
@@ -806,43 +801,6 @@ private fun detailLine(w: Watch): String {
     }
     if (w.airlineTokens.isNotEmpty()) extra += "csak: ${w.airlines.trim()}"
     return extra.joinToString(" · ")
-}
-
-@Composable
-private fun Sparkline(points: List<PricePoint>, target: Int, modifier: Modifier) {
-    val lineColor = Neon.Green
-    val targetColor = Neon.Pink.copy(alpha = 0.7f)
-    val draw = remember(points.size) { Animatable(0f) }
-    LaunchedEffect(points.size) { draw.animateTo(1f, tween(1200, easing = FastOutSlowInEasing)) }
-    Canvas(modifier) {
-        val prices = points.map { it.price }
-        val minP = minOf(prices.min(), target).toFloat()
-        val maxP = maxOf(prices.max(), target).toFloat()
-        val range = (maxP - minP).takeIf { it > 0f } ?: 1f
-        val pad = 4.dp.toPx()
-        fun y(p: Float) = pad + (1f - (p - minP) / range) * (size.height - 2 * pad)
-        val stepX = size.width / (points.size - 1)
-
-        val ty = y(target.toFloat())
-        drawLine(
-            color = targetColor,
-            start = Offset(0f, ty),
-            end = Offset(size.width, ty),
-            strokeWidth = 1.5.dp.toPx(),
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 10f)),
-        )
-        val path = Path()
-        points.forEachIndexed { i, p ->
-            val x = i * stepX
-            val py = y(p.price.toFloat())
-            if (i == 0) path.moveTo(x, py) else path.lineTo(x, py)
-        }
-        // A vonal balról jobbra „rajzolódik ki”
-        clipRect(right = size.width * draw.value) {
-            drawPath(path, lineColor.copy(alpha = 0.25f), style = Stroke(width = 8.dp.toPx()))
-            drawPath(path, lineColor, style = Stroke(width = 2.5.dp.toPx()))
-        }
-    }
 }
 
 // ---------------------------------------------------------------- Szerkesztés

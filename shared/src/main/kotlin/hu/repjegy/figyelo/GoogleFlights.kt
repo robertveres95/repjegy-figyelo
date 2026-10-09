@@ -53,6 +53,39 @@ object GoogleFlights {
         throw IOException("A Google erre a keresésre most hibát jelzett")
     }
 
+    private val insights = java.util.concurrent.ConcurrentHashMap<String, MarketInsight>()
+
+    /** Az adott keresés (pontos dátumokkal) legutóbb kapott árelőzménye; kiveszi a tárolóból. */
+    fun takeInsight(w: Watch, currency: String): MarketInsight? =
+        insights.remove(searchUrl(w.copy(flexDays = 0), currency))
+
+    /**
+     * Az „árbetekintés” blokk megkeresése a válaszban:
+     * [szint, [null, mostani], [null, …], [null, eltérés], [null, szokásos alsó], [null, szokásos felső], …, [[időbélyeg ms, ár], …]]
+     */
+    internal fun findInsight(node: Any?, depth: Int = 0): MarketInsight? {
+        if (node !is JSONArray || depth > 14) return null
+        if (node.length() >= 11) {
+            val pts = node.optJSONArray(10)
+            fun money(i: Int) = node.optJSONArray(i)?.takeIf { it.length() == 2 && it.isNull(0) }?.optInt(1, 0)?.takeIf { it > 0 }
+            if (pts != null && pts.length() >= 2 && money(1) != null) {
+                val parsed = (0 until pts.length()).mapNotNull { i ->
+                    val p = pts.optJSONArray(i) ?: return@mapNotNull null
+                    val t = p.optLong(0, 0L)
+                    val v = p.optInt(1, 0)
+                    if (t > 1_500_000_000_000L && v > 0) PricePoint(t, v) else null
+                }
+                if (parsed.size >= 2 && parsed.size == pts.length()) {
+                    return MarketInsight(parsed.sortedBy { it.time }, money(4), money(5), System.currentTimeMillis())
+                }
+            }
+        }
+        for (i in 0 until node.length()) {
+            findInsight(node.opt(i), depth + 1)?.let { return it }
+        }
+        return null
+    }
+
     private fun fetch(w: Watch, currency: String): Fetched {
         // Az EU-s beleegyezési oldal átugrása
         Http.setCookie("www.google.com", ".google.com", "SOCS", "CAESEwgDEgk0ODE3Nzk3MjQaAmVuIAEaBgiA_LyaBg")
@@ -76,6 +109,9 @@ object GoogleFlights {
             return Fetched(emptyList(), 0, errorStatus = true)
         }
         val payload = JSONArray(data)
+        // Az útvonal árelőzménye (ha a Google ad hozzá): a keresés címével tároljuk, az ellenőrző innen veszi
+        if (insights.size > 50) insights.clear()
+        runCatching { findInsight(payload) }.getOrNull()?.let { insights[url] = it }
 
         val offers = mutableListOf<Offer>()
         var seen = 0

@@ -68,7 +68,14 @@ class ScreenshotTest {
             ),
             sourceStatus = listOf(SourceStatus("Google Flights", true, "141 ajánlat"), SourceStatus("Ryanair", true, "1 ajánlat"),
                 SourceStatus("Wizz Air", true, "3 ajánlat")),
-            history = listOf(68000, 66500, 61200, 59900, 57300, 55800, 54200).mapIndexed { i, p -> PricePoint(i * 21_600_000L, p) },
+            // Saját mérések az elmúlt 3 napban, előttük a Google 2 hetes árelőzménye
+            history = listOf(68000, 66500, 61200, 59900, 63100, 57300, 55800, 56900, 54200, 54200, 54900, 54200)
+                .mapIndexed { i, p -> PricePoint(System.currentTimeMillis() - (11 - i) * 21_600_000L, p) },
+            market = MarketInsight(
+                points = listOf(71200, 70400, 72800, 69900, 74100, 73500, 70200, 68800, 69400, 72100, 71000, 67900, 69300, 68400)
+                    .mapIndexed { i, p -> PricePoint(System.currentTimeMillis() - 3 * 86_400_000L - (14 - i) * 86_400_000L, p) },
+                typicalLow = 52000, typicalHigh = 78000, fetchedAt = System.currentTimeMillis(),
+            ),
         )
         val milan = Watch(
             id = "s2", from = "BUD", to = "MXP,LIN,BGY", fromLabel = "Budapest", toLabel = "Milánó",
@@ -78,7 +85,7 @@ class ScreenshotTest {
             lastPrice = 18311, lastChecked = System.currentTimeMillis(),
             offers = listOf(Offer(18311, "Google Flights", "Ryanair", "BUD", "BGY", "${d.plusDays(10)}T08:35",
                 "${d.plusDays(10)}T10:15", 0, url = "https://www.google.com/travel/flights", note = "becsült poggyász-díjjal (+12 837 Ft)")),
-            history = listOf(17000, 16500, 18900, 19500, 18311).mapIndexed { i, p -> PricePoint(i * 21_600_000L, p) },
+            history = listOf(17000, 16500, 18900, 19500, 18311).mapIndexed { i, p -> PricePoint(System.currentTimeMillis() - (4 - i) * 21_600_000L, p) },
         )
         val jfk = Watch(
             id = "s3", from = "BUD", to = "JFK", fromLabel = "Budapest", toLabel = "New York",

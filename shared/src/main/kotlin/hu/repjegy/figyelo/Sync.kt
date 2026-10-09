@@ -297,6 +297,7 @@ object Sync {
             sourceStatus = fresher.sourceStatus,
             lowestPrice = lowest,
             history = history,
+            market = fresher.market ?: staler.market,
             // Ha már valamelyik eszköz szólt erről az árról, a másik ne szóljon újra
             // Ha a felhasználó épp most kapcsolta át a csengőt (újabb módosítás), az ő törlése nyer
             lastNotifiedPrice = if (base.editedAt > other.editedAt && base.lastNotifiedPrice == null) null else notified,

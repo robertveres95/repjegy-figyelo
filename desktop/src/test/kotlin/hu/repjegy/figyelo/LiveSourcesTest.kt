@@ -30,6 +30,9 @@ class LiveSourcesTest {
         for ((name, watch) in cases) {
             out.appendLine("=== $name  (${watch.outboundDate}${watch.returnDate?.let { " – $it" } ?: ""})")
             run("Google Flights", watch) { GoogleFlights.search(watch, "HUF") }
+            GoogleFlights.takeInsight(watch, "HUF").let { m ->
+                out.appendLine("  [Google árelőzmény] " + (m?.let { "${it.points.size} nap, szokásos: ${it.typicalLow}–${it.typicalHigh}, utolsó: ${it.points.last().price}" } ?: "nincs"))
+            }
             run("Ryanair", watch) { Ryanair.search(watch, "HUF") }
             run("Wizz Air", watch) { WizzAir.search(watch, "HUF") }
             val all = runCatching { GoogleFlights.search(watch, "HUF") }.getOrDefault(emptyList()) +

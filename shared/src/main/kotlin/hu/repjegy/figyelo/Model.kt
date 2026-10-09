@@ -7,6 +7,40 @@ import java.util.Locale
 
 data class PricePoint(val time: Long, val price: Int)
 
+/**
+ * A Google Flights saját árelőzménye az útvonalra (nem mi mértük): napi legolcsóbb ár kb.
+ * 2 hónapra visszamenőleg, és az ott „szokásosnak” tartott ársáv. A választott pénznemben.
+ */
+data class MarketInsight(
+    val points: List<PricePoint>,
+    val typicalLow: Int?,
+    val typicalHigh: Int?,
+    val fetchedAt: Long,
+) {
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("points", JSONArray().apply { points.forEach { put(JSONArray().put(it.time).put(it.price)) } })
+        putOpt("typicalLow", typicalLow)
+        putOpt("typicalHigh", typicalHigh)
+        put("fetchedAt", fetchedAt)
+    }
+
+    companion object {
+        fun fromJson(o: JSONObject): MarketInsight? {
+            val arr = o.optJSONArray("points") ?: return null
+            val pts = (0 until arr.length()).mapNotNull { i ->
+                arr.optJSONArray(i)?.let { p -> runCatching { PricePoint(p.getLong(0), p.getInt(1)) }.getOrNull() }
+            }.filter { it.price > 0 }
+            if (pts.isEmpty()) return null
+            return MarketInsight(
+                pts.sortedBy { it.time }.takeLast(90),
+                o.optInt("typicalLow", 0).takeIf { it > 0 },
+                o.optInt("typicalHigh", 0).takeIf { it > 0 },
+                o.optLong("fetchedAt", 0L),
+            )
+        }
+    }
+}
+
 /** Egy konkrét ajánlat egy forrásból, a választott pénznemben. */
 data class Offer(
     val price: Int,
@@ -101,6 +135,7 @@ data class Watch(
     val offers: List<Offer> = emptyList(),          // ár szerint rendezve, az első a legjobb
     val sourceStatus: List<SourceStatus> = emptyList(),
     val history: List<PricePoint> = emptyList(),
+    val market: MarketInsight? = null,               // a Google árelőzménye (nem a mi mérésünk)
 ) {
     val isRoundTrip: Boolean get() = returnDate != null
 
@@ -181,6 +216,7 @@ data class Watch(
     fun clearResults(): Watch = copy(
         lastPrice = null, lowestPrice = null, lastChecked = null, lastError = null,
         lastNotifiedPrice = null, offers = emptyList(), sourceStatus = emptyList(), history = emptyList(),
+        market = null,
     )
 
     fun toJson(): JSONObject = JSONObject().apply {
@@ -220,6 +256,7 @@ data class Watch(
         val h = JSONArray()
         history.forEach { h.put(JSONArray().put(it.time).put(it.price)) }
         put("history", h)
+        market?.let { put("market", it.toJson()) }
     }
 
     companion object {
@@ -269,6 +306,7 @@ data class Watch(
                 offers = offers,
                 sourceStatus = status,
                 history = history,
+                market = o.optJSONObject("market")?.let { runCatching { MarketInsight.fromJson(it) }.getOrNull() },
             )
         }
     }
