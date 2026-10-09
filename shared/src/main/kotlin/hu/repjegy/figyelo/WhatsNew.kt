@@ -23,7 +23,7 @@ object WhatsNew {
     val notes: List<Pair<String, List<String>>> = listOf(
         "1.3.2" to listOf(
             "Új, szemkímélőbb kék színvilág.",
-            "Részletesebb árgörbe: dátumokkal, a legmagasabb és legalacsonyabb árral, és a Google 2 hetes árelőzményével.",
+            "Részletesebb árgörbe: dátumokkal, a legmagasabb és legalacsonyabb árral, poggyász nélküli utaknál a Google 2 hetes árelőzményével is.",
             "Felfedezés: most már egy évre előre is kereshetsz olcsó úti célt.",
             "Megbízhatóbb szinkronizálás a telefon és a számítógép között – a törölt figyelés nem jön vissza.",
             "Kevesebb fölösleges értesítés: ugyanarról az árról nem szólunk kétszer.",

@@ -51,7 +51,8 @@ internal fun chartDataFor(w: Watch, now: Long = System.currentTimeMillis()): Cha
     val own = w.history.sortedBy { it.time }
     // Az előzmény a saját mérések kezdete előtti 2 hét (ha még nincs saját mérés: a mai napig)
     val start = own.firstOrNull()?.time ?: now
-    val market = w.market?.points.orEmpty()
+    // A Google előzménye poggyász nélküli ár: poggyászos figyelésnél nem összevethető, ezért nem mutatjuk
+    val market = (if (w.wantsBags) null else w.market)?.points.orEmpty()
         .filter { it.time < start - DAY_MS / 2 && it.time >= start - MARKET_DAYS * DAY_MS }
         .sortedBy { it.time }
     return ChartData(market, own, w.targetPrice)
@@ -168,7 +169,7 @@ internal fun PriceChart(w: Watch, currency: String, modifier: Modifier = Modifie
             if (data.market.isNotEmpty()) LegendItem(marketColor, "Google árelőzmény")
             LegendItem(ownColor, "REFI mérései")
         }
-        w.market?.let { m ->
+        w.market?.takeIf { !w.wantsBags }?.let { m ->
             if (m.typicalLow != null && m.typicalHigh != null) {
                 Text(
                     "A Google szerint ezen az úton a szokásos ár: ${formatPrice(m.typicalLow, currency)} – ${formatPrice(m.typicalHigh, currency)}",

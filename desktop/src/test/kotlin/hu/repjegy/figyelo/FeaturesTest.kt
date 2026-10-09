@@ -94,14 +94,17 @@ class FeaturesTest {
         val start = 1_800_000_000_000L
         val market = (0 until 60).map { PricePoint(start - (60 - it) * day, 1000 + it) }
         val own = listOf(PricePoint(start, 900), PricePoint(start + day / 4, 950))
-        val d = chartDataFor(watch().copy(history = own, market = MarketInsight(market, null, null, start)), now = start + day)
+        val d = chartDataFor(watch().copy(bags = 0, checkedBag = false, history = own, market = MarketInsight(market, null, null, start)), now = start + day)
         assertTrue(d.market.size in 13..14, "${d.market.size}")
         assertTrue(d.market.all { it.time < start && it.time >= start - 14 * day })
         assertEquals(start, d.boundary)
         // Saját mérés nélkül: a mai napig visszamenő 2 hét
-        val fresh = chartDataFor(watch().copy(market = MarketInsight(market, null, null, start)), now = start)
+        val fresh = chartDataFor(watch().copy(bags = 0, checkedBag = false, market = MarketInsight(market, null, null, start)), now = start)
         assertTrue(fresh.drawable)
         assertTrue(fresh.own.isEmpty())
+        // Poggyászos figyelésnél a (poggyász nélküli) Google-előzmény nem jelenik meg
+        val withBags = chartDataFor(watch().copy(bags = 1, history = own, market = MarketInsight(market, null, null, start)), now = start + day)
+        assertTrue(withBags.market.isEmpty())
     }
 
     @Test fun collectOffersOutcomes() {
