@@ -64,7 +64,7 @@ async function loadFile(token) {
   const id = list.files && list.files[0] && list.files[0].id;
   if (!id) return { watches: [], currency: 'HUF', updatedAt: null };
   const data = await (await drive(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`, token)).json();
-  if (data.format !== 'refi-sync') throw new Error('Ismeretlen adatformátum – frissítsd a bővítményt.');
+  if (data.format !== 'refi-sync' || (data.version || 1) > 1) throw new Error('Ismeretlen adatformátum – frissítsd a bővítményt.');
   // A kulcsokat (SerpApi, Ignav) nem tároljuk el és nem mutatjuk
   return { watches: data.watches || [], currency: data.currency || 'HUF', updatedAt: data.updatedAt || null };
 }
@@ -101,17 +101,24 @@ function expired(w) {
   return last < new Date();
 }
 
+/** [időbélyeg, ár] párok → érvényes, időrendbe rendezett pontok (hibás elemek nélkül). */
+function points(arr) {
+  return (Array.isArray(arr) ? arr : [])
+    .map((p) => ({ t: Number(p && p[0]), v: Number(p && p[1]) }))
+    .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.v) && p.v > 0)
+    .sort((a, b) => a.t - b.t);
+}
+
 function sparkline(w) {
-  const pts = (w.history || []).map((p) => ({ t: p[0], v: p[1] }));
+  const pts = points(w.history);
   // Poggyász nélküli figyelésnél a Google 2 hetes árelőzménye is (halványan), mint az appban
   const first = pts.length ? pts[0].t : Date.now();
-  const market = (!wantsBags(w) && w.market && w.market.points ? w.market.points : [])
-    .map((p) => ({ t: p[0], v: p[1] }))
+  const market = points(!wantsBags(w) && w.market ? w.market.points : [])
     .filter((p) => p.t < first - 43200000 && p.t >= first - 14 * 86400000);
   const all = market.concat(pts);
   if (all.length < 2) return null;
   const W = 340, H = 34, pad = 3;
-  const vs = all.map((p) => p.v).concat([w.targetPrice]);
+  const vs = all.map((p) => p.v).concat(Number.isFinite(w.targetPrice) ? [w.targetPrice] : []);
   const lo = Math.min(...vs), hi = Math.max(...vs), span = (hi - lo) || 1;
   const t0 = all[0].t, t1 = all[all.length - 1].t || t0 + 1;
   const x = (t) => ((t - t0) / ((t1 - t0) || 1)) * W;
@@ -206,14 +213,21 @@ function render(data) {
 let running = null;
 
 /** Betöltés (egyszerre csak egy fut; ha közben újat kérnek, a futót várjuk meg). */
+let stickyError = false;
+let epoch = 0; // kijelentkezéskor nő: a közben befejeződő betöltés eredményét eldobjuk
+
 function refresh(interactive) {
   if (running && !interactive) return running;
-  running = doRefresh(interactive).finally(() => { running = null; });
-  return running;
+  const p = doRefresh(interactive).finally(() => { if (running === p) running = null; });
+  running = p;
+  return p;
 }
 
 async function doRefresh(interactive) {
-  show('error', false);
+  const myEpoch = epoch;
+  // A bejelentkezési hiba üzenete addig marad, amíg újra meg nem próbálja
+  if (interactive) stickyError = false;
+  if (!stickyError) show('error', false);
   const btn = $('refresh');
   btn.classList.add('spin');
   try {
@@ -252,6 +266,7 @@ async function doRefresh(interactive) {
       }
       data = await loadFile(token);
     }
+    if (myEpoch !== epoch) return; // közben kijelentkezett
     await store.set({ data });
     show('loading', false);
     show('refresh'); show('signout');
@@ -280,6 +295,7 @@ async function start() {
   $('refresh').addEventListener('click', () => refresh(false));
   $('signout').addEventListener('click', async () => {
     // A hozzáférést a Google-nél is visszavonjuk, különben a következő megnyitáskor csendben visszalépne
+    epoch++;
     await chrome.runtime.sendMessage({ type: 'signout' });
     $('list').replaceChildren();
     ['refresh', 'signout', 'footer', 'empty', 'error'].forEach((id) => show(id, false));
@@ -298,6 +314,14 @@ async function start() {
     show('refresh'); show('signout');
     render(window.REFI_DEMO);
     return;
+  }
+  // Egy korábbi (bezárt ablak alatti) bejelentkezési hiba üzenete
+  const authError = await store.get('authError');
+  if (authError && authError !== 'kijelentkezve') {
+    $('error').textContent = friendlyAuthError(authError);
+    show('error');
+    stickyError = true;
+    await store.remove(['authError']);
   }
   // Az utolsó ismert állapot azonnal látszik, közben frissítünk
   const cached = await store.get('data');
