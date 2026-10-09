@@ -127,15 +127,16 @@ object Sync {
         // Ha két eszköz egyszerre tölt fel, a későbbi „ütközést” kap: újra letölti, összefésüli, feltölti
         repeat(2) {
             try {
-                return syncAttempt()
+                return syncAttempt(useEtag = true)
             } catch (_: ConflictException) {
                 kotlinx.coroutines.delay(1500)
             }
         }
-        syncAttempt()
+        // Végső tartalék: verziójel nélkül (a korábbi, bevált módon) – így a szinkron sosem akad el
+        syncAttempt(useEtag = false)
     }
 
-    private suspend fun syncAttempt() {
+    private suspend fun syncAttempt(useEtag: Boolean) {
         val token = Platform.current.googleAccessToken(interactive = false)
             ?: throw IOException("Jelentkezz be újra a Google-fiókkal (Beállítások)")
         val auth = mapOf("Authorization" to "Bearer $token")
@@ -154,7 +155,7 @@ object Sync {
         // A fájl verziójele: feltöltéskor ezzel ellenőrizzük, hogy közben nem írta-e felül más eszköz
         var etag: String? = null
         if (fileId != null) {
-            etag = runCatching {
+            if (useEtag) etag = runCatching {
                 val meta = Http.request("https://www.googleapis.com/drive/v2/files/$fileId?fields=etag", headers = auth, timeoutMs = 20_000)
                 if (meta.code in 200..299) JSONObject(meta.body).optString("etag").takeIf { it.isNotBlank() } else null
             }.getOrNull()
