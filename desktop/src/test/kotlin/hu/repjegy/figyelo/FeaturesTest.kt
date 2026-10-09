@@ -143,7 +143,7 @@ class FeaturesTest {
         val lastDay = LocalDate.of(2026, 10, 31)
         val periods = Discover.periods(lastDay)
         assertFalse(periods.any { it.second.contains("október", ignoreCase = true) }, periods.toString())
-        assertEquals(6, periods.size)
+        assertEquals(12, periods.size)
     }
 
     @Test fun searchKeyIncludesNewFields() {
@@ -269,6 +269,6 @@ class FeaturesTest {
         val (c, e) = Discover.periodRange(1, today)
         assertEquals(today.plusDays(1), c, "a folyó hónap a holnapi nappal kezdődik")
         assertEquals(LocalDate.of(2026, 10, 31), e)
-        assertEquals(7, Discover.periods(today).size)
+        assertEquals(13, Discover.periods(today).size)
     }
 }

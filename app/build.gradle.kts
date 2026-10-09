@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "hu.repjegy.figyelo"
-        minSdk = 26
+        minSdk = 28
         targetSdk = 35
         // versionName: a version.properties-ből (pl. 1.1.0) – ezt látja a felhasználó.
         // versionCode: a GitHub Actions futásszáma, mindig nő, így a frissítés a régi fölé települ.

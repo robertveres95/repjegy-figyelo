@@ -48,9 +48,9 @@ object Discover {
 
     private val monthFormat = DateTimeFormatter.ofPattern("yyyy. LLLL", HU)
 
-    /** Időszakok: a következő 30 nap, majd a következő 6 hónap. */
+    /** Időszakok: a következő 30 nap, majd a következő 12 hónap (egy évre előre). */
     fun periods(today: LocalDate = LocalDate.now()): List<Pair<Int, String>> =
-        listOf(0 to "A következő 30 nap") + (0..5).mapNotNull { i ->
+        listOf(0 to "A következő 30 nap") + (0..11).mapNotNull { i ->
             // A hónap utolsó napján a folyó hónapból már nem maradt keresendő nap
             val (start, end) = periodRange(i + 1, today)
             if (start.isAfter(end)) return@mapNotNull null
