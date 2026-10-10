@@ -1,0 +1,74 @@
+name: Biztonsági vizsgálat
+
+# Kézi indításra: vírusellenőrzés (ClamAV, friss vírusadatbázissal) a teljes forráskódon, a git-előzményen
+# és a legutóbbi éles és teszt-kiadás letölthető fájljain (APK, MSI, Chrome-bővítmény), valamint
+# titokkeresés (gitleaks) – nehogy jelszó vagy kulcs kerüljön a nyilvános tárolóba.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: ClamAV telepítése és vírusadatbázis frissítése
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q clamav > /dev/null
+          sudo systemctl stop clamav-freshclam 2>/dev/null || true
+          sudo freshclam --quiet || sudo freshclam
+          clamscan --version
+
+      - name: Kiadások letöltése
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p kiadasok/eles kiadasok/teszt
+          gh release download --repo "${{ github.repository }}" -D kiadasok/eles || true
+          T=$(gh api "repos/${{ github.repository }}/releases?per_page=10" --jq '[.[]|select(.prerelease and (.draft|not))][0].tag_name')
+          [ -n "$T" ] && gh release download "$T" --repo "${{ github.repository }}" -D kiadasok/teszt || true
+          ls -la kiadasok/*
+          # A csomagok tartalma is külön (az APK és a zip belseje)
+          for f in kiadasok/*/*.apk kiadasok/*/*.zip; do [ -f "$f" ] && mkdir -p "$f.x" && unzip -q -o "$f" -d "$f.x" || true; done
+
+      - name: Git-előzmény kibontása (minden valaha feltöltött fájl)
+        run: |
+          mkdir -p elozmeny
+          git rev-list --objects --all | awk '$2 {print $1}' | sort -u | while read -r obj; do
+            [ "$(git cat-file -t "$obj")" = blob ] && git cat-file -p "$obj" > "elozmeny/$obj"
+          done
+          ls elozmeny | wc -l
+
+      - name: Vírusellenőrzés
+        run: |
+          set +e
+          clamscan -r -i --max-filesize=400M --max-scansize=1000M \
+            --exclude-dir='^./.git$' . | tee clamav.txt
+          code=${PIPESTATUS[0]}
+          {
+            echo "## ClamAV"
+            echo '```'
+            tail -12 clamav.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" = 1 ]; then echo "::error::Fertőzött fájl található!"; grep FOUND clamav.txt | sed 's/^/::error::/'; exit 1; fi
+          [ "$code" = 0 ] || exit "$code"
+          echo "::notice::ClamAV: nincs fertőzött fájl"
+
+      - name: Titokkeresés (gitleaks)
+        run: |
+          set +e
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.24.2/gitleaks_8.24.2_linux_x64.tar.gz | tar xz gitleaks
+          ./gitleaks git --redact --no-banner -v . > gitleaks.txt 2>&1
+          code=$?
+          { echo "## gitleaks"; echo '```'; tail -30 gitleaks.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          tail -30 gitleaks.txt
+          [ "$code" = 0 ] && echo "::notice::gitleaks: nincs kiszivárgott titok" || echo "::warning::gitleaks talált valamit (lásd fent)"
