@@ -7,17 +7,23 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -179,11 +185,12 @@ internal object Tips {
     }
 }
 
-/** A tipp-buborék a figyelés szerkesztőjében: bezárható, lapozható, „ne mutasd többé” is választható. */
+/** A tipp-buborék a figyelés szerkesztőjében: tömör, bezárható, lapozható; a „ne mutasd” a ⋮ menüben. */
 @Composable
 internal fun TipBubble(onOpenGuide: (KeyProvider) -> Unit) {
     var tip by remember { mutableStateOf(runCatching { Tips.next() }.getOrNull()) }
     var visible by remember { mutableStateOf(tip != null) }
+    var menu by remember { mutableStateOf(false) }
     AnimatedVisibility(visible = visible && tip != null, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
         val cur = tip ?: return@AnimatedVisibility
         // Nyelvváltáskor a tipp szövege is az új nyelven jelenjen meg
@@ -191,42 +198,58 @@ internal fun TipBubble(onOpenGuide: (KeyProvider) -> Unit) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .background(Neon.SurfaceHigh, RoundedCornerShape(16.dp))
-                .border(1.dp, Neon.Green.copy(alpha = 0.45f), RoundedCornerShape(16.dp))
-                .padding(start = 14.dp, top = 8.dp, end = 4.dp, bottom = 4.dp),
+                .background(Neon.Surface, RoundedCornerShape(12.dp))
+                .border(0.5.dp, Neon.Green.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                .padding(start = 12.dp, top = 0.dp, end = 0.dp, bottom = 0.dp),
         ) {
+            // Fejléc: ikon, cím, bezárás
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Info, contentDescription = null, tint = Neon.Green, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.size(8.dp))
+                Icon(Icons.Filled.Info, contentDescription = null, tint = Neon.Green, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
                 Text(
                     t.title,
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = Neon.Green,
+                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(onClick = { visible = false }) {
-                    Icon(Icons.Filled.Close, contentDescription = tr("Tipp bezárása", "Close tip", "Tipp schließen"), tint = Neon.TextDim)
+                    Icon(Icons.Filled.Close, contentDescription = tr("Tipp bezárása", "Close tip", "Tipp schließen"), tint = Neon.TextDim, modifier = Modifier.size(18.dp))
                 }
             }
-            Text(t.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 10.dp))
-            if (t.action != null && t.provider != null) {
-                androidx.compose.material3.Button(
-                    onClick = { onOpenGuide(t.provider) },
-                    modifier = Modifier.padding(top = 8.dp, end = 10.dp).fillMaxWidth(),
-                ) { Text(t.action, fontWeight = FontWeight.Bold) }
-            }
-            Row(horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                TextButton(onClick = { tip = runCatching { Tips.next() }.getOrNull(); if (tip == null) visible = false }) {
+            Text(
+                t.text,
+                style = MaterialTheme.typography.bodySmall,
+                color = Neon.TextDim,
+                modifier = Modifier.padding(end = 12.dp),
+            )
+            // Egy sor: (fő teendő) · Következő tipp · ⋮
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                // A fő gomb kitölti a maradék helyet (keskeny kijelzőn tördelődik, nem lóg ki)
+                Box(Modifier.weight(1f)) {
+                    if (t.action != null && t.provider != null) {
+                        FilledTonalButton(
+                            onClick = { onOpenGuide(t.provider) },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        ) { Text(t.action, style = MaterialTheme.typography.labelLarge) }
+                    }
+                }
+                TextButton(contentPadding = PaddingValues(horizontal = 8.dp), onClick = { tip = runCatching { Tips.next() }.getOrNull(); if (tip == null) visible = false }) {
                     Text(tr("Következő tipp", "Next tip", "Nächster Tipp"))
                 }
-                TextButton(onClick = { Tips.hide(t.id); visible = false }) {
-                    Text(tr("Ezt a tippet ne mutasd", "Don’t show this tip", "Diesen Tipp nicht mehr zeigen"), color = Neon.TextDim)
-                }
-            }
-            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                TextButton(onClick = { Tips.allOff = true; visible = false }) {
-                    Text(tr("Egyik tippet se mutasd", "Don’t show any tips", "Keine Tipps mehr zeigen"), color = Neon.TextDim)
+                Box {
+                    IconButton(onClick = { menu = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = tr("További lehetőségek", "More options", "Weitere Optionen"), tint = Neon.TextDim)
+                    }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(tr("Ezt a tippet ne mutasd", "Don’t show this tip", "Diesen Tipp nicht mehr zeigen")) },
+                            onClick = { menu = false; Tips.hide(t.id); visible = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(tr("Egyik tippet se mutasd", "Don’t show any tips", "Keine Tipps mehr zeigen")) },
+                            onClick = { menu = false; Tips.allOff = true; visible = false },
+                        )
+                    }
                 }
             }
         }

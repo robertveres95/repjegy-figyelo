@@ -26,6 +26,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.LaunchedEffect
@@ -46,6 +47,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.size
@@ -69,6 +71,7 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
@@ -1200,6 +1203,28 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
         topBar = {
             NeonTopBar(if (existing == null) tr("ÚJ FIGYELÉS", "NEW WATCH", "NEUE BEOBACHTUNG") else tr("SZERKESZTÉS", "EDIT", "BEARBEITEN"), onBack = onDone)
         },
+        bottomBar = {
+            // Rögzített mentés-sáv: a gomb mindig elérhető, a hibaüzenet is itt látszik (nem görgetődik el)
+            androidx.compose.material3.Surface(color = Neon.Surface) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .drawBehind { drawLine(Neon.Line, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1f) }
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    error?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Button(
+                        onClick = { save() },
+                        enabled = !saved,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    ) { Text(tr("Mentés", "Save", "Speichern"), fontWeight = FontWeight.Bold) }
+                }
+            }
+        },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -1207,154 +1232,178 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
                 .padding(padding)
                 .imePadding()
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             // Tippek és trükkök (pl. ingyenes kulcs a több árhoz – végigvezetünk rajta)
             // Sikeres kulcsbeállítás után új tipp jön (a kulcsos tipp már nem aktuális)
             androidx.compose.runtime.key(tipRound) { TipBubble(onOpenGuide = { guide = it }) }
             guide?.let { p -> KeyGuideDialog(p, onClose = { guide = null }, onSaved = { tipRound++ }) }
-            SectionTitle(tr("Útvonal", "Route", "Strecke"))
-            AirportField(tr("Honnan", "From", "Von"), fromPlace) { fromPlace = it }
-            AirportField(tr("Hova", "To", "Nach"), toPlace) { toPlace = it }
-            SwitchRow(tr("Oda-vissza út", "Return trip", "Hin- und Rückflug"), roundTrip) { roundTrip = it }
 
-            SectionTitle(tr("Dátum", "Date", "Datum"))
-            DateField(
-                if (weekly) tr("Első indulás", "First departure", "Erster Abflug") else tr("Indulás", "Departure", "Abflug"), outDate,
-                minDate = if (weekly) minOf(outDate, today) else today.minusDays(flexDays.toLong()),
-                onValidChange = { outValid = it },
-            ) {
-                // Az út hossza marad: ha az indulás eltolódik, a visszaút vele mozog
-                // (gépelés közbeni részleges dátumnál sem vész el az eredeti hossz)
-                val days = java.time.temporal.ChronoUnit.DAYS.between(outDate, retDate).coerceAtLeast(0)
-                // A „minden héten” tartomány is vele mozog
-                val span = java.time.temporal.ChronoUnit.DAYS.between(outDate, weeklyUntil)
-                outDate = it
-                retDate = it.plusDays(days)
-                if (span >= 0) weeklyUntil = it.plusDays(span)
+            // ---- Útvonal
+            SettingsCard {
+                SectionTitle(tr("Útvonal", "Route", "Strecke"))
+                AirportField(tr("Honnan", "From", "Von"), fromPlace) { fromPlace = it }
+                AirportField(tr("Hova", "To", "Nach"), toPlace) { toPlace = it }
+                SwitchRow(tr("Oda-vissza út", "Return trip", "Hin- und Rückflug"), roundTrip) { roundTrip = it }
             }
-            // Havi árnaptár: melyik nap a legolcsóbb (a fapadosok árnaptárából)
-            val calFrom = fromPlace
-            val calTo = toPlace
-            if (calFrom != null && calTo != null) {
-                var showCal by remember { mutableStateOf(false) }
-                TextButton(onClick = { showCal = true }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
-                    Icon(Icons.Filled.DateRange, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(tr("Árnaptár – melyik nap a legolcsóbb?", "Price calendar – which day is cheapest?", "Preiskalender – welcher Tag ist am günstigsten?"))
-                }
-                if (showCal) PriceCalendarDialog(calFrom.codes, calTo.codes, outDate, onPick = { picked ->
-                    val days = java.time.temporal.ChronoUnit.DAYS.between(outDate, retDate).coerceAtLeast(0)
-                    val span = java.time.temporal.ChronoUnit.DAYS.between(outDate, weeklyUntil)
-                    // A visszaút és a „minden héten” vége se lógjon túl a megadható utolsó napon
-                    val latest = maxTravelDate(today)
-                    outDate = picked
-                    retDate = minOf(picked.plusDays(days), latest)
-                    if (span >= 0) weeklyUntil = minOf(picked.plusDays(span), latest)
-                }, onClose = { showCal = false },
-                    nights = if (roundTrip) java.time.temporal.ChronoUnit.DAYS.between(outDate, retDate).toInt().coerceAtLeast(0) else null)
-            }
-            if (roundTrip) {
-                DateField(tr("Visszaút", "Return", "Rückflug"), retDate, minDate = outDate, onValidChange = { retValid = it }) { retDate = it }
-            }
-            ChoiceField(tr("Rugalmasság", "Flexibility", "Flexibilität"), FLEX_OPTIONS + (WEEKLY_CHOICE to tr("Minden héten (pl. bármelyik hétvége)", "Every week (e.g. any weekend)", "Jede Woche (z. B. jedes Wochenende)")), if (weekly) WEEKLY_CHOICE else flexDays) {
-                weekly = it == WEEKLY_CHOICE
-                flexDays = if (weekly) 0 else it
-                if (weekly && (weeklyUntil.isBefore(outDate) || weeklyUntil.isAfter(outDate.plusWeeks((MAX_WEEKS - 1).toLong())))) {
-                    weeklyUntil = outDate.plusWeeks(3)
-                }
-            }
-            if (weekly) {
+
+            // ---- Dátum
+            SettingsCard {
+                SectionTitle(tr("Dátum", "Date", "Datum"))
                 DateField(
-                    tr("Utolsó indulás legkésőbb", "Last departure at the latest", "Letzter Abflug spätestens"), weeklyUntil, minDate = outDate,
-                    maxDate = minOf(outDate.plusWeeks((MAX_WEEKS - 1).toLong()), maxTravelDate(today)),
-                    onValidChange = { untilValid = it },
-                ) { weeklyUntil = it }
-                val weeks = weeklyCount(outDate, weeklyUntil)
+                    if (weekly) tr("Első indulás", "First departure", "Erster Abflug") else tr("Indulás", "Departure", "Abflug"), outDate,
+                    minDate = if (weekly) minOf(outDate, today) else today.minusDays(flexDays.toLong()),
+                    onValidChange = { outValid = it },
+                ) {
+                    // Az út hossza marad: ha az indulás eltolódik, a visszaút vele mozog
+                    // (gépelés közbeni részleges dátumnál sem vész el az eredeti hossz)
+                    val days = java.time.temporal.ChronoUnit.DAYS.between(outDate, retDate).coerceAtLeast(0)
+                    // A „minden héten” tartomány is vele mozog
+                    val span = java.time.temporal.ChronoUnit.DAYS.between(outDate, weeklyUntil)
+                    outDate = it
+                    retDate = it.plusDays(days)
+                    if (span >= 0) weeklyUntil = it.plusDays(span)
+                }
+                if (roundTrip) {
+                    DateField(tr("Visszaút", "Return", "Rückflug"), retDate, minDate = outDate, onValidChange = { retValid = it }) { retDate = it }
+                }
+                // Havi árnaptár: melyik nap a legolcsóbb (a fapadosok árnaptárából)
+                val calFrom = fromPlace
+                val calTo = toPlace
+                if (calFrom != null && calTo != null) {
+                    var showCal by remember { mutableStateOf(false) }
+                    TextButton(onClick = { showCal = true }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
+                        Icon(Icons.Filled.DateRange, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(tr("Árnaptár – melyik nap a legolcsóbb?", "Price calendar – which day is cheapest?", "Preiskalender – welcher Tag ist am günstigsten?"))
+                    }
+                    if (showCal) PriceCalendarDialog(calFrom.codes, calTo.codes, outDate, onPick = { picked ->
+                        val days = java.time.temporal.ChronoUnit.DAYS.between(outDate, retDate).coerceAtLeast(0)
+                        val span = java.time.temporal.ChronoUnit.DAYS.between(outDate, weeklyUntil)
+                        // A visszaút és a „minden héten” vége se lógjon túl a megadható utolsó napon
+                        val latest = maxTravelDate(today)
+                        outDate = picked
+                        retDate = minOf(picked.plusDays(days), latest)
+                        if (span >= 0) weeklyUntil = minOf(picked.plusDays(span), latest)
+                    }, onClose = { showCal = false },
+                        nights = if (roundTrip) java.time.temporal.ChronoUnit.DAYS.between(outDate, retDate).toInt().coerceAtLeast(0) else null)
+                }
+                ChoiceField(tr("Rugalmasság", "Flexibility", "Flexibilität"), FLEX_OPTIONS + (WEEKLY_CHOICE to tr("Minden héten (pl. bármelyik hétvége)", "Every week (e.g. any weekend)", "Jede Woche (z. B. jedes Wochenende)")), if (weekly) WEEKLY_CHOICE else flexDays) {
+                    weekly = it == WEEKLY_CHOICE
+                    flexDays = if (weekly) 0 else it
+                    if (weekly && (weeklyUntil.isBefore(outDate) || weeklyUntil.isAfter(outDate.plusWeeks((MAX_WEEKS - 1).toLong())))) {
+                        weeklyUntil = outDate.plusWeeks(3)
+                    }
+                }
+                if (weekly) {
+                    DateField(
+                        tr("Utolsó indulás legkésőbb", "Last departure at the latest", "Letzter Abflug spätestens"), weeklyUntil, minDate = outDate,
+                        maxDate = minOf(outDate.plusWeeks((MAX_WEEKS - 1).toLong()), maxTravelDate(today)),
+                        onValidChange = { untilValid = it },
+                    ) { weeklyUntil = it }
+                    val weeks = weeklyCount(outDate, weeklyUntil)
+                    Text(
+                        tr(
+                            "Ugyanezeken a napokon minden héten keres ($weeks hét), és a legolcsóbbat mutatja. " +
+                                "Pl. péntek–vasárnapot megadva: bármelyik hétvége. (Csak a REFI 1.4-től működik – a többi eszközödön is frissíts.)",
+                            "Searches the same days every week ($weeks weeks) and shows the cheapest. " +
+                                "E.g. Friday–Sunday means any weekend. (Needs REFI 1.4 or later – update your other devices too.)",
+                            "Sucht jede Woche an denselben Tagen (${if (weeks == 1) "1 Woche" else "$weeks Wochen"}) und zeigt das günstigste Angebot. " +
+                                "Z. B. Freitag–Sonntag heißt: jedes Wochenende. (Ab REFI 1.4 – aktualisiere auch deine anderen Geräte.)",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Neon.TextDim,
+                    )
+                }
+                if (!weekly && flexDays > 0) {
+                    Text(
+                        tr("A megadott naptól ±$flexDays napon belül keresi a legolcsóbbat (az út hossza marad).", "Looks for the cheapest within ±$flexDays ${if (flexDays == 1) "day" else "days"} of the chosen date (trip length stays the same).", "Sucht das günstigste Angebot innerhalb von ±$flexDays ${if (flexDays == 1) "Tag" else "Tagen"} um das gewählte Datum (die Reisedauer bleibt gleich)."),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Neon.TextDim,
+                    )
+                }
+            }
+
+            // ---- Utasok és osztály
+            SettingsCard {
+                SectionTitle(tr("Utasok és osztály", "Passengers and class", "Reisende und Klasse"))
+                ChoiceField(tr("Osztály", "Class", "Klasse"), TRAVEL_CLASSES, travelClass) { travelClass = it }
+                Stepper(tr("Felnőtt", "Adults", "Erwachsene"), tr("12 év felett", "over 12", "über 12"), adults, 1..9) { adults = it }
+                Stepper(tr("Gyerek", "Children", "Kinder"), tr("2–11 év", "ages 2–11", "2–11 Jahre"), children, 0..8) { children = it }
+                Stepper(tr("Csecsemő saját ülésen", "Infants in own seat", "Säuglinge mit eigenem Sitz"), tr("2 év alatt", "under 2", "unter 2"), infantsInSeat, 0..4) { infantsInSeat = it }
+                Stepper(tr("Csecsemő ölben", "Infants on lap", "Säuglinge auf dem Schoß"), tr("2 év alatt, felnőttenként 1", "under 2, 1 per adult", "unter 2, 1 pro Erwachsenem"), infantsOnLap, 0..adults) { infantsOnLap = it }
+            }
+
+            // ---- Poggyász és átszállás
+            SettingsCard {
+                SectionTitle(tr("Poggyász és átszállás", "Bags and stops", "Gepäck und Umstiege"))
+                Stepper(tr("Kézipoggyász", "Cabin bags", "Handgepäck"), tr("összesen, minden utasra", "in total, for all passengers", "insgesamt, für alle Reisenden"), bags, 0..maxBags) { bags = it }
+                SwitchRow(tr("Feladott poggyász (utasonként 1)", "Checked bag (1 per passenger)", "Aufgabegepäck (1 pro Person)"), checkedBag) { checkedBag = it }
                 Text(
                     tr(
-                        "Ugyanezeken a napokon minden héten keres ($weeks hét), és a legolcsóbbat mutatja. " +
-                            "Pl. péntek–vasárnapot megadva: bármelyik hétvége. (Csak a REFI 1.4-től működik – a többi eszközödön is frissíts.)",
-                        "Searches the same days every week ($weeks weeks) and shows the cheapest. " +
-                            "E.g. Friday–Sunday means any weekend. (Needs REFI 1.4 or later – update your other devices too.)",
-                        "Sucht jede Woche an denselben Tagen (${if (weeks == 1) "1 Woche" else "$weeks Wochen"}) und zeigt das günstigste Angebot. " +
-                            "Z. B. Freitag–Sonntag heißt: jedes Wochenende. (Ab REFI 1.4 – aktualisiere auch deine anderen Geräte.)",
+                        "A fapadosoknál (Ryanair, Wizz Air, easyJet…) a poggyász becsült díját " +
+                            "hozzáadjuk az árhoz. A hagyományos légitársaságoknál úgy számolunk, hogy a " +
+                            "poggyász benne van a jegyárban (a legolcsóbb „light” jegyeknél ez nem mindig igaz).",
+                        "For low-cost airlines (Ryanair, Wizz Air, easyJet…) we add an estimated bag fee " +
+                            "to the price. For traditional airlines we assume the bags are included " +
+                            "in the fare (not always true for the cheapest “light” fares).",
+                        "Bei Billigfliegern (Ryanair, Wizz Air, easyJet…) rechnen wir eine geschätzte Gepäckgebühr " +
+                            "zum Preis dazu. Bei klassischen Airlines gehen wir davon aus, dass das Gepäck im " +
+                            "Ticketpreis enthalten ist (bei den günstigsten „Light“-Tarifen nicht immer).",
                     ),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Neon.TextDim,
                 )
+                ChoiceField(tr("Átszállás", "Stops", "Umstiege"), STOP_OPTIONS, stops) { stops = it }
             }
-            if (!weekly && flexDays > 0) {
-                Text(
-                    tr("A megadott naptól ±$flexDays napon belül keresi a legolcsóbbat (az út hossza marad).", "Looks for the cheapest within ±$flexDays ${if (flexDays == 1) "day" else "days"} of the chosen date (trip length stays the same).", "Sucht das günstigste Angebot innerhalb von ±$flexDays ${if (flexDays == 1) "Tag" else "Tagen"} um das gewählte Datum (die Reisedauer bleibt gleich)."),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+
+            // ---- Szűrők (alapból csukva, egysoros összefoglalóval)
+            SettingsCard {
+                val filterParts = listOfNotNull(
+                    depFrom?.let { f -> HOUR_FROM_OPTIONS.firstOrNull { it.first == f }?.second },
+                    depTo?.let { t -> HOUR_TO_OPTIONS.firstOrNull { it.first == t }?.second },
+                    airlines.trim().takeIf { it.isNotEmpty() }?.let { tr("csak: $it", "only: $it", "nur: $it") },
                 )
+                CollapsibleSection(
+                    title = tr("Szűrők", "Filters", "Filter"),
+                    summary = if (filterParts.isEmpty()) tr("Nincs szűrő", "No filters", "Keine Filter") else filterParts.joinToString(" · "),
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(Modifier.weight(1f)) { ChoiceField(tr("Indulás legkorábban", "Depart earliest", "Abflug frühestens"), HOUR_FROM_OPTIONS, depFrom) { depFrom = it } }
+                        Box(Modifier.weight(1f)) { ChoiceField(tr("Indulás legkésőbb", "Depart latest", "Abflug spätestens"), HOUR_TO_OPTIONS, depTo) { depTo = it } }
+                    }
+                    OutlinedTextField(
+                        value = airlines,
+                        onValueChange = { airlines = it.take(80) },
+                        label = { Text(tr("Csak ezek a légitársaságok", "Only these airlines", "Nur diese Airlines")) },
+                        placeholder = { Text(tr("pl. Wizz, Ryanair – üresen: bármelyik", "e.g. Wizz, Ryanair – empty: any", "z. B. Wizz, Ryanair – leer: alle")) },
+                        supportingText = { Text(tr("Vesszővel elválasztva; elég a név része is", "Separated by commas; part of the name is enough", "Durch Kommas getrennt; ein Teil des Namens reicht")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
 
-            SectionTitle(tr("Utasok és osztály", "Passengers and class", "Reisende und Klasse"))
-            ChoiceField(tr("Osztály", "Class", "Klasse"), TRAVEL_CLASSES, travelClass) { travelClass = it }
-            Stepper(tr("Felnőtt", "Adults", "Erwachsene"), tr("12 év felett", "over 12", "über 12"), adults, 1..9) { adults = it }
-            Stepper(tr("Gyerek", "Children", "Kinder"), tr("2–11 év", "ages 2–11", "2–11 Jahre"), children, 0..8) { children = it }
-            Stepper(tr("Csecsemő saját ülésen", "Infants in own seat", "Säuglinge mit eigenem Sitz"), tr("2 év alatt", "under 2", "unter 2"), infantsInSeat, 0..4) { infantsInSeat = it }
-            Stepper(tr("Csecsemő ölben", "Infants on lap", "Säuglinge auf dem Schoß"), tr("2 év alatt, felnőttenként 1", "under 2, 1 per adult", "unter 2, 1 pro Erwachsenem"), infantsOnLap, 0..adults) { infantsOnLap = it }
-
-            SectionTitle(tr("Poggyász és átszállás", "Bags and stops", "Gepäck und Umstiege"))
-            Stepper(tr("Kézipoggyász", "Cabin bags", "Handgepäck"), tr("összesen, minden utasra", "in total, for all passengers", "insgesamt, für alle Reisenden"), bags, 0..maxBags) { bags = it }
-            SwitchRow(tr("Feladott poggyász (utasonként 1)", "Checked bag (1 per passenger)", "Aufgabegepäck (1 pro Person)"), checkedBag) { checkedBag = it }
-            Text(
-                tr(
-                    "A fapadosoknál (Ryanair, Wizz Air, easyJet…) a poggyász díját becsült összeggel " +
-                        "adom hozzá az árhoz. A hagyományos légitársaságoknál úgy számolok, hogy a " +
-                        "poggyász benne van a jegyárban (a legolcsóbb „light” jegyeknél ez nem mindig igaz).",
-                    "For low-cost airlines (Ryanair, Wizz Air, easyJet…) we add an estimated bag fee " +
-                        "to the price. For traditional airlines we assume the bags are included " +
-                        "in the fare (not always true for the cheapest “light” fares).",
-                    "Bei Billigfliegern (Ryanair, Wizz Air, easyJet…) rechnen wir eine geschätzte Gepäckgebühr " +
-                        "zum Preis dazu. Bei klassischen Airlines gehen wir davon aus, dass das Gepäck im " +
-                        "Ticketpreis enthalten ist (bei den günstigsten „Light“-Tarifen nicht immer).",
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            ChoiceField(tr("Átszállás", "Stops", "Umstiege"), STOP_OPTIONS, stops) { stops = it }
-
-            SectionTitle(tr("Szűrők", "Filters", "Filter"))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Box(Modifier.weight(1f)) { ChoiceField(tr("Indulás legkorábban", "Depart earliest", "Abflug frühestens"), HOUR_FROM_OPTIONS, depFrom) { depFrom = it } }
-                Box(Modifier.weight(1f)) { ChoiceField(tr("Indulás legkésőbb", "Depart latest", "Abflug spätestens"), HOUR_TO_OPTIONS, depTo) { depTo = it } }
+            // ---- Riasztás
+            SettingsCard {
+                SectionTitle(tr("Riasztás", "Alert", "Alarm"))
+                OutlinedTextField(
+                    value = target,
+                    onValueChange = { v ->
+                        // Tizedesrész (pl. beillesztett „89,99”) ne szorozza százzal az árat
+                        val whole = v.trim().replace(Regex("[.,]\\d{1,2}$"), "")
+                        target = whole.filter(Char::isDigit).take(9)
+                    },
+                    label = { Text(tr("Célár (${currencySymbol(currency)})", "Target price (${currencySymbol(currency)})", "Zielpreis (${currencySymbol(currency)})")) },
+                    supportingText = { Text(tr("Szólunk, ha a teljes ár (minden utassal) erre az összegre vagy ez alá csökken", "We'll let you know when the total price (all passengers) drops to this amount or below", "Wir melden uns, wenn der Gesamtpreis (alle Reisenden) auf diesen Betrag oder darunter fällt")) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                SwitchRow(tr("Értesítés küldése", "Send notification", "Benachrichtigung senden"), notify) { notify = it }
             }
-            OutlinedTextField(
-                value = airlines,
-                onValueChange = { airlines = it.take(80) },
-                label = { Text(tr("Csak ezek a légitársaságok", "Only these airlines", "Nur diese Airlines")) },
-                placeholder = { Text(tr("pl. Wizz, Ryanair – üresen: bármelyik", "e.g. Wizz, Ryanair – empty: any", "z. B. Wizz, Ryanair – leer: alle")) },
-                supportingText = { Text(tr("Vesszővel elválasztva; elég a név része is", "Separated by commas; part of the name is enough", "Durch Kommas getrennt; ein Teil des Namens reicht")) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
 
-            SectionTitle(tr("Riasztás", "Alert", "Alarm"))
-            OutlinedTextField(
-                value = target,
-                onValueChange = { v ->
-                    // Tizedesrész (pl. beillesztett „89,99”) ne szorozza százzal az árat
-                    val whole = v.trim().replace(Regex("[.,]\\d{1,2}$"), "")
-                    target = whole.filter(Char::isDigit).take(9)
-                },
-                label = { Text(tr("Célár (${currencySymbol(currency)})", "Target price (${currencySymbol(currency)})", "Zielpreis (${currencySymbol(currency)})")) },
-                supportingText = { Text(tr("Szólunk, ha a teljes ár (minden utassal) erre az összegre vagy ez alá csökken", "We'll let you know when the total price (all passengers) drops to this amount or below", "Wir melden uns, wenn der Gesamtpreis (alle Reisenden) auf diesen Betrag oder darunter fällt")) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            SwitchRow(tr("Értesítés küldése", "Send notification", "Benachrichtigung senden"), notify) { notify = it }
-
-            error?.let {
-                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-            }
-            Button(onClick = { save() }, enabled = !saved, modifier = Modifier.fillMaxWidth()) { Text(tr("Mentés", "Save", "Speichern")) }
             if (confirmDelete && existing != null) {
                 androidx.compose.material3.AlertDialog(
                     onDismissRequest = { confirmDelete = false },
@@ -1376,10 +1425,14 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
                     onClick = { confirmDelete = true },
                     enabled = !saved,
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text(tr("Figyelés törlése", "Delete watch", "Beobachtung löschen")) }
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = if (saved) 0.3f else 0.7f)),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                ) {
+                    Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(tr("Figyelés törlése", "Delete watch", "Beobachtung löschen"))
+                }
             }
-            Spacer(Modifier.height(24.dp))
         }
     }
 }
