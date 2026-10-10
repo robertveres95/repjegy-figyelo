@@ -75,7 +75,7 @@ object Fees {
             ?: return o.copy(
                 bagsIncluded = !w.wantsBags,
                 partial = includeInfants && w.infantsOnLap > 0,
-                note = listOfNotNull(o.note, tr("poggyász-/csecsemődíj nélkül", "without baggage/infant fees")).joinToString(", "),
+                note = listOfNotNull(o.note, trs("poggyász-/csecsemődíj nélkül", "without baggage/infant fees")).joinToString(", "),
             )
         val bags = w.wantsBags
         val infants = includeInfants && w.infantsOnLap > 0
@@ -87,7 +87,7 @@ object Fees {
             if (bags) add("baggage")
             if (infants) add("infant")
         }.joinToString(" and ")
-        val tag = tr(
+        val tag = trs(
             "becsült $what-díjjal (+${formatPrice(extra, currency)})",
             "incl. estimated $whatEn ${if (bags && infants) "fees" else "fee"} (+${formatPrice(extra, currency)})",
         )

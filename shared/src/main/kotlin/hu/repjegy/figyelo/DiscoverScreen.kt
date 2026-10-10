@@ -282,14 +282,14 @@ internal fun DiscoverScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(
-                                r.city,
+                                r.shownCity,
                                 style = MaterialTheme.typography.titleLarge,
                                 color = Neon.Green,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                listOf(r.country, "${r.fromCode} → ${r.code}").filter { it.isNotBlank() }.joinToString(" · "),
+                                listOf(r.shownCountry, "${r.fromCode} → ${r.code}").filter { it.isNotBlank() }.joinToString(" · "),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -316,7 +316,7 @@ private fun DealAlertRow(a: DealAlert, currency: String) {
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(
-            tr("${a.fromLabel} → bárhová, ${DealAlerts.periodLabel(a)}", "${a.fromLabel} → anywhere, ${DealAlerts.periodLabel(a)}"),
+            tr("${a.fromName} → bárhová, ${DealAlerts.periodLabel(a)}", "${a.fromName} → anywhere, ${DealAlerts.periodLabel(a)}"),
             style = MaterialTheme.typography.titleSmall, color = Neon.Green,
         )
         Text(
@@ -328,7 +328,7 @@ private fun DealAlertRow(a: DealAlert, currency: String) {
         )
         if (a.latest.isNotEmpty()) {
             a.latest.take(3).forEach { r ->
-                Text(tr("✈ ${r.city}: ${formatPrice(r.pricePerPerson, currency)}/fő · ${Discover.describeDates(r)}", "✈ ${r.city}: ${formatPrice(r.pricePerPerson, currency)}/person · ${Discover.describeDates(r)}"), style = MaterialTheme.typography.bodySmall)
+                Text(tr("✈ ${r.shownCity}: ${formatPrice(r.pricePerPerson, currency)}/fő · ${Discover.describeDates(r)}", "✈ ${r.shownCity}: ${formatPrice(r.pricePerPerson, currency)}/person · ${Discover.describeDates(r)}"), style = MaterialTheme.typography.bodySmall)
             }
         } else if (a.lastChecked != null && a.lastError == null) {
             Text(tr("Most nincs a határ alatti út – szólunk, ha lesz.", "No trips below your limit right now – we’ll let you know when there are."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -342,7 +342,7 @@ private fun DealAlertRow(a: DealAlert, currency: String) {
     if (confirm) AlertDialog(
         onDismissRequest = { confirm = false },
         title = { Text(tr("Riasztás törlése?", "Delete alert?")) },
-        text = { Text(tr("${a.fromLabel} → bárhová, ${DealAlerts.periodLabel(a)}", "${a.fromLabel} → anywhere, ${DealAlerts.periodLabel(a)}")) },
+        text = { Text(tr("${a.fromName} → bárhová, ${DealAlerts.periodLabel(a)}", "${a.fromName} → anywhere, ${DealAlerts.periodLabel(a)}")) },
         confirmButton = { TextButton(onClick = { DealAlerts.remove(a.id); confirm = false }) { Text(tr("Törlés", "Delete")) } },
         dismissButton = { TextButton(onClick = { confirm = false }) { Text(tr("Mégse", "Cancel")) } },
     )

@@ -15,11 +15,12 @@ object PriceChecker {
     private const val MAX_OFFERS = 10
     private const val CURRENCY_HINT_HU = "Pénznemet váltottál"
     private const val CURRENCY_HINT_EN = "You changed the currency"
-    val CURRENCY_HINT_PREFIX: String get() = tr(CURRENCY_HINT_HU, CURRENCY_HINT_EN)
+    private const val CURRENCY_HINT_DE = "Du hast die Währung geändert"
+    val CURRENCY_HINT_PREFIX: String get() = tr(CURRENCY_HINT_HU, CURRENCY_HINT_EN, CURRENCY_HINT_DE)
 
     /** A pénznemváltási figyelmeztetés-e a szöveg (bármelyik nyelven íródott). */
     fun isCurrencyHint(text: String?): Boolean =
-        text != null && (text.startsWith(CURRENCY_HINT_HU) || text.startsWith(CURRENCY_HINT_EN))
+        text != null && (text.startsWith(CURRENCY_HINT_HU) || text.startsWith(CURRENCY_HINT_EN) || text.startsWith(CURRENCY_HINT_DE))
 
     private class SourceRun(val name: String, val search: suspend () -> List<Offer>)
 
@@ -80,11 +81,11 @@ object PriceChecker {
         val now = System.currentTimeMillis()
 
         if (!settings.isReady) {
-            Store.update(id) { it.copy(lastError = tr("Nincs bekapcsolt árforrás (Beállítások)", "No price source is turned on (Settings)")) }
+            Store.update(id) { it.copy(lastError = trs("Nincs bekapcsolt árforrás (Beállítások)", "No price source is turned on (Settings)")) }
             return@withContext false
         }
         if (watch.isExpired()) {
-            Store.update(id) { it.copy(lastError = tr("Az indulás dátuma már elmúlt", "The departure date has already passed")) }
+            Store.update(id) { it.copy(lastError = trs("Az indulás dátuma már elmúlt", "The departure date has already passed")) }
             return@withContext false
         }
         // Atomi foglalás: két egyszerre induló ellenőrzés (pl. kézi + háttér) ne fusson kétszer
@@ -134,13 +135,13 @@ object PriceChecker {
             val statuses = outcomes.map { (name, result) ->
                 result.fold(
                     onSuccess = { offers ->
-                        SourceStatus(name, true, if (offers.isEmpty()) tr("nincs járat", "no flights") else tr("${offers.size} ajánlat", if (offers.size == 1) "1 offer" else "${offers.size} offers"))
+                        SourceStatus(name, true, if (offers.isEmpty()) trs("nincs járat", "no flights") else trs("${offers.size} ajánlat", if (offers.size == 1) "1 offer" else "${offers.size} offers"))
                     },
                     onFailure = { e ->
                         when (e) {
-                            is SkipSourceException -> SourceStatus(name, true, e.message ?: tr("kihagyva", "skipped"))
+                            is SkipSourceException -> SourceStatus(name, true, e.message ?: trs("kihagyva", "skipped"))
                             // Talált ajánlatot, de nem minden kérése sikerült: nem számít teljes válasznak
-                            is PartialSourceException -> SourceStatus(name, false, tr("${e.offers.size} ajánlat, ${e.message}", "${e.offers.size} ${if (e.offers.size == 1) "offer" else "offers"}, ${e.message}").take(160))
+                            is PartialSourceException -> SourceStatus(name, false, trs("${e.offers.size} ajánlat, ${e.message}", "${e.offers.size} ${if (e.offers.size == 1) "offer" else "offers"}, ${e.message}").take(160))
                             // A szerverek hibaszövege lehet hosszú (akár HTML) – röviden tároljuk
                             else -> SourceStatus(name, false, (e.message ?: e.javaClass.simpleName).take(160))
                         }
@@ -172,12 +173,12 @@ object PriceChecker {
                         offers = if (allAnswered) emptyList() else it.offers,
                         lastPrice = if (allAnswered) null else it.lastPrice,
                         lastError = when {
-                            allAnswered -> tr("Nincs találat ezekkel a beállításokkal", "No results with these settings")
-                            anyWorked -> tr(
+                            allAnswered -> trs("Nincs találat ezekkel a beállításokkal", "No results with these settings")
+                            anyWorked -> trs(
                                 "Nem minden forrás válaszolt, és a többi nem talált járatot",
                                 "Not every source answered, and the others found no flights",
                             )
-                            else -> tr("Egyik forrás sem válaszolt", "None of the sources answered")
+                            else -> trs("Egyik forrás sem válaszolt", "None of the sources answered")
                         }.let { msg -> keepCurrencyHint(it) ?: msg },
                     )
                 }
@@ -229,7 +230,7 @@ object PriceChecker {
 
     /** Ha a légitársaság-szűrő kizárja ezt a fapadost, a lekérdezést meg sem kezdjük. */
     private fun airlineAllowed(w: Watch, name: String) {
-        if (!w.airlineMatches(name)) throw SkipSourceException(tr("kizárva a légitársaság-szűrővel", "excluded by the airline filter"))
+        if (!w.airlineMatches(name)) throw SkipSourceException(trs("kizárva a légitársaság-szűrővel", "excluded by the airline filter"))
     }
 
     /**

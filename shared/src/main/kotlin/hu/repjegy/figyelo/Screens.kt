@@ -756,7 +756,7 @@ private fun WatchCard(
             Spacer(Modifier.height(6.dp))
             when {
                 w.isExpired() -> StatusText(tr("Az indulás dátuma elmúlt, a figyelés szünetel.", "The departure date has passed, this watch is paused."), true)
-                w.lastError != null -> StatusText(w.lastError, true)
+                w.lastError != null -> StatusText(w.errorText ?: w.lastError, true)
                 w.lastChecked != null -> StatusText(
                     tr("Utoljára ellenőrizve: ", "Last checked: ") +
                         Instant.ofEpochMilli(w.lastChecked).atZone(ZoneId.systemDefault()).format(timeFormat),
@@ -767,7 +767,7 @@ private fun WatchCard(
             if (w.sourceStatus.isNotEmpty()) {
                 Text(
                     w.sourceStatus.joinToString("  ·  ") { s ->
-                        "${s.source} ${if (s.ok) "✓" else "✗"} ${s.text}"
+                        "${s.source} ${if (s.ok) "✓" else "✗"} ${s.shown}"
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = if (w.sourceStatus.any { !it.ok }) MaterialTheme.colorScheme.error
@@ -858,7 +858,7 @@ private fun OfferDetails(offer: Offer, highlight: Boolean) {
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
-        offer.note?.let {
+        offer.noteText?.let {
             Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.tertiary)
         }
     }

@@ -379,6 +379,49 @@ class FeaturesTest {
         assertEquals(a.copy(latest = listOf(r("STN", 19000))), DealAlert.fromJson(a.copy(latest = listOf(r("STN", 19000))).toJson()))
     }
 
+    // ---------------- Nyelvek: városnevek és tárolt szövegek
+    @Test fun languagesCitiesAndStoredTexts() {
+        try {
+            Lang.set(Lang.EN_CODE)
+            assertEquals("Milan", Airports.cityName("MXP"))
+            assertEquals("Athens", Airports.cityName("ATH"))
+            assertEquals("Brussels", Airports.cityName("BRU"))
+            assertEquals("Budapest → London", watch().copy(fromLabel = "Budapest", toLabel = "London").routeTitle)
+            assertEquals("Rome → Milan", watch().copy(from = "FCO", to = "MXP,LIN,BGY", fromLabel = "Róma", toLabel = "Milánó").routeTitle)
+            Lang.set(Lang.DE_CODE)
+            assertEquals("Mailand", Airports.cityName("MXP,LIN,BGY"))
+            assertEquals("Wien", Airports.cityName("VIE"))
+            assertEquals("Italien", Airports.countryName("FCO"))
+            Lang.set(Lang.HU_CODE)
+            assertEquals("Milánó", Airports.cityName("MXP"))
+            assertEquals("Róma → Milánó", watch().copy(from = "FCO", to = "MXP,LIN,BGY").routeTitle)
+            // Keresés bármelyik nyelvű névvel
+            assertTrue(Airports.search("Mailand").any { it.codes.contains("MXP") })
+            assertTrue(Airports.search("Milan").any { it.codes.contains("MXP") })
+
+            // Tárolt szöveg: magyarul keletkezett, angolul angolul látszik
+            val msg = trs("Nincs járat erre a napra", "No flights on this day", "Keine Flüge an diesem Tag")
+            val w = watch().copy(lastError = msg, sourceStatus = listOf(SourceStatus("Ryanair", true, msg)),
+                offers = listOf(Offer(1, "x", note = msg))).withL10n()
+            val back = Watch.fromJson(w.toJson())
+            Lang.set(Lang.EN_CODE)
+            assertEquals("No flights on this day", back.errorText)
+            assertEquals("No flights on this day", back.sourceStatus.single().shown)
+            assertEquals("No flights on this day", back.offers.single().noteText)
+            Lang.set(Lang.DE_CODE)
+            assertEquals("Keine Flüge an diesem Tag", back.errorText)
+            // Ismeretlen (pl. régi) szöveg úgy marad, ahogy volt
+            assertEquals("valami régi", watch().copy(lastError = "valami régi").withL10n().errorText)
+            // Összefűzött megjegyzések
+            val a = trs("egy", "one", "eins"); val b = trs("kettő", "two", "zwei")
+            Lang.set(Lang.HU_CODE)
+            assertEquals(L10n("egy, kettő", "one, two", "eins, zwei"), Texts.find("$a, $b"))
+            assertEquals("Ugyanaz", tr("Ugyanaz", "Same"))
+        } finally {
+            Lang.set(Lang.HU_CODE)
+        }
+    }
+
     // ---------------- Reptéri transzfer
     @Test fun transfers() {
         val stn = assertNotNull(Transfers.infoFor("stn"))

@@ -161,7 +161,7 @@ function card(w, cur) {
 
   const top = el('div', 'row');
   top.append(
-    el('span', 'route', `${w.fromLabel || w.from} → ${w.toLabel || w.to}`),
+    el('span', 'route', `${refiCity(w.from, w.fromLabel)} → ${refiCity(w.to, w.toLabel)}`),
     el('span', 'price', price != null ? money(price, cur) : '—'),
   );
   li.append(top);

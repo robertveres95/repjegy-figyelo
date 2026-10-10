@@ -72,13 +72,13 @@ object Ignav {
         if (res.code !in 200..299) {
             val message = json?.optJSONObject("error")?.optString("message")?.takeIf { it.isNotBlank() }
             throw when (res.code) {
-                401, 403 -> FatalSourceException(tr("érvénytelen kulcs", "invalid key"))
-                402 -> FatalSourceException(tr("elfogyott a keret", "quota used up"))
-                429 -> FatalSourceException(tr("túl sok kérés, később újrapróbálom", "too many requests, will try again later"))
+                401, 403 -> FatalSourceException(trs("érvénytelen kulcs", "invalid key"))
+                402 -> FatalSourceException(trs("elfogyott a keret", "quota used up"))
+                429 -> FatalSourceException(trs("túl sok kérés, később újrapróbálom", "too many requests, will try again later"))
                 else -> IOException(message ?: "HTTP ${res.code}")
             }
         }
-        if (json == null) throw IOException(tr("hibás válasz", "invalid response"))
+        if (json == null) throw IOException(trs("hibás válasz", "invalid response"))
 
         val itineraries = json.optJSONArray("itineraries") ?: JSONArray()
         val url = GoogleFlights.searchUrl(w.copy(from = origin, to = destination), currency)
@@ -171,9 +171,9 @@ object Rates {
         if (primary != null && f in primary && t in primary) return amount / primary.getValue(f) * primary.getValue(t)
         val backup = runCatching { wide.rates() }.getOrNull()
         if (backup != null && f in backup && t in backup) return amount / backup.getValue(f) * backup.getValue(t)
-        if (primary == null && backup == null) throw IOException(tr("Nem sikerült lekérni az árfolyamot", "Couldn't get exchange rates"))
+        if (primary == null && backup == null) throw IOException(trs("Nem sikerült lekérni az árfolyamot", "Couldn't get exchange rates"))
         throw IOException(
-            tr("Ismeretlen pénznem: ", "Unknown currency: ") +
+            trs("Ismeretlen pénznem: ", "Unknown currency: ") +
                 (if (primary?.containsKey(f) == true || backup?.containsKey(f) == true) t else f),
         )
     }
@@ -190,7 +190,7 @@ object Rates {
             // végigvárnánk az időkorlátot), addig a régebbi árfolyam is jó
             if (now - failedAt < 10 * 60_000L) {
                 cache?.let { return it }
-                throw IOException(tr("Az árfolyam-szolgáltatás nem elérhető", "The exchange rate service is unavailable"))
+                throw IOException(trs("Az árfolyam-szolgáltatás nem elérhető", "The exchange rate service is unavailable"))
             }
             try {
                 return fetch(now)
@@ -203,14 +203,14 @@ object Rates {
 
         private fun fetch(now: Long): Map<String, Double> {
             val res = Http.request(url, timeoutMs = 15_000)
-            if (res.code !in 200..299) throw IOException(tr("Nem sikerült lekérni az árfolyamot (HTTP ${res.code})", "Couldn't get exchange rates (HTTP ${res.code})"))
+            if (res.code !in 200..299) throw IOException(trs("Nem sikerült lekérni az árfolyamot (HTTP ${res.code})", "Couldn't get exchange rates (HTTP ${res.code})"))
             val obj = JSONObject(res.body).getJSONObject("rates")
             val map = mutableMapOf("EUR" to 1.0)
             obj.keys().forEach { k ->
                 val v = obj.optDouble(k, Double.NaN)
                 if (v.isFinite() && v > 0) map[k.uppercase()] = v
             }
-            if (map.size < 2) throw IOException(tr("Hibás árfolyam-válasz", "Invalid exchange rate response"))
+            if (map.size < 2) throw IOException(trs("Hibás árfolyam-válasz", "Invalid exchange rate response"))
             cache = map
             fetchedAt = now
             return map

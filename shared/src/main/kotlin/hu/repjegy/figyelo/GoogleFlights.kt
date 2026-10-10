@@ -54,7 +54,7 @@ object GoogleFlights {
             }
         }
         // Nem „nincs járat”: a forrás hibázott, így a korábbi ár megmarad
-        throw IOException(tr("A Google erre a keresésre most hibát jelzett", "Google reported an error for this search"))
+        throw IOException(trs("A Google erre a keresésre most hibát jelzett", "Google reported an error for this search"))
     }
 
     private val insights = java.util.concurrent.ConcurrentHashMap<String, MarketInsight>()
@@ -100,14 +100,14 @@ object GoogleFlights {
 
         val url = searchUrl(w, currency)
         val res = Http.request(url, headers = mapOf("Accept" to "text/html,application/xhtml+xml"))
-        if (res.code == 429) throw FatalSourceException(tr("A Google ideiglenesen korlátozta a lekérdezést", "Google is temporarily limiting searches"))
+        if (res.code == 429) throw FatalSourceException(trs("A Google ideiglenesen korlátozta a lekérdezést", "Google is temporarily limiting searches"))
         if (res.code !in 200..299) throw IOException("HTTP ${res.code}")
 
         val script = Regex("""<script class="ds:1"[^>]*>([\s\S]*?)</script>""").find(res.body)?.groupValues?.get(1)
             ?: if (res.body.contains("consent.google")) {
-                throw IOException(tr("A Google beleegyezési oldalt adott vissza", "Google returned a consent page"))
+                throw IOException(trs("A Google beleegyezési oldalt adott vissza", "Google returned a consent page"))
             } else {
-                throw IOException(tr("Nem található járatadat az oldalon (változhatott a formátum)", "No flight data found on the page (the format may have changed)"))
+                throw IOException(trs("Nem található járatadat az oldalon (változhatott a formátum)", "No flight data found on the page (the format may have changed)"))
             }
 
         val data = script.substringAfter("data:").substringBeforeLast(",").trim()
@@ -138,7 +138,7 @@ object GoogleFlights {
         // Ha voltak járatok, de egyiket sem tudtuk értelmezni, az formátumváltozás –
         // ezt hibaként jelezzük, ne „nincs járat”-ként
         if (seen > 0 && offers.isEmpty() && failed > 0) {
-            throw IOException(tr("A Google válaszát nem sikerült értelmezni (változhatott a formátum)", "Couldn't read Google's response (the format may have changed)"))
+            throw IOException(trs("A Google válaszát nem sikerült értelmezni (változhatott a formátum)", "Couldn't read Google's response (the format may have changed)"))
         }
         lastDebug = "payload=${payload.length()} elem=$seen hibás=$failed"
         return Fetched(offers, seen, errorStatus = false)

@@ -331,12 +331,15 @@ object Store {
     }
 
     /** Pénznemváltási figyelmeztetés (a [PriceChecker.isCurrencyHint] mindkét nyelven felismeri). */
-    private fun currencyHint(): String = tr(
-        "${PriceChecker.CURRENCY_HINT_PREFIX}: add meg újra a célárat, és kapcsold vissza az értesítést.",
-        "${PriceChecker.CURRENCY_HINT_PREFIX}: enter the target price again and turn notifications back on.",
+    private fun currencyHint(): String = trs(
+        "Pénznemet váltottál: add meg újra a célárat, és kapcsold vissza az értesítést.",
+        "You changed the currency: enter the target price again and turn notifications back on.",
+        "Du hast die Währung geändert: Gib den Zielpreis erneut ein und schalte die Benachrichtigung wieder ein.",
     )
 
-    private fun persist(list: List<Watch>) {
+    private fun persist(list0: List<Watch>) {
+        // A tárolt szövegek minden nyelven (nyelvváltás után is a felület nyelvén látszanak)
+        val list = list0.map { it.withL10n() }
         val arr = JSONArray()
         list.forEach { arr.put(it.toJson()) }
         prefs.edit { putString("watches", arr.toString()) }

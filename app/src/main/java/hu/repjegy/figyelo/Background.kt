@@ -401,7 +401,7 @@ object Notifier {
             best.returnText()?.let { append(tr("\nVissza: $it", "\nReturn: $it")) }
             append("\n")
             append(listOfNotNull(best.airline, best.source).distinct().joinToString(" · "))
-            best.note?.let { append(" ($it)") }
+            best.noteText?.let { append(" ($it)") }
         }
         val quiet = Store.settings.value.isQuiet()
         val notification = NotificationCompat.Builder(context, if (quiet) QUIET_CHANNEL_ID else CHANNEL_ID)

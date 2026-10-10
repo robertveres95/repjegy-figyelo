@@ -372,6 +372,7 @@ object Sync {
             lastPrice = fresher.lastPrice,
             lastChecked = fresher.lastChecked,
             lastError = fresher.lastError,
+            lastErrorL = fresher.lastErrorL,
             offers = fresher.offers,
             sourceStatus = fresher.sourceStatus,
             lowestPrice = lowest,

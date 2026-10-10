@@ -61,7 +61,11 @@ data class Offer(
     val bagsIncluded: Boolean = true,      // a kért poggyász díja benne van-e
     val note: String? = null,              // pl. "becsült ár"
     val partial: Boolean = false,          // az ár hiányos (pl. ölben utazó csecsemő díja nélkül)
+    val noteL: L10n? = null,               // a megjegyzés minden nyelven (a felület nyelvén látszik)
 ) {
+    /** A megjegyzés a felület nyelvén. */
+    val noteText: String? get() = noteL?.takeIf { it.has(note) }?.text ?: note
+
     fun toJson(): JSONObject = JSONObject().apply {
         put("price", price)
         put("source", source)
@@ -77,6 +81,7 @@ data class Offer(
         putOpt("url", url)
         put("bagsIncluded", bagsIncluded)
         putOpt("note", note)
+        noteL?.takeIf { it.has(note) }?.let { put("noteL", it.toJson()) }
         if (partial) put("partial", true)
     }
 
@@ -97,12 +102,16 @@ data class Offer(
             bagsIncluded = o.optBoolean("bagsIncluded", true),
             note = o.stringOrNull("note"),
             partial = o.optBoolean("partial", false),
+            noteL = L10n.fromJson(o.optJSONObject("noteL")),
         )
     }
 }
 
 /** Egy forrás eredménye az utolsó ellenőrzéskor. */
-data class SourceStatus(val source: String, val ok: Boolean, val text: String)
+data class SourceStatus(val source: String, val ok: Boolean, val text: String, val textL: L10n? = null) {
+    /** Az állapot szövege a felület nyelvén. */
+    val shown: String get() = textL?.takeIf { it.has(text) }?.text ?: text
+}
 
 /** Egy figyelt út a keresési beállításokkal és az utolsó eredményekkel. */
 data class Watch(
@@ -136,6 +145,7 @@ data class Watch(
     val lowestPrice: Int? = null,
     val lastChecked: Long? = null,
     val lastError: String? = null,
+    val lastErrorL: L10n? = null,      // a hibaüzenet minden nyelven
     val lastNotifiedPrice: Int? = null,
     val offers: List<Offer> = emptyList(),          // ár szerint rendezve, az első a legjobb
     val sourceStatus: List<SourceStatus> = emptyList(),
@@ -149,9 +159,23 @@ data class Watch(
     val seatedPassengers: Int get() = adults + children + infantsInSeat
 
     /** Kártyán és értesítésben használt útvonalnév, pl. "Budapest → London". */
-    val routeTitle: String get() = "${fromLabel ?: from} → ${toLabel ?: to}"
+    val routeTitle: String
+        get() = "${Airports.cityName(from) ?: fromLabel ?: from} → ${Airports.cityName(to) ?: toLabel ?: to}"
 
     val bestOffer: Offer? get() = offers.firstOrNull()
+
+    /** A hibaüzenet a felület nyelvén. */
+    val errorText: String? get() = lastErrorL?.takeIf { it.has(lastError) }?.text ?: lastError
+
+    /**
+     * A tárolt szövegek (hiba, forrásállapot, ajánlat-megjegyzés) minden nyelvű változatának kitöltése a
+     * [Texts]-ből: így nyelvváltás után is a felület nyelvén látszanak. A már nem illő változatot eldobja.
+     */
+    fun withL10n(): Watch = copy(
+        lastErrorL = lastErrorL?.takeIf { it.has(lastError) } ?: Texts.find(lastError),
+        sourceStatus = sourceStatus.map { s -> if (s.textL?.has(s.text) == true) s else s.copy(textL = Texts.find(s.text)) },
+        offers = offers.map { o -> if (o.note == null || o.noteL?.has(o.note) == true) o else o.copy(noteL = Texts.find(o.note)) },
+    )
 
     /**
      * Összevethető-e az ajánlat a célárral: a kért poggyász díja benne van, és az ár nem
@@ -240,7 +264,7 @@ data class Watch(
     ).joinToString("|") + (weeklyUntil?.let { "|w$it" } ?: "")
 
     fun clearResults(): Watch = copy(
-        lastPrice = null, lowestPrice = null, lastChecked = null, lastError = null,
+        lastPrice = null, lowestPrice = null, lastChecked = null, lastError = null, lastErrorL = null,
         lastNotifiedPrice = null, offers = emptyList(), sourceStatus = emptyList(), history = emptyList(),
         market = null,
     )
@@ -274,11 +298,14 @@ data class Watch(
         putOpt("lowestPrice", lowestPrice)
         putOpt("lastChecked", lastChecked)
         putOpt("lastError", lastError)
+        lastErrorL?.takeIf { it.has(lastError) }?.let { put("lastErrorL", it.toJson()) }
         putOpt("lastNotifiedPrice", lastNotifiedPrice)
         put("offers", JSONArray().apply { offers.forEach { put(it.toJson()) } })
         put("sourceStatus", JSONArray().apply {
             sourceStatus.forEach {
-                put(JSONObject().put("source", it.source).put("ok", it.ok).put("text", it.text))
+                put(JSONObject().put("source", it.source).put("ok", it.ok).put("text", it.text).apply {
+                    it.textL?.takeIf { l -> l.has(it.text) }?.let { l -> put("textL", l.toJson()) }
+                })
             }
         })
         val h = JSONArray()
@@ -300,7 +327,7 @@ data class Watch(
             val statusArr = o.optJSONArray("sourceStatus") ?: JSONArray()
             val status = (0 until statusArr.length()).mapNotNull { i ->
                 statusArr.optJSONObject(i)?.let {
-                    SourceStatus(it.optString("source"), it.optBoolean("ok"), it.optString("text"))
+                    SourceStatus(it.optString("source"), it.optBoolean("ok"), it.optString("text"), L10n.fromJson(it.optJSONObject("textL")))
                 }
             }
             return Watch(
@@ -332,6 +359,7 @@ data class Watch(
                 lowestPrice = o.intOrNull("lowestPrice"),
                 lastChecked = o.longOrNull("lastChecked"),
                 lastError = o.stringOrNull("lastError"),
+                lastErrorL = L10n.fromJson(o.optJSONObject("lastErrorL")),
                 lastNotifiedPrice = o.intOrNull("lastNotifiedPrice"),
                 offers = offers,
                 sourceStatus = status,
