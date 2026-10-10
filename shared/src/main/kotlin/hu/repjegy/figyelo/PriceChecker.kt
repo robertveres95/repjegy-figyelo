@@ -134,7 +134,7 @@ object PriceChecker {
                 )
             }
             // A Google árelőzménye a pontos (rugalmasság nélküli) keresésre, ha most jött
-            val market = runCatching { GoogleFlights.takeInsight(single, currency) }.getOrNull()
+            val market = runCatching { GoogleFlights.takeInsight(single, currency)?.copy(forDate = single.outboundDate) }.getOrNull()
             // Ha a rendszer letiltotta az értesítéseket, nem jegyezzük fel, hogy „szóltunk” – különben
             // visszakapcsolás után erről az árról már sosem kapna értesítést
             val notificationsBlocked = runCatching { Platform.current.notificationsBlocked() }.getOrDefault(false)

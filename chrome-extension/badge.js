@@ -2,6 +2,22 @@
 // Jelvény a bővítmény ikonján: hány figyelés ára van most a célár alatt (a REFI app szabálya
 // szerint: poggyásszal csak a poggyászdíjat is tartalmazó, nem hiányos ár számít).
 
+/** Az utolsó lehetséges indulás napjának vége (Date) – mint az appban: ±napok vagy „minden héten”. */
+function refiLastDay(w) {
+  const first = new Date(w.outboundDate + 'T00:00:00');
+  const last = new Date(first);
+  if (w.weeklyUntil) {
+    // Az első indulással azonos hétköznapra eső, a határnál nem későbbi nap (legfeljebb 9 hét)
+    const until = new Date(w.weeklyUntil + 'T00:00:00');
+    const weeks = Math.min(8, Math.max(0, Math.floor(Math.round((until - first) / 86400000) / 7)));
+    last.setDate(last.getDate() + weeks * 7);
+  } else {
+    last.setDate(last.getDate() + (w.flexDays || 0));
+  }
+  last.setDate(last.getDate() + 1);
+  return last;
+}
+
 function refiBelowTargetCount(data) {
   if (!data || !Array.isArray(data.watches)) return 0;
   const now = new Date();
@@ -10,9 +26,7 @@ function refiBelowTargetCount(data) {
     if (!best || !Number.isFinite(best.price) || !Number.isFinite(w.targetPrice)) return false;
     const bags = (w.bags || 0) > 0 || !!w.checkedBag;
     if ((bags && best.bagsIncluded === false) || best.partial) return false;
-    const last = new Date((w.weeklyUntil || w.outboundDate) + 'T00:00:00');
-    last.setDate(last.getDate() + (w.weeklyUntil ? 0 : (w.flexDays || 0)) + 1);
-    if (!(last > now)) return false; // lejárt vagy hibás dátum
+    if (!(refiLastDay(w) > now)) return false; // lejárt vagy hibás dátum
     return best.price <= w.targetPrice;
   }).length;
 }

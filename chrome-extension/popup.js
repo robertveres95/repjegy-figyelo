@@ -96,8 +96,7 @@ function wantsBags(w) { return (w.bags || 0) > 0 || !!w.checkedBag; }
 function comparable(w, o) { return !(wantsBags(w) && o.bagsIncluded === false) && !o.partial; }
 
 function expired(w) {
-  const last = new Date((w.weeklyUntil || w.outboundDate) + 'T00:00:00');
-  last.setDate(last.getDate() + (w.weeklyUntil ? 0 : (w.flexDays || 0)) + 1);
+  const last = refiLastDay(w);
   return last < new Date();
 }
 

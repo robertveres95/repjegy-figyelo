@@ -162,6 +162,8 @@ jobs:
       # Google Play-változat (saját frissítő nélkül) App Bundle-ként; nem kerül a nyilvános kiadásba,
       # csak a futás „Artifacts” részébe (innen tölthető fel a Play Console-ba)
       - name: Play-változat (AAB)
+        # Ha ez nem sikerül, a nyilvános (APK/MSI) kiadás attól még elkészül
+        continue-on-error: true
         shell: bash
         env:
           REFI_KEYSTORE_PASS: ${{ secrets.REFI_KEYSTORE_PASS }}

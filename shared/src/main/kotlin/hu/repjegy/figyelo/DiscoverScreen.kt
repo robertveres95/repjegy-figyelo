@@ -78,6 +78,7 @@ internal fun ImportCodeDialog(initial: String, onDismiss: () -> Unit, onImported
                     decoded != null -> Text(
                         "${decoded.first.routeTitle} · ${shortDay(decoded.first.outboundDate)}" +
                             (decoded.first.returnDate?.let { " – ${shortDay(it)}" } ?: "") +
+                            (decoded.first.weeklyUntil?.let { ", minden héten ${shortDay(it)}-ig" } ?: "") +
                             " · célár ${formatPrice(decoded.first.targetPrice, decoded.second)}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Neon.Green,
@@ -103,7 +104,7 @@ internal fun ImportCodeDialog(initial: String, onDismiss: () -> Unit, onImported
                 onClick = click@{
                     val (w0, cur) = decoded ?: return@click
                     val ex = existing
-                    // Frissítésnél a meglévő azonosító, a saját értesítés-beállítás és a saját címkék maradnak
+                    // Frissítésnél a meglévő azonosító és a saját értesítés-beállítás marad (a többi a kapott kód szerint)
                     val w = if (ex != null) w0.copy(id = ex.id, notify = ex.notify, sharedFrom = ex.sharedFrom) else w0
                     busy = true
                     AppScope.scope.launch {

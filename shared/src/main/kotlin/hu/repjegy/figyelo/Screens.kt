@@ -961,7 +961,7 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
             weekly && weeklyUntil.isBefore(outDate) -> "A „minden héten” utolsó napja nem lehet az első indulás előtt."
             weekly && weeklyUntil.isAfter(outDate.plusWeeks((MAX_WEEKS - 1).toLong())) ->
                 "„Minden héten” legfeljebb $MAX_WEEKS hétre állítható."
-            weekly && weeklyUntil.isBefore(today) -> "Az indulás dátuma nem lehet a múltban."
+            weekly && lastWeekly(outDate, weeklyUntil).isBefore(today) -> "Az indulás dátuma nem lehet a múltban."
             !weekly && outDate.plusDays(flexDays.toLong()).isBefore(today) -> "Az indulás dátuma nem lehet a múltban."
             outDate.isAfter(maxTravelDate(today)) || (roundTrip && retDate.isAfter(maxTravelDate(today))) ->
                 "Legfeljebb ${maxTravelDate(today).format(typedDateFormat)}-ig lehet dátumot megadni."
@@ -999,7 +999,9 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
             targetPrice = targetValue,
             notify = notify,
             flexDays = if (weekly) 0 else flexDays,
-            weeklyUntil = if (weekly) weeklyUntil.toString() else null,
+            weeklyUntil = if (weekly) lastWeekly(outDate, weeklyUntil).toString() else null,
+            // Megosztott figyelés szerkesztése után is felismerhető maradjon, ha újra elküldik
+            sharedFrom = if (stillThere) existing!!.sharedFrom else null,
             depFrom = depFrom,
             depTo = depTo,
             airlines = airlines.trim(),
@@ -1068,8 +1070,11 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
                 // Az út hossza marad: ha az indulás eltolódik, a visszaút vele mozog
                 // (gépelés közbeni részleges dátumnál sem vész el az eredeti hossz)
                 val days = java.time.temporal.ChronoUnit.DAYS.between(outDate, retDate).coerceAtLeast(0)
+                // A „minden héten” tartomány is vele mozog
+                val span = java.time.temporal.ChronoUnit.DAYS.between(outDate, weeklyUntil)
                 outDate = it
                 retDate = it.plusDays(days)
+                if (span >= 0) weeklyUntil = it.plusDays(span)
             }
             if (roundTrip) {
                 DateField("Visszaút", retDate, minDate = outDate, onValidChange = { retValid = it }) { retDate = it }

@@ -322,6 +322,14 @@ class FeaturesTest {
         val (back, _) = assertNotNull(ShareCode.decode(ShareCode.message(w, "HUF")))
         assertEquals("2026-12-04", back.weeklyUntil)
         assertEquals(4, weeklyCount(LocalDate.parse("2026-11-13"), LocalDate.parse("2026-12-04")))
+        assertTrue(ShareCode.message(w, "HUF").contains("REFI2:"), "a régi appok ne vegyék át egy dátumosként")
+        assertTrue(ShareCode.message(watch(), "HUF").contains("REFI1:"))
+        // Nem azonos hétköznapra eső határ: az utolsó valódi indulás számít (lejárat, mentés)
+        val odd = w.copy(weeklyUntil = "2026-12-09")   // szerda → az utolsó péntek dec. 4.
+        assertEquals(LocalDate.parse("2026-12-04"), odd.lastDeparture())
+        assertTrue(odd.isExpired(LocalDate.of(2026, 12, 5)))
+        assertEquals("2026-12-04", odd.sanitized()!!.weeklyUntil)
+        assertEquals(LocalDate.parse("2026-12-04"), lastWeekly(LocalDate.parse("2026-11-13"), LocalDate.parse("2026-12-09")))
     }
 
     // ---------------- Reptéri transzfer

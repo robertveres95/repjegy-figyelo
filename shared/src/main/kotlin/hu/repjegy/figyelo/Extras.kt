@@ -20,6 +20,9 @@ import java.util.zip.Inflater
  */
 object ShareCode {
     private const val PREFIX = "REFI1:"
+    // „Minden héten” figyelés kódja: a régi (1.3-as) appok ezt nem ismerik fel, így nem veszik át
+    // tévesen egyszerű, egy dátumos figyelésként
+    private const val PREFIX2 = "REFI2:"
     private val shortDate = DateTimeFormatter.ofPattern("MMM d.", HU)
 
     fun encode(w: Watch, currency: String): String {
@@ -30,7 +33,7 @@ object ShareCode {
             // Az eredeti figyelés azonosítója: ha később újra elküldi (pl. módosított dátummal), a fogadónál
             // a meglévő figyelés frissül, nem lesz belőle még egy
             .put("src", w.sharedFrom ?: w.id)
-        return PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(deflate(json.toString().toByteArray(Charsets.UTF_8)))
+        return (if (w.weeklyUntil != null) PREFIX2 else PREFIX) + Base64.getUrlEncoder().withoutPadding().encodeToString(deflate(json.toString().toByteArray(Charsets.UTF_8)))
     }
 
     /** Az elküldendő üzenet: olvasható összefoglaló + a kód külön sorban. */
@@ -62,9 +65,9 @@ object ShareCode {
     }
 
     fun decode(text: String): Pair<Watch, String>? {
-        val start = text.indexOf(PREFIX)
-        if (start < 0) return null
-        val code = text.substring(start + PREFIX.length).takeWhile { it.isLetterOrDigit() || it == '-' || it == '_' }
+        val (start, prefix) = listOf(PREFIX, PREFIX2).map { text.indexOf(it) to it }
+            .filter { it.first >= 0 }.minByOrNull { it.first } ?: return null
+        val code = text.substring(start + prefix.length).takeWhile { it.isLetterOrDigit() || it == '-' || it == '_' }
         if (code.isEmpty() || code.length > 20_000) return null
         return runCatching {
             val bytes = inflate(Base64.getUrlDecoder().decode(code))
@@ -144,7 +147,7 @@ internal fun Watch.sanitized(): Watch? {
             val until = runCatching { LocalDate.parse(u) }.getOrNull()
             val out = runCatching { LocalDate.parse(outboundDate) }.getOrNull()
             if (until == null || out == null || until.isBefore(out)) null
-            else minOf(until, out.plusWeeks((MAX_WEEKS - 1).toLong())).toString()
+            else lastWeekly(out, until).toString()
         },
         depFrom = depFrom?.coerceIn(0, 23),
         depTo = depTo?.coerceIn(1, 24),
@@ -236,6 +239,8 @@ fun verdictFor(w: Watch, today: LocalDate = LocalDate.now(), currency: String? =
         // ha a legjobb ajánlat épp arra a napra esik
         val firstDay = w.datePairs(today).first().first
         if (w.isFlexible && best.departure?.take(10) != firstDay) return null
+        // …és a Google-adat is erre a napra szóljon (nem egy korábbi, azóta elmúlt első napra)
+        if (w.isFlexible && w.market?.forDate != firstDay) return null
         return marketVerdict(w, now, daysLeft, currency)
     }
     val lower = prices.count { it < now }

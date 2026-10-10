@@ -16,12 +16,14 @@ data class MarketInsight(
     val typicalLow: Int?,
     val typicalHigh: Int?,
     val fetchedAt: Long,
+    val forDate: String? = null,   // melyik indulási napra szól (rugalmas figyelésnél fontos)
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("points", JSONArray().apply { points.forEach { put(JSONArray().put(it.time).put(it.price)) } })
         putOpt("typicalLow", typicalLow)
         putOpt("typicalHigh", typicalHigh)
         put("fetchedAt", fetchedAt)
+        putOpt("forDate", forDate)
     }
 
     companion object {
@@ -36,6 +38,7 @@ data class MarketInsight(
                 o.optInt("typicalLow", 0).takeIf { it > 0 },
                 o.optInt("typicalHigh", 0).takeIf { it > 0 },
                 o.optLong("fetchedAt", 0L),
+                o.optString("forDate", "").takeIf { it.isNotBlank() },
             )
         }
     }
@@ -164,7 +167,8 @@ data class Watch(
 
     /** Az utolsó lehetséges indulási nap. */
     fun lastDeparture(): LocalDate? = runCatching {
-        weeklyUntil?.let { LocalDate.parse(it) } ?: LocalDate.parse(outboundDate).plusDays(flexDays.toLong())
+        val out = LocalDate.parse(outboundDate)
+        weeklyUntil?.let { lastWeekly(out, LocalDate.parse(it)) } ?: out.plusDays(flexDays.toLong())
     }.getOrNull()
 
     /** Lejárt, ha már a rugalmas tartomány utolsó napja is elmúlt. */
@@ -414,6 +418,15 @@ val FLEX_OPTIONS = listOf(
 
 /** „Minden héten” mód: legfeljebb ennyi hetet nézünk (a kérések száma ne nőjön túl). */
 const val MAX_WEEKS = 9
+
+/**
+ * A „minden héten” mód tényleges utolsó indulása: az első indulás napjával azonos hétköznapra eső,
+ * [until]-nál nem későbbi nap (pl. péntek → november végéig: az utolsó novemberi péntek), legfeljebb MAX_WEEKS hét.
+ */
+fun lastWeekly(first: LocalDate, until: LocalDate): LocalDate {
+    val days = java.time.temporal.ChronoUnit.DAYS.between(first, until).coerceAtLeast(0)
+    return first.plusWeeks((days / 7).coerceAtMost(MAX_WEEKS - 1L))
+}
 
 
 val HOUR_FROM_OPTIONS: List<Pair<Int?, String>> =
