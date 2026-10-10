@@ -95,9 +95,9 @@ fun groupCostLine(w: Watch, best: Offer, currency: String, transferTotal: Int?):
         if (transferTotal != null && transferTotal > 0) add(tr("transzfer", "transfer", "Transfer"))
     }.joinToString(" + ")
     return tr(
-        "👥 Fejenként kb. ${formatPrice(per, currency)} ($people fő, $parts: ${formatPrice(total, currency)})",
-        "👥 About ${formatPrice(per, currency)} per person ($people people, $parts: ${formatPrice(total, currency)})",
-        "👥 Etwa ${formatPrice(per, currency)} pro Person ($people Personen, $parts: ${formatPrice(total, currency)})",
+        "Fejenként kb. ${formatPrice(per, currency)} ($people fő, $parts: ${formatPrice(total, currency)})",
+        "About ${formatPrice(per, currency)} per person ($people people, $parts: ${formatPrice(total, currency)})",
+        "Etwa ${formatPrice(per, currency)} pro Person ($people Personen, $parts: ${formatPrice(total, currency)})",
     )
 }
 

@@ -411,8 +411,17 @@ fun BellToggle(on: Boolean, onToggle: () -> Unit) {
             if (!on) {
                 // Áthúzás, ha ki van kapcsolva
                 androidx.compose.foundation.Canvas(Modifier.size(18.dp)) {
+                    // Semleges áthúzás (a piros csak hibákat jelöl), vékony háttérszínű szegéllyel,
+                    // hogy az azonos színű csengőn is jól elváljon
                     drawLine(
-                        color = Neon.Pink,
+                        color = Neon.Surface,
+                        start = Offset(2f, 2f),
+                        end = Offset(size.width - 2f, size.height - 2f),
+                        strokeWidth = 4.dp.toPx(),
+                        cap = StrokeCap.Round,
+                    )
+                    drawLine(
+                        color = Neon.TextDim,
                         start = Offset(2f, 2f),
                         end = Offset(size.width - 2f, size.height - 2f),
                         strokeWidth = 2.dp.toPx(),
@@ -425,7 +434,8 @@ fun BellToggle(on: Boolean, onToggle: () -> Unit) {
         Text(
             if (on) tr("BE", "ON", "AN") else tr("KI", "OFF", "AUS"),
             color = tint,
-            style = MaterialTheme.typography.labelMedium.copy(fontFamily = AppFont, fontWeight = FontWeight.Bold),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
             fontSize = 12.sp,
         )
     }

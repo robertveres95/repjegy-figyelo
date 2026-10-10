@@ -9,7 +9,9 @@ data class Place(
     val city: String,       // rövid név a kártyákhoz, pl. "London"
     val title: String,      // a lista első sora
     val subtitle: String,   // a lista második sora
-    val fieldText: String,  // ami kiválasztás után a mezőben látszik
+    val fieldText: String,  // ami kiválasztás után a mezőben látszik (rövid: „Budapest (BUD)”)
+    /** A kiválasztott hely részletei a mező alatt (pl. „Budapest Liszt Ferenc International Airport · Magyarország”). */
+    val detail: String = subtitle,
 )
 
 /**
@@ -249,7 +251,9 @@ object Airports {
                     city = shownCity,
                     title = name,
                     subtitle = "$shownCity, $country · $code",
-                    fieldText = "$name ($code)",
+                    // A mezőben rövid, jól olvasható forma; a teljes név a mező alatti sorba kerül
+                    fieldText = "$shownCity ($code)",
+                    detail = "$name · $country",
                 )
                 val keys = listOfNotNull(code.lowercase(), city, name, huName, deName).map(::normalize)
                 Entry(place, keys, rank)

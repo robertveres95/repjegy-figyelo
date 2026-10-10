@@ -332,8 +332,8 @@ fun savingsLine(w: Watch, currency: String, nowMs: Long = System.currentTimeMill
     val days = ((nowMs - first.time) / 86_400_000L).coerceAtLeast(0)
     val ago = if (days < 1) tr("Ma", "Today", "Heute") else tr("$days napja", if (days == 1L) "1 day ago" else "$days days ago", if (days == 1L) "Vor 1 Tag" else "Vor $days Tagen")
     return tr(
-        "▼ $ago még ${formatPrice(first.price, currency)} volt – ennyit nyersz most: ${formatPrice(diff, currency)}",
-        "▼ $ago it was still ${formatPrice(first.price, currency)} – you save ${formatPrice(diff, currency)} now",
-        "▼ $ago lag der Preis noch bei ${formatPrice(first.price, currency)} – du sparst jetzt ${formatPrice(diff, currency)}",
+        "$ago még ${formatPrice(first.price, currency)} volt – ennyit nyersz most: ${formatPrice(diff, currency)}",
+        "$ago it was still ${formatPrice(first.price, currency)} – you save ${formatPrice(diff, currency)} now",
+        "$ago lag der Preis noch bei ${formatPrice(first.price, currency)} – du sparst jetzt ${formatPrice(diff, currency)}",
     )
 }

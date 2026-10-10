@@ -35,6 +35,9 @@ import org.json.JSONObject
 import java.io.IOException
 import java.net.URLEncoder
 import java.time.LocalDate
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.Icons
 
 /** A kulcsos árforrások, amelyekhez lépésről lépésre segítünk kulcsot szerezni. */
 enum class KeyProvider(val title: String) { SERPAPI("SerpApi"), IGNAV("Ignav") }
@@ -297,7 +300,11 @@ fun KeyGuideDialog(provider: KeyProvider, onClose: () -> Unit, onSaved: (String)
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
-                    Text(tr("Kész! 🎉", "Done! 🎉", "Fertig! 🎉"), style = MaterialTheme.typography.titleLarge, color = Neon.Mint, fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Neon.Mint, modifier = Modifier.size(24.dp))
+                        Spacer(Modifier.size(8.dp))
+                        Text(tr("Kész!", "Done!", "Fertig!"), style = MaterialTheme.typography.titleLarge, color = Neon.Mint, fontWeight = FontWeight.Bold)
+                    }
                     Text(success!!, style = MaterialTheme.typography.bodyLarge)
                     Text(
                         tr("A következő ellenőrzéstől a ${provider.title} is keres neked. Nincs más teendőd.", "From the next check, ${provider.title} searches for you too. Nothing else to do.", "Ab der nächsten Prüfung sucht auch ${provider.title} für dich. Sonst musst du nichts tun."),

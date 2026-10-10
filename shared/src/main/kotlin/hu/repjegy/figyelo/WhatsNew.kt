@@ -4,6 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -192,8 +195,9 @@ internal fun WhatsNewOverlay(items: List<Pair<String, List<String>>>, onClose: (
                     Text("REFI $version", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     lines.forEach { line ->
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text("✈", color = Neon.Green, style = MaterialTheme.typography.bodyLarge)
-                            Text(line, style = MaterialTheme.typography.bodyLarge)
+                            // Kis kiemelőszínű pötty, az első sor közepéhez igazítva
+                            Box(Modifier.padding(top = 9.dp).size(6.dp).background(Neon.Green, CircleShape))
+                            Text(line, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                         }
                     }
                 }

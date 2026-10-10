@@ -14,11 +14,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -263,7 +268,11 @@ internal fun DiscoverScreen(
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text(tr("🔔 Szólj, ha bárhová ennyi alá megy", "🔔 Alert me if anywhere drops below this", "🔔 Sag Bescheid, wenn es irgendwohin darunter fällt")) }
+                    ) {
+                        Icon(Icons.Filled.Notifications, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(tr("Szólj, ha bárhová ennyi alá megy", "Alert me if anywhere drops below this", "Sag Bescheid, wenn es irgendwohin darunter fällt"))
+                    }
                     alertMsg?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Neon.Mint) }
                     if (alerts.isNotEmpty()) {
                         SectionTitle(tr("BÁRHOVÁ-RIASZTÁSAID", "YOUR ANYWHERE ALERTS", "DEINE „ÜBERALL GÜNSTIG“-ALARME"))
@@ -340,7 +349,11 @@ private fun DealAlertRow(a: DealAlert, currency: String) {
         )
         if (a.latest.isNotEmpty()) {
             a.latest.take(3).forEach { r ->
-                Text(tr("✈ ${r.shownCity}: ${formatPrice(r.pricePerPerson, currency)}/fő · ${Discover.describeDates(r)}", "✈ ${r.shownCity}: ${formatPrice(r.pricePerPerson, currency)}/person · ${Discover.describeDates(r)}", "✈ ${r.shownCity}: ${formatPrice(r.pricePerPerson, currency)}/Person · ${Discover.describeDates(r)}"), style = MaterialTheme.typography.bodySmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Place, contentDescription = null, tint = Neon.TextDim, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(tr("${r.shownCity}: ${formatPrice(r.pricePerPerson, currency)}/fő · ${Discover.describeDates(r)}", "${r.shownCity}: ${formatPrice(r.pricePerPerson, currency)}/person · ${Discover.describeDates(r)}", "${r.shownCity}: ${formatPrice(r.pricePerPerson, currency)}/Person · ${Discover.describeDates(r)}"), style = MaterialTheme.typography.bodySmall)
+                }
             }
         } else if (a.lastChecked != null && a.lastError == null) {
             Text(tr("Most nincs a határ alatti út – szólunk, ha lesz.", "No trips below your limit right now – we’ll let you know when there are.", "Gerade gibt es keine Flüge unter deinem Limit – wir sagen dir Bescheid, sobald es welche gibt."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

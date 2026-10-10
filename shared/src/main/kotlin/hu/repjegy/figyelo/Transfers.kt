@@ -48,7 +48,7 @@ object Transfers {
     fun totalEur(w: Watch, info: Info): Double = info.eur * trips(w)
 
     /**
-     * Egy sor a kártyára, pl. „🚌 London belvárosa: busz, kb. 80 perc · kb. 6 000 Ft/fő/út (oda-vissza, 2 főre kb. 24 000 Ft)”.
+     * Egy sor a kártyára, pl. „London belvárosa: busz, kb. 80 perc · kb. 6 000 Ft/fő/út (oda-vissza, 2 főre kb. 24 000 Ft)”.
      * [convert]: euró → a felhasználó pénzneme (null, ha most nem érhető el – ilyenkor euróban írjuk).
      */
     fun line(w: Watch, info: Info, currency: String, convert: (Double) -> Double?): String {
@@ -61,9 +61,9 @@ object Transfers {
             tr(" ($dir$who kb. ${money(totalEur(w, info))})", " ($dir$who about ${money(totalEur(w, info))})", " ($dir$who etwa ${money(totalEur(w, info))})")
         } else ""
         return tr(
-            "🚌 ${info.city} belvárosa: ${info.how}, kb. ${info.minutes} perc · kb. ${money(info.eur)}/fő/út$total",
-            "🚌 To central ${info.city}: ${info.how}, about ${info.minutes} min · about ${money(info.eur)}/person/trip$total",
-            "🚌 Ins Zentrum von ${info.city}: ${info.how}, etwa ${info.minutes} Min. · etwa ${money(info.eur)}/Person/Fahrt$total",
+            "${info.city} belvárosa: ${info.how}, kb. ${info.minutes} perc · kb. ${money(info.eur)}/fő/út$total",
+            "To central ${info.city}: ${info.how}, about ${info.minutes} min · about ${money(info.eur)}/person/trip$total",
+            "Ins Zentrum von ${info.city}: ${info.how}, etwa ${info.minutes} Min. · etwa ${money(info.eur)}/Person/Fahrt$total",
         )
     }
 

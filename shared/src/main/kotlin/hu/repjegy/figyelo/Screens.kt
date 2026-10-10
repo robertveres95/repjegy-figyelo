@@ -23,6 +23,9 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.LaunchedEffect
@@ -54,7 +57,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DateRange
@@ -520,7 +531,8 @@ internal fun HomeScreen(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 96.dp),
+            // Az „Új figyelés” lebegő gomb soha ne takarja el az utolsó kártyát
+            contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 112.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             toast?.let { msg ->
@@ -615,6 +627,36 @@ private fun BlockedNotificationsCard() {
 }
 
 /**
+ * Egy szöveg elejéről levágja az ikonként használt jelet (pl. „🚌 ”, „👥 ”, „▼ ”), ha még ott van:
+ * a kártyán Material ikon áll előtte. A betűvel, számmal vagy pénznemjellel kezdődő szöveg változatlan.
+ */
+internal fun stripLeadingIcon(s: String): String {
+    if (s.isEmpty()) return s
+    val cp = s.codePointAt(0)
+    if (Character.isLetterOrDigit(cp) || cp < 0x2190) return s
+    var i = Character.charCount(cp)
+    // Változatválasztó / összekötő (pl. „⚠️”)
+    while (i < s.length && (s[i] == '\uFE0F' || s[i] == '\u200D')) i++
+    return s.substring(i).trimStart()
+}
+
+/** Másodlagos információ egy kis ikonnal az elején (az ikon a szöveg első sorához igazodik). */
+@Composable
+private fun IconLine(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String,
+    color: Color = Neon.TextDim,
+    iconTint: Color = Neon.TextDim,
+    modifier: Modifier = Modifier,
+) {
+    Row(modifier, verticalAlignment = Alignment.Top) {
+        Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.padding(top = 1.dp).size(16.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(text, style = MaterialTheme.typography.bodySmall, color = color)
+    }
+}
+
+/**
  * A legjobb ajánlat alatti kiegészítők: a távoli reptér belvárosi transzferének becsült költsége,
  * a fejenkénti teljes költség, és a „Naptárba” gomb.
  */
@@ -627,20 +669,21 @@ private fun CostLines(w: Watch, best: Offer, currency: String, onCalendar: (List
             runCatching { Rates.convert(1.0, "EUR", currency) }.getOrNull()
         }
     }
-    if (info != null) Text(
-        Transfers.line(w, info, currency) { eur -> rate?.let { eur * it } },
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 4.dp),
+    if (info != null) IconLine(
+        Icons.Filled.Place,
+        stripLeadingIcon(Transfers.line(w, info, currency) { eur -> rate?.let { eur * it } }),
+        modifier = Modifier.padding(top = 8.dp),
     )
     val transferTotal = info?.let { i -> rate?.let { r -> Math.round(Transfers.totalEur(w, i) * r).toInt() } }
     groupCostLine(w, best, currency, transferTotal)?.let {
-        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
+        IconLine(Icons.Filled.Person, stripLeadingIcon(it), modifier = Modifier.padding(top = 4.dp))
     }
     val events = remember(best, w.from, w.to, Lang.code) { RefiCalendar.eventsFor(w, best) }
     if (events.isNotEmpty()) {
-        TextButton(onClick = { onCalendar(events) }, contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)) {
-            Text(if (events.size > 1) tr("📅 Oda- és visszaút a naptárba", "📅 Add both flights to calendar", "📅 Hin- und Rückflug in den Kalender") else tr("📅 Naptárba", "📅 Add to calendar", "📅 In den Kalender"), style = MaterialTheme.typography.labelLarge)
+        TextButton(onClick = { onCalendar(events) }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
+            Icon(Icons.Filled.DateRange, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(if (events.size > 1) tr("Oda- és visszaút a naptárba", "Add both flights to calendar", "Hin- und Rückflug in den Kalender") else tr("Naptárba", "Add to calendar", "In den Kalender"), style = MaterialTheme.typography.labelLarge)
         }
     }
 }
@@ -659,11 +702,12 @@ private fun WatchCard(
     onShare: () -> Unit = {},
     onCalendar: (List<CalEvent>) -> Unit = {},
 ) {
-    val good = Neon.Green
     val best = w.bestOffer
     // Ugyanaz a szabály, mint a riasztásnál (poggyász, hiányos ár), hogy a kártya ne mondjon mást
     val belowTarget = best != null && w.alertable(best)
     var showAll by remember { mutableStateOf(false) }
+    // Fokozatos feltárás: alapból csak a lényeg (ár, tanács), a részletek egy koppintásra
+    var expanded by androidx.compose.runtime.saveable.rememberSaveable(w.id) { mutableStateOf(false) }
 
     NeonCard(
         modifier = modifier.fillMaxWidth(),
@@ -671,6 +715,7 @@ private fun WatchCard(
         scanning = isChecking,
     ) {
         Column {
+            // ---- Fejléc: útvonal, megosztás, csengő
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     w.routeTitle,
@@ -684,19 +729,16 @@ private fun WatchCard(
                 BellToggle(on = w.notify, onToggle = onToggleNotify)
             }
             Text(dateLine(w), style = MaterialTheme.typography.bodyMedium)
-            Text(
-                detailLine(w),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text(detailLine(w), style = MaterialTheme.typography.bodySmall, color = Neon.TextDim)
 
+            // ---- Ár: egyetlen fő szám
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.Bottom) {
                 Column(Modifier.weight(1f)) {
-                    Text(tr("Legolcsóbb most", "Cheapest now", "Jetzt am günstigsten"), style = MaterialTheme.typography.labelMedium)
+                    Text(tr("Legolcsóbb most", "Cheapest now", "Jetzt am günstigsten"), style = MaterialTheme.typography.labelMedium, color = Neon.TextDim)
                     // Az ár „pörögve” változik az új értékre
                     // Üres állapotból vagy pénznemváltás után nem „pörög fel” nulláról / a régi számról
-                    val priceAnim = remember(currency) { androidx.compose.animation.core.Animatable((best?.price ?: 0).toFloat()) }
+                    val priceAnim = remember(currency) { Animatable((best?.price ?: 0).toFloat()) }
                     LaunchedEffect(best?.price, currency) {
                         val p = best?.price ?: return@LaunchedEffect
                         if (priceAnim.value <= 0f) priceAnim.snapTo(p.toFloat())
@@ -706,10 +748,20 @@ private fun WatchCard(
                         if (best != null) formatPrice(priceAnim.value.roundToInt(), currency) else "—",
                         style = if (belowTarget) MaterialTheme.typography.headlineMedium.glow(radius = 24f)
                         else MaterialTheme.typography.headlineMedium,
-                        color = if (belowTarget) good else Neon.Text,
+                        color = if (belowTarget) Neon.Mint else Neon.Text,
                     )
                     if (belowTarget) {
-                        Text(tr("▼ CÉLÁR ALATT", "▼ BELOW TARGET PRICE", "▼ UNTER ZIELPREIS"), style = MaterialTheme.typography.labelSmall, color = Neon.Mint)
+                        Row(
+                            Modifier
+                                .padding(top = 4.dp)
+                                .background(Neon.Mint.copy(alpha = 0.14f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Filled.Check, contentDescription = null, tint = Neon.Mint, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(tr("CÉLÁR ALATT", "BELOW TARGET", "UNTER ZIELPREIS"), style = MaterialTheme.typography.labelSmall, color = Neon.Mint)
+                        }
                     }
                 }
                 Column(horizontalAlignment = Alignment.End) {
@@ -721,12 +773,13 @@ private fun WatchCard(
                         Text(
                             tr("Eddigi min.: ${formatPrice(it, currency)}", "Lowest so far: ${formatPrice(it, currency)}", "Bisher am niedrigsten: ${formatPrice(it, currency)}"),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = Neon.TextDim,
                         )
                     }
                 }
             }
-            // „Most vegyem vagy várjak?” – az eddigi árak alapján
+
+            // ---- Egyetlen fő üzenet: „Most vegyem vagy várjak?” – az eddigi árak alapján
             verdictFor(w, currency = currency)?.let { v ->
                 Text(
                     v.text,
@@ -734,91 +787,137 @@ private fun WatchCard(
                     color = when (v.tone) {
                         Verdict.Tone.GOOD -> Neon.Mint
                         Verdict.Tone.WAIT -> Neon.Amber
-                        Verdict.Tone.NEUTRAL -> MaterialTheme.colorScheme.onSurfaceVariant
+                        Verdict.Tone.NEUTRAL -> Neon.TextDim
                     },
-                    modifier = Modifier.padding(top = 6.dp),
+                    modifier = Modifier.padding(top = 8.dp),
                 )
             }
-            forecastFor(w)?.let { f ->
+
+            // ---- Fontos: hiba / lejárt figyelés mindig látszik
+            val problem = when {
+                w.isExpired() -> tr("Az indulás dátuma elmúlt, a figyelés szünetel.", "The departure date has passed, this watch is paused.", "Das Abflugdatum ist vorbei, diese Beobachtung pausiert.")
+                w.lastError != null -> w.errorText ?: w.lastError
+                else -> null
+            }
+            problem?.let {
+                IconLine(
+                    Icons.Filled.Warning, it,
+                    color = MaterialTheme.colorScheme.error,
+                    iconTint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+
+            // ---- Utolsó ellenőrzés + Részletek kapcsoló
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    f.text,
+                    w.lastChecked?.let {
+                        tr("Utoljára ellenőrizve: ", "Last checked: ", "Zuletzt geprüft: ") +
+                            Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).format(timeFormat)
+                    } ?: tr("Még nem volt ellenőrzés.", "Not checked yet.", "Noch nicht geprüft."),
                     style = MaterialTheme.typography.bodySmall,
-                    color = when (f.tone) {
-                        Verdict.Tone.GOOD -> Neon.Mint
-                        Verdict.Tone.WAIT -> Neon.Amber
-                        Verdict.Tone.NEUTRAL -> MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    modifier = Modifier.padding(top = 2.dp),
+                    color = Neon.TextDim,
+                    modifier = Modifier.weight(1f),
                 )
-            }
-            savingsLine(w, currency)?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = Neon.Mint, modifier = Modifier.padding(top = 2.dp))
-            }
-            if (best != null) {
-                OfferDetails(best, highlight = true)
-                CostLines(w, best, currency, onCalendar)
+                TextButton(onClick = { expanded = !expanded }) {
+                    Text(
+                        if (expanded) tr("Kevesebb", "Less", "Weniger") else tr("Részletek", "Details", "Details"),
+                        maxLines = 1,
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
             }
 
-            // Árgörbe: a Google árelőzménye + a saját mérések (ha van mit mutatni)
-            PriceChart(w, currency, Modifier.fillMaxWidth().padding(top = 10.dp))
-
-            Spacer(Modifier.height(6.dp))
-            when {
-                w.isExpired() -> StatusText(tr("Az indulás dátuma elmúlt, a figyelés szünetel.", "The departure date has passed, this watch is paused.", "Das Abflugdatum ist vorbei, diese Beobachtung pausiert."), true)
-                w.lastError != null -> StatusText(w.errorText ?: w.lastError, true)
-                w.lastChecked != null -> StatusText(
-                    tr("Utoljára ellenőrizve: ", "Last checked: ", "Zuletzt geprüft: ") +
-                        Instant.ofEpochMilli(w.lastChecked).atZone(ZoneId.systemDefault()).format(timeFormat),
-                    false,
-                )
-                else -> StatusText(tr("Még nem volt ellenőrzés.", "Not checked yet.", "Noch nicht geprüft."), false)
-            }
-            if (w.sourceStatus.isNotEmpty()) {
-                Text(
-                    w.sourceStatus.joinToString("  ·  ") { s ->
-                        "${s.source} ${if (s.ok) "✓" else "✗"} ${s.shown}"
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (w.sourceStatus.any { !it.ok }) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-
+            // ---- Részletek (lenyitva)
             AnimatedVisibility(
-                visible = showAll && w.offers.size > 1,
-                enter = expandVertically(tween(350)) + fadeIn(tween(350)),
+                visible = expanded,
+                enter = expandVertically(tween(300)) + fadeIn(tween(300)),
                 exit = shrinkVertically(tween(250)) + fadeOut(tween(200)),
             ) {
-              Column {
-                Spacer(Modifier.height(8.dp))
-                Text(tr("ÖSSZES AJÁNLAT", "ALL OFFERS", "ALLE ANGEBOTE"), style = MaterialTheme.typography.titleMedium, color = Neon.Green)
-                w.offers.forEachIndexed { index, offer ->
-                    Column(
-                        Modifier
-                            .padding(top = 10.dp)
-                            .fillMaxWidth()
-                            .border(0.5.dp, Neon.Line, RoundedCornerShape(12.dp))
-                            .padding(12.dp),
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                "${index + 1}. ${formatPrice(offer.price, currency)}",
-                                style = MaterialTheme.typography.titleLarge,
-                                modifier = Modifier.weight(1f),
+                Column(Modifier.fillMaxWidth()) {
+                    // Előrejelzés: másodlagos, semleges színnel (soha ne mondjon ellent a fő tanácsnak)
+                    forecastFor(w)?.let { f ->
+                        Text(f.text, style = MaterialTheme.typography.bodySmall, color = Neon.TextDim, modifier = Modifier.padding(top = 4.dp))
+                    }
+                    savingsLine(w, currency)?.let {
+                        IconLine(Icons.Filled.Check, stripLeadingIcon(it), iconTint = Neon.Mint, modifier = Modifier.padding(top = 4.dp))
+                    }
+                    if (best != null) {
+                        OfferDetails(best, highlight = true)
+                        CostLines(w, best, currency, onCalendar)
+                    }
+
+                    // Árgörbe: a Google árelőzménye + a saját mérések (ha van mit mutatni)
+                    PriceChart(w, currency, Modifier.fillMaxWidth().padding(top = 12.dp))
+
+                    if (w.sourceStatus.isNotEmpty()) {
+                        Text(
+                            tr("Források", "Sources", "Quellen"),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Neon.TextDim,
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                        Text(
+                            w.sourceStatus.joinToString("  ·  ") { s ->
+                                "${s.source} ${if (s.ok) "✓" else "✗"} ${s.shown}"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (w.sourceStatus.any { !it.ok }) MaterialTheme.colorScheme.error else Neon.TextDim,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+
+                    if (w.offers.size > 1) {
+                        TextButton(onClick = { showAll = !showAll }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp), modifier = Modifier.padding(top = 4.dp)) {
+                            Text(if (showAll) tr("Kevesebb ajánlat", "Fewer offers", "Weniger Angebote") else tr("Mind a ${w.offers.size} ajánlat", "All ${w.offers.size} offers", "Alle ${w.offers.size} Angebote"), maxLines = 1)
+                            Spacer(Modifier.width(4.dp))
+                            Icon(
+                                if (showAll) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
                             )
-                            offer.url?.let { url ->
-                                TextButton(onClick = { onOpen(url) }) { Text(tr("Megnyitás", "Open", "Öffnen")) }
+                        }
+                    }
+                    AnimatedVisibility(
+                        visible = showAll && w.offers.size > 1,
+                        enter = expandVertically(tween(350)) + fadeIn(tween(350)),
+                        exit = shrinkVertically(tween(250)) + fadeOut(tween(200)),
+                    ) {
+                        Column {
+                            Text(tr("ÖSSZES AJÁNLAT", "ALL OFFERS", "ALLE ANGEBOTE"), style = MaterialTheme.typography.titleMedium, color = Neon.Green, modifier = Modifier.padding(top = 8.dp))
+                            w.offers.forEachIndexed { index, offer ->
+                                Column(
+                                    Modifier
+                                        .padding(top = 8.dp)
+                                        .fillMaxWidth()
+                                        .border(0.5.dp, Neon.Line, RoundedCornerShape(12.dp))
+                                        .padding(12.dp),
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            "${index + 1}. ${formatPrice(offer.price, currency)}",
+                                            style = MaterialTheme.typography.titleLarge,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        offer.url?.let { url ->
+                                            TextButton(onClick = { onOpen(url) }) { Text(tr("Megnyitás", "Open", "Öffnen")) }
+                                        }
+                                    }
+                                    OfferDetails(offer, highlight = false)
+                                }
                             }
                         }
-                        OfferDetails(offer, highlight = false)
                     }
                 }
-              }
             }
 
-            // Nagy betűméretnél a gombok új sorba törnek (nem a szavak közepén)
-            androidx.compose.foundation.layout.FlowRow {
+            // ---- Fő műveletek (mindig látszanak). Nagy betűméretnél új sorba törnek.
+            androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth().padding(top = 4.dp)) {
                 val center = Modifier.align(Alignment.CenterVertically)
                 if (isChecking) {
                     CircularProgressIndicator(
@@ -829,17 +928,22 @@ private fun WatchCard(
                     Text(tr("KERESÉS…", "SEARCHING…", "SUCHE…"), style = MaterialTheme.typography.labelSmall, color = Neon.Green, modifier = center)
                 } else {
                     TextButton(onClick = onCheck, enabled = canCheck && !w.isExpired(), modifier = center) {
+                        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
                         Text(tr("Ellenőrzés", "Check", "Prüfen"), maxLines = 1)
                     }
                 }
                 best?.url?.let { url ->
-                    TextButton(onClick = { onOpen(url) }, modifier = center) { Text(tr("Megnyitás", "Open", "Öffnen"), maxLines = 1) }
-                }
-                TextButton(onClick = onEdit, modifier = center) { Text(tr("Szerkesztés", "Edit", "Bearbeiten"), maxLines = 1) }
-                if (w.offers.size > 1) {
-                    TextButton(onClick = { showAll = !showAll }, modifier = center) {
-                        Text(if (showAll) tr("Kevesebb", "Less", "Weniger") else tr("Mind a ${w.offers.size} ajánlat", "All ${w.offers.size} offers", "Alle ${w.offers.size} Angebote"), maxLines = 1)
+                    TextButton(onClick = { onOpen(url) }, modifier = center) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(tr("Megnyitás", "Open", "Öffnen"), maxLines = 1)
                     }
+                }
+                TextButton(onClick = onEdit, modifier = center) {
+                    Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(tr("Szerkesztés", "Edit", "Bearbeiten"), maxLines = 1)
                 }
             }
         }
@@ -1132,8 +1236,10 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
             val calTo = toPlace
             if (calFrom != null && calTo != null) {
                 var showCal by remember { mutableStateOf(false) }
-                TextButton(onClick = { showCal = true }, contentPadding = PaddingValues(0.dp)) {
-                    Text(tr("📅 Árnaptár – melyik nap a legolcsóbb?", "📅 Price calendar – which day is cheapest?", "📅 Preiskalender – welcher Tag ist am günstigsten?"))
+                TextButton(onClick = { showCal = true }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
+                    Icon(Icons.Filled.DateRange, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(tr("Árnaptár – melyik nap a legolcsóbb?", "Price calendar – which day is cheapest?", "Preiskalender – welcher Tag ist am günstigsten?"))
                 }
                 if (showCal) PriceCalendarDialog(calFrom.codes, calTo.codes, outDate, onPick = { picked ->
                     val days = java.time.temporal.ChronoUnit.DAYS.between(outDate, retDate).coerceAtLeast(0)
@@ -1279,83 +1385,102 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
 
 @Composable
 internal fun SettingsScreen(onDone: () -> Unit) {
-    val initial = remember { Store.settings.value }
-    var googleOn by remember { mutableStateOf(initial.googleOn) }
-    var ryanairOn by remember { mutableStateOf(initial.ryanairOn) }
-    var wizzOn by remember { mutableStateOf(initial.wizzOn) }
-    var serpOn by remember { mutableStateOf(initial.serpOn) }
-    var ignavOn by remember { mutableStateOf(initial.ignavOn) }
-    var apiKey by remember { mutableStateOf(initial.apiKey) }
-    var ignavKey by remember { mutableStateOf(initial.ignavKey) }
-    var keyGuide by remember { mutableStateOf<KeyProvider?>(null) }
-    var currency by remember { mutableStateOf(initial.currency) }
-    var interval by remember { mutableStateOf(initial.intervalHours) }
-    var themeMode by remember { mutableStateOf(initial.themeMode) }
-    var textScale by remember { mutableStateOf(initial.textScale) }
-    var quietOn by remember { mutableStateOf(initial.quietOn) }
-    var quietFrom by remember { mutableStateOf(initial.quietFrom) }
-    var quietTo by remember { mutableStateOf(initial.quietTo) }
-    val draft = initial.copy(
-        googleOn = googleOn, ryanairOn = ryanairOn, wizzOn = wizzOn, serpOn = serpOn, ignavOn = ignavOn,
-        apiKey = apiKey, ignavKey = ignavKey, currency = currency, intervalHours = interval,
-        themeMode = themeMode, textScale = textScale,
-        quietOn = quietOn, quietFrom = quietFrom, quietTo = quietTo,
-    )
-
-    // A mentendő beállítások. A pénznemet csak a háttérbeli átváltás írja (a célárakkal együtt), így egy még
-    // futó korábbi váltást sem írunk vissza a régire. A kulcsoknál mezőnként csak azt, amit itt módosított:
-    // közben a szinkron vagy a varázsló már frissíthette a többit. A téma és a betűméret azonnal mentődik.
-    fun effective(stored: Settings): Settings = draft.copy(
-        currency = stored.currency,
-        apiKey = if (apiKey != initial.apiKey) apiKey else stored.apiKey,
-        serpOn = if (serpOn != initial.serpOn) serpOn else stored.serpOn,
-        ignavKey = if (ignavKey != initial.ignavKey) ignavKey else stored.ignavKey,
-        ignavOn = if (ignavOn != initial.ignavOn) ignavOn else stored.ignavOn,
-        themeMode = stored.themeMode,
-        textScale = stored.textScale,
-    )
-
-    fun saveAll() {
-        Store.saveSettings(effective(Store.settings.value))
-        if (currency != initial.currency) {
-            val to = currency
-            AppScope.scope.launch { Store.switchCurrency(to) }
-        }
-        if (interval != initial.intervalHours) Platform.current.reschedule()
-    }
-
-    // Vissza a mentés nélkül módosított beállításokkal: rákérdezünk
+    // Minden beállítás azonnal mentődik (nincs külön Mentés gomb). A kapcsolók és választók mindig a
+    // tárolt, legfrissebb állapotból olvasnak, és csak a saját mezőjüket írják: így a szinkron vagy a
+    // kulcsvarázsló közbeni módosításait sem írjuk felül.
     val stored by Store.settings.collectAsState()
-    val dirty = effective(stored) != stored || currency != initial.currency
-    var confirmLeave by remember { mutableStateOf(false) }
-    fun leave() { if (dirty) confirmLeave = true else onDone() }
-    Platform.current.BackHandler(enabled = dirty) { confirmLeave = true }
-    if (confirmLeave) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { confirmLeave = false },
-            title = { Text(tr("Mented a változásokat?", "Save your changes?", "Änderungen speichern?")) },
-            text = { Text(tr("Módosítottál a beállításokon, de még nem mentetted el őket.", "You changed some settings but haven't saved them yet.", "Du hast Einstellungen geändert, aber noch nicht gespeichert.")) },
-            confirmButton = {
-                TextButton(onClick = { confirmLeave = false; if (draft.isReady) { saveAll(); onDone() } }) { Text(tr("Mentés", "Save", "Speichern")) }
-            },
-            dismissButton = { TextButton(onClick = { confirmLeave = false; onDone() }) { Text(tr("Elvetés", "Discard", "Verwerfen")) } },
-        )
+    fun update(change: (Settings) -> Settings) {
+        val before = Store.settings.value
+        val after = change(before)
+        if (after != before) Store.saveSettings(after)
     }
 
+    // A kulcsmezők gépelés közben rövid szünet után mentődnek (és a képernyő elhagyásakor is).
+    // Csak akkor írjuk, ha itt módosította: a máshonnan (szinkron, varázsló) érkező kulcsot nem írjuk vissza.
+    var apiKey by remember { mutableStateOf(stored.apiKey) }
+    var ignavKey by remember { mutableStateOf(stored.ignavKey) }
+    var apiKeyEdited by remember { mutableStateOf(false) }
+    var ignavKeyEdited by remember { mutableStateOf(false) }
+    fun flushKeys() {
+        val cur = Store.settings.value
+        val next = cur.copy(
+            apiKey = if (apiKeyEdited) apiKey.trim() else cur.apiKey,
+            ignavKey = if (ignavKeyEdited) ignavKey.trim() else cur.ignavKey,
+        )
+        if (next != cur) Store.saveSettings(next)
+        // Mentve: innentől a tárolt (pl. szinkronból frissülő) kulcsot követi a mező
+        apiKeyEdited = false
+        ignavKeyEdited = false
+    }
+    LaunchedEffect(apiKey, ignavKey) {
+        if (!apiKeyEdited && !ignavKeyEdited) return@LaunchedEffect
+        kotlinx.coroutines.delay(600)
+        flushKeys()
+    }
+    // Ha nem itt szerkeszti, a mező kövesse a tárolt kulcsot (pl. a másik eszközről szinkronizált)
+    LaunchedEffect(stored.apiKey) { if (!apiKeyEdited) apiKey = stored.apiKey }
+    LaunchedEffect(stored.ignavKey) { if (!ignavKeyEdited) ignavKey = stored.ignavKey }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { flushKeys() } }
+
+    var keyGuide by remember { mutableStateOf<KeyProvider?>(null) }
+    // Pénznemváltás: a háttérben fut (a célárakkal együtt), addig a választott értéket mutatjuk
+    var pendingCurrency by remember { mutableStateOf<String?>(null) }
+    var confirmCurrency by remember { mutableStateOf<String?>(null) }
+    val currency = pendingCurrency ?: stored.currency
+    LaunchedEffect(stored.currency) { if (stored.currency == pendingCurrency) pendingCurrency = null }
+
+    // A kulcsmezők még nem mentett, épp gépelt értékével számolunk (különben a figyelmeztetés késne)
+    val view = stored.copy(
+        apiKey = if (apiKeyEdited) apiKey.trim() else stored.apiKey,
+        ignavKey = if (ignavKeyEdited) ignavKey.trim() else stored.ignavKey,
+    )
+    val interval = stored.intervalHours
     val watches by Store.watches.collectAsState()
     val activeWatches = watches.filter { !it.isExpired() }
     val checksPerMonth = if (interval > 0) (24 / interval) * 30 else 0
-    val serpPerMonth = if (draft.useSerpApi) activeWatches.size * checksPerMonth else 0
-    val ignavPerMonth = if (draft.useIgnav) {
+    val serpPerMonth = if (view.useSerpApi) activeWatches.size * checksPerMonth else 0
+    val ignavPerMonth = if (view.useIgnav) {
         activeWatches.sumOf {
             (it.from.split(',').size * it.to.split(',').size).coerceAtMost(Ignav.MAX_PAIRS)
         } * checksPerMonth
     } else 0
 
+    confirmCurrency?.let { to ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmCurrency = null },
+            title = { Text(tr("Pénznem váltása?", "Change currency?", "Währung wechseln?")) },
+            text = {
+                Text(tr(
+                    "Pénznemváltáskor az eddigi árelőzmények törlődnek, a célárakat átváltjuk.",
+                    "Changing the currency clears the price history so far; target prices are converted.",
+                    "Beim Wechsel der Währung wird der bisherige Preisverlauf gelöscht; die Zielpreise werden umgerechnet.",
+                ))
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmCurrency = null
+                    pendingCurrency = to
+                    AppScope.scope.launch { Store.switchCurrency(to) }
+                }) { Text(tr("Váltás", "Change", "Wechseln")) }
+            },
+            dismissButton = { TextButton(onClick = { confirmCurrency = null }) { Text(tr("Mégse", "Cancel", "Abbrechen")) } },
+        )
+    }
+
+    keyGuide?.let { p ->
+        KeyGuideDialog(p, onClose = { keyGuide = null }, onSaved = { k ->
+            // A varázsló már elmentette: a mező is ezt mutassa, és ne írjuk felül egy korábbi gépeléssel
+            when (p) {
+                KeyProvider.SERPAPI -> { apiKey = k; apiKeyEdited = false }
+                KeyProvider.IGNAV -> { ignavKey = k; ignavKeyEdited = false }
+            }
+        })
+    }
+
     Scaffold(
         containerColor = Neon.Black,
         topBar = {
-            NeonTopBar(tr("BEÁLLÍTÁSOK", "SETTINGS", "EINSTELLUNGEN"), onBack = { leave() })
+            NeonTopBar(tr("BEÁLLÍTÁSOK", "SETTINGS", "EINSTELLUNGEN"), onBack = onDone)
         },
     ) { padding ->
         Column(
@@ -1365,200 +1490,268 @@ internal fun SettingsScreen(onDone: () -> Unit) {
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            SectionTitle(tr("Megjelenés", "Appearance", "Darstellung"))
-            // A nyelv azonnal vált (mentés nélkül is)
-            ChoiceField("Nyelv / Language / Sprache", Lang.OPTIONS, Lang.setting) { Lang.set(it) }
-            ChoiceField(tr("Téma", "Theme", "Design"), THEMES, themeMode) { mode ->
-                themeMode = mode
-                // Azonnal látszik, mentés nélkül is
-                Store.saveSettings(Store.settings.value.copy(themeMode = mode))
-            }
-            ChoiceField(tr("Betűméret", "Text size", "Textgröße"), TEXT_SCALES, textScale) { scale ->
-                textScale = scale
-                Store.saveSettings(Store.settings.value.copy(textScale = scale))
-            }
-
-            SectionTitle(tr("Árforrások – kulcs nélkül", "Price sources – no key needed", "Preisquellen – ohne Schlüssel"))
             Text(
-                tr(
-                    "Minden bekapcsolt forrást egyszerre kérdez le, és az összes ajánlatot ár szerint " +
-                        "versenyezteti. Ezek nem hivatalos felületek: ha valamelyik megváltozik, átmenetileg " +
-                        "hibát jelez, a többi forrás ettől még működik.",
-                    "All sources that are on are checked at once, and every offer competes on price. " +
-                        "These are unofficial services: if one changes, it may show an error for a while, " +
-                        "but the other sources keep working.",
-                    "Alle aktivierten Quellen werden gleichzeitig abgefragt, und alle Angebote treten preislich gegeneinander an. " +
-                        "Das sind keine offiziellen Schnittstellen: Ändert sich eine, zeigt sie eine Weile einen Fehler, " +
-                        "die anderen Quellen funktionieren aber weiter.",
-                ),
+                tr("A módosítások azonnal mentődnek.", "Changes are saved automatically.", "Änderungen werden automatisch gespeichert."),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            SwitchRow(tr("Google Flights (légitársaságok és irodák)", "Google Flights (airlines and agencies)", "Google Flights (Airlines und Reisebüros)"), googleOn) { googleOn = it }
-            SwitchRow(tr("Ryanair (közvetlenül)", "Ryanair (direct)", "Ryanair (direkt)"), ryanairOn) { ryanairOn = it }
-            SwitchRow(tr("Wizz Air (közvetlenül)", "Wizz Air (direct)", "Wizz Air (direkt)"), wizzOn) { wizzOn = it }
-
-            SectionTitle(tr("Még több ár – ingyenes kulccsal", "More prices – with a free key", "Mehr Preise – mit kostenlosem Schlüssel"))
-            Text(
-                tr(
-                    "Két további kereső, ingyenes kulccsal. Nem kell hozzá szakértőnek lenni: a varázsló lépésről " +
-                        "lépésre végigvezet (regisztráció, kulcs kimásolása, kipróbálás).",
-                    "Two more search engines, with a free key. No expertise needed: the wizard guides you " +
-                        "step by step (sign up, copy the key, test it).",
-                    "Zwei weitere Suchmaschinen mit kostenlosem Schlüssel. Du musst kein Profi sein: Der Assistent führt dich " +
-                        "Schritt für Schritt (registrieren, Schlüssel kopieren, testen).",
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            keyGuide?.let { p ->
-                KeyGuideDialog(p, onClose = { keyGuide = null }, onSaved = { k ->
-                    // A varázsló már elmentette; a képernyő vázlata is frissüljön, hogy a Mentés ne írja felül
-                    when (p) {
-                        KeyProvider.SERPAPI -> { apiKey = k; serpOn = true }
-                        KeyProvider.IGNAV -> { ignavKey = k; ignavOn = true }
-                    }
-                })
-            }
-            SwitchRow(tr("SerpApi (megbízhatóbb Google-árak · havi 250 ingyenes)", "SerpApi (more reliable Google prices · 250 free per month)", "SerpApi (zuverlässigere Google-Preise · 250 kostenlos pro Monat)"), serpOn) { serpOn = it }
-            if (serpOn || apiKey.isBlank()) {
-                OutlinedButton(onClick = { keyGuide = KeyProvider.SERPAPI }) {
-                    Text(if (apiKey.isBlank()) tr("Kulcs szerzése lépésről lépésre", "Get a key step by step", "Schlüssel Schritt für Schritt holen") else tr("Új kulcs beállítása (varázsló)", "Set up a new key (wizard)", "Neuen Schlüssel einrichten (Assistent)"))
-                }
-            }
-            if (serpOn) SecretField(tr("SerpApi API-kulcs", "SerpApi API key", "SerpApi-API-Schlüssel"), apiKey) { apiKey = it }
-            SwitchRow(tr("Ignav (saját adatforrás · 1000 ingyenes)", "Ignav (own data source · 1000 free)", "Ignav (eigene Datenquelle · 1000 kostenlos)"), ignavOn) { ignavOn = it }
-            if (ignavOn || ignavKey.isBlank()) {
-                OutlinedButton(onClick = { keyGuide = KeyProvider.IGNAV }) {
-                    Text(if (ignavKey.isBlank()) tr("Kulcs szerzése lépésről lépésre", "Get a key step by step", "Schlüssel Schritt für Schritt holen") else tr("Új kulcs beállítása (varázsló)", "Set up a new key (wizard)", "Neuen Schlüssel einrichten (Assistent)"))
-                }
-            }
-            if (ignavOn) SecretField(tr("Ignav API-kulcs", "Ignav API key", "Ignav-API-Schlüssel"), ignavKey) { ignavKey = it }
-            if (serpOn || ignavOn) {
-                Text(
-                    tr("A kulcsok a Google-fiókod rejtett REFI-területén keresztül a többi eszközödre is átkerülnek.", "The keys are copied to your other devices through a hidden REFI area in your Google account.", "Die Schlüssel werden über einen versteckten REFI-Bereich in deinem Google-Konto auf deine anderen Geräte übertragen."),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (!draft.isReady) {
-                Text(
-                    tr("Legalább egy forrást kapcsolj be.", "Turn on at least one source.", "Aktiviere mindestens eine Quelle."),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-
-            SectionTitle(tr("Pénznem", "Currency", "Währung"))
-            ChoiceField(tr("Árak pénzneme", "Price currency", "Währung der Preise"), CURRENCIES, currency) { currency = it }
-            if (currency != initial.currency) {
-                Text(
-                    tr("Pénznemváltáskor az eddigi árelőzmények törlődnek.", "Changing the currency clears the price history so far.", "Beim Wechsel der Währung wird der bisherige Preisverlauf gelöscht."),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            if (Platform.current.autostartSupported) {
-                var auto by remember { mutableStateOf(Platform.current.autostart) }
-                SwitchRow(tr("Indítás a Windows-zal (a tálcán, a háttérben figyel)", "Start with Windows (watches in the background, from the tray)", "Mit Windows starten (beobachtet im Hintergrund, aus dem Infobereich)"), auto) {
-                    auto = it
-                    // (a rendszerleíró-adatbázis írása lassú lehet: ne akassza meg az ablakot)
-                    AppScope.scope.launch { autostartLock.withLock { Platform.current.autostart = auto } }
-                }
-            }
-
-            run {
-                var tipsOn by remember { mutableStateOf(!Tips.allOff) }
-                SwitchRow(tr("Tippek a figyelés szerkesztésekor", "Tips while editing a watch", "Tipps beim Bearbeiten einer Beobachtung"), tipsOn) {
-                    tipsOn = it
-                    Tips.allOff = !it
-                    if (it) Tips.showAgain()
-                }
-            }
-
-            SectionTitle(tr("Ellenőrzés gyakorisága", "Check frequency", "Prüfhäufigkeit"))
-            ChoiceField(tr("Automatikus ellenőrzés", "Automatic check", "Automatische Prüfung"), INTERVALS, interval) { interval = it }
-            if (draft.useSerpApi) {
-                Text(
-                    tr("SerpApi: kb. $serpPerMonth keresés/hó (ingyenes keret: 250).", "SerpApi: about $serpPerMonth searches/month (free limit: 250).", "SerpApi: ca. $serpPerMonth Suchen/Monat (kostenloses Kontingent: 250)."),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (serpPerMonth > 250) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (draft.useIgnav) {
-                Text(
-                    tr("Ignav: kb. $ignavPerMonth kérés/hó (1000 ingyenes, utána fizetős).", "Ignav: about $ignavPerMonth requests/month (1000 free, paid after that).", "Ignav: ca. $ignavPerMonth Anfragen/Monat (1000 kostenlos, danach kostenpflichtig)."),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Text(
-                tr(
-                    "A kulcs nélküli forrásoknál nincs keret, de túl gyakori lekérdezésnél ideiglenesen " +
-                        "letilthatnak. A 6 óránkénti ellenőrzés biztonságos. ",
-                    "Sources without a key have no limit, but checking too often can get you temporarily " +
-                        "blocked. Checking every 6 hours is safe. ",
-                    "Quellen ohne Schlüssel haben kein Limit, aber bei zu häufigen Abfragen kannst du vorübergehend " +
-                        "gesperrt werden. Eine Prüfung alle 6 Stunden ist sicher. ",
-                ) + Platform.current.backgroundHint,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Neon.TextDim,
             )
 
-            SectionTitle(tr("Szinkronizálás", "Sync", "Synchronisierung"))
-            SyncSection()
+            // ---- Megjelenés
+            SettingsCard {
+                SectionTitle(tr("Megjelenés", "Appearance", "Darstellung"))
+                ChoiceField("Nyelv / Language / Sprache", Lang.OPTIONS, Lang.setting) { Lang.set(it) }
+                ChoiceField(tr("Téma", "Theme", "Design"), THEMES, stored.themeMode) { mode -> update { it.copy(themeMode = mode) } }
+                ChoiceField(tr("Betűméret", "Text size", "Textgröße"), TEXT_SCALES, stored.textScale) { scale -> update { it.copy(textScale = scale) } }
+            }
 
-            SectionTitle(tr("Csendes órák", "Quiet hours", "Ruhezeiten"))
-            SwitchRow(tr("Éjszaka ne szóljon és ne rezegjen", "No sound or vibration at night", "Nachts kein Ton und keine Vibration"), quietOn) { quietOn = it }
-            if (quietOn) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Box(Modifier.weight(1f)) { ChoiceField(tr("Ettől", "From", "Von"), QUIET_HOURS, quietFrom) { quietFrom = it } }
-                    Box(Modifier.weight(1f)) { ChoiceField(tr("Eddig", "Until", "Bis"), QUIET_HOURS, quietTo) { quietTo = it } }
-                }
-                if (quietFrom == quietTo) {
-                    Text(
-                        tr("A kezdő és a záró óra azonos: így a csendes órák nem működnek.", "Start and end hours are the same, so quiet hours won't work.", "Start- und Endzeit sind gleich, daher funktionieren die Ruhezeiten nicht."),
-                        style = MaterialTheme.typography.bodySmall,
+            // ---- Árforrások
+            SettingsCard {
+                SectionTitle(tr("Árforrások", "Price sources", "Preisquellen"))
+                if (!view.isReady) {
+                    IconLine(
+                        Icons.Filled.Warning,
+                        tr("Legalább egy forrást kapcsolj be.", "Turn on at least one source.", "Aktiviere mindestens eine Quelle."),
                         color = MaterialTheme.colorScheme.error,
+                        iconTint = MaterialTheme.colorScheme.error,
+                    )
+                }
+                val freeOn = listOf(stored.googleOn, stored.ryanairOn, stored.wizzOn).count { it }
+                CollapsibleSection(
+                    title = tr("Kulcs nélkül", "No key needed", "Ohne Schlüssel"),
+                    summary = tr("$freeOn / 3 bekapcsolva", "$freeOn of 3 on", "$freeOn von 3 aktiv"),
+                ) {
+                    Text(
+                        tr(
+                            "Minden bekapcsolt forrást egyszerre kérdez le, és az összes ajánlatot ár szerint " +
+                                "versenyezteti. Ezek nem hivatalos felületek: ha valamelyik megváltozik, átmenetileg " +
+                                "hibát jelez, a többi forrás ettől még működik.",
+                            "All sources that are on are checked at once, and every offer competes on price. " +
+                                "These are unofficial services: if one changes, it may show an error for a while, " +
+                                "but the other sources keep working.",
+                            "Alle aktivierten Quellen werden gleichzeitig abgefragt, und alle Angebote treten preislich gegeneinander an. " +
+                                "Das sind keine offiziellen Schnittstellen: Ändert sich eine, zeigt sie eine Weile einen Fehler, " +
+                                "die anderen Quellen funktionieren aber weiter.",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Neon.TextDim,
+                    )
+                    SwitchRow(tr("Google Flights (légitársaságok és irodák)", "Google Flights (airlines and agencies)", "Google Flights (Airlines und Reisebüros)"), stored.googleOn) { on -> update { it.copy(googleOn = on) } }
+                    SwitchRow(tr("Ryanair (közvetlenül)", "Ryanair (direct)", "Ryanair (direkt)"), stored.ryanairOn) { on -> update { it.copy(ryanairOn = on) } }
+                    SwitchRow(tr("Wizz Air (közvetlenül)", "Wizz Air (direct)", "Wizz Air (direkt)"), stored.wizzOn) { on -> update { it.copy(wizzOn = on) } }
+                }
+
+                val keyedOn = listOf(view.useSerpApi, view.useIgnav).count { it }
+                CollapsibleSection(
+                    title = tr("Még több ár – ingyenes kulccsal", "More prices – with a free key", "Mehr Preise – mit kostenlosem Schlüssel"),
+                    summary = tr("$keyedOn / 2 bekapcsolva", "$keyedOn of 2 on", "$keyedOn von 2 aktiv"),
+                ) {
+                    Text(
+                        tr(
+                            "Két további kereső, ingyenes kulccsal. Nem kell hozzá szakértőnek lenni: a varázsló lépésről " +
+                                "lépésre végigvezet (regisztráció, kulcs kimásolása, kipróbálás).",
+                            "Two more search engines, with a free key. No expertise needed: the wizard guides you " +
+                                "step by step (sign up, copy the key, test it).",
+                            "Zwei weitere Suchmaschinen mit kostenlosem Schlüssel. Du musst kein Profi sein: Der Assistent führt dich " +
+                                "Schritt für Schritt (registrieren, Schlüssel kopieren, testen).",
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Neon.TextDim,
+                    )
+                    SwitchRow(tr("SerpApi (megbízhatóbb Google-árak · havi 250 ingyenes)", "SerpApi (more reliable Google prices · 250 free per month)", "SerpApi (zuverlässigere Google-Preise · 250 kostenlos pro Monat)"), stored.serpOn) { on -> update { it.copy(serpOn = on) } }
+                    if (stored.serpOn || apiKey.isBlank()) {
+                        OutlinedButton(onClick = { keyGuide = KeyProvider.SERPAPI }) {
+                            Text(if (apiKey.isBlank()) tr("Kulcs szerzése lépésről lépésre", "Get a key step by step", "Schlüssel Schritt für Schritt holen") else tr("Új kulcs beállítása (varázsló)", "Set up a new key (wizard)", "Neuen Schlüssel einrichten (Assistent)"))
+                        }
+                    }
+                    if (stored.serpOn) SecretField(tr("SerpApi API-kulcs", "SerpApi API key", "SerpApi-API-Schlüssel"), apiKey) { apiKey = it; apiKeyEdited = true }
+                    SwitchRow(tr("Ignav (saját adatforrás · 1000 ingyenes)", "Ignav (own data source · 1000 free)", "Ignav (eigene Datenquelle · 1000 kostenlos)"), stored.ignavOn) { on -> update { it.copy(ignavOn = on) } }
+                    if (stored.ignavOn || ignavKey.isBlank()) {
+                        OutlinedButton(onClick = { keyGuide = KeyProvider.IGNAV }) {
+                            Text(if (ignavKey.isBlank()) tr("Kulcs szerzése lépésről lépésre", "Get a key step by step", "Schlüssel Schritt für Schritt holen") else tr("Új kulcs beállítása (varázsló)", "Set up a new key (wizard)", "Neuen Schlüssel einrichten (Assistent)"))
+                        }
+                    }
+                    if (stored.ignavOn) SecretField(tr("Ignav API-kulcs", "Ignav API key", "Ignav-API-Schlüssel"), ignavKey) { ignavKey = it; ignavKeyEdited = true }
+                    if (stored.serpOn || stored.ignavOn) {
+                        Text(
+                            tr("A kulcsok a Google-fiókod rejtett REFI-területén keresztül a többi eszközödre is átkerülnek.", "The keys are copied to your other devices through a hidden REFI area in your Google account.", "Die Schlüssel werden über einen versteckten REFI-Bereich in deinem Google-Konto auf deine anderen Geräte übertragen."),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Neon.TextDim,
+                        )
+                    }
+                }
+            }
+
+            // ---- Ellenőrzés
+            SettingsCard {
+                SectionTitle(tr("Ellenőrzés gyakorisága", "Check frequency", "Prüfhäufigkeit"))
+                ChoiceField(tr("Automatikus ellenőrzés", "Automatic check", "Automatische Prüfung"), INTERVALS, interval) { hours ->
+                    if (hours != Store.settings.value.intervalHours) {
+                        update { it.copy(intervalHours = hours) }
+                        Platform.current.reschedule()
+                    }
+                }
+                if (view.useSerpApi) {
+                    Text(
+                        tr("SerpApi: kb. $serpPerMonth keresés/hó (ingyenes keret: 250).", "SerpApi: about $serpPerMonth searches/month (free limit: 250).", "SerpApi: ca. $serpPerMonth Suchen/Monat (kostenloses Kontingent: 250)."),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (serpPerMonth > 250) MaterialTheme.colorScheme.error else Neon.TextDim,
+                    )
+                }
+                if (view.useIgnav) {
+                    Text(
+                        tr("Ignav: kb. $ignavPerMonth kérés/hó (1000 ingyenes, utána fizetős).", "Ignav: about $ignavPerMonth requests/month (1000 free, paid after that).", "Ignav: ca. $ignavPerMonth Anfragen/Monat (1000 kostenlos, danach kostenpflichtig)."),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Neon.TextDim,
                     )
                 }
                 Text(
-                    Platform.current.quietHint,
+                    tr(
+                        "A kulcs nélküli forrásoknál nincs keret, de túl gyakori lekérdezésnél ideiglenesen " +
+                            "letilthatnak. A 6 óránkénti ellenőrzés biztonságos. ",
+                        "Sources without a key have no limit, but checking too often can get you temporarily " +
+                            "blocked. Checking every 6 hours is safe. ",
+                        "Quellen ohne Schlüssel haben kein Limit, aber bei zu häufigen Abfragen kannst du vorübergehend " +
+                            "gesperrt werden. Eine Prüfung alle 6 Stunden ist sicher. ",
+                    ) + Platform.current.backgroundHint,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Neon.TextDim,
                 )
             }
 
-            SectionTitle(tr("Verzió", "Version", "Version"))
-            Text(
-                tr("Telepítve: ${Updater.currentVersion}.", "Installed: ${Updater.currentVersion}.", "Installiert: ${Updater.currentVersion}."),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            var updateMsg by remember { mutableStateOf<String?>(null) }
-            if (Platform.current.updatesViaStore) Text(
-                tr("A frissítéseket a Google Play telepíti.", "Updates are installed by Google Play.", "Updates werden über Google Play installiert."),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            ) else OutlinedButton(onClick = {
-                updateMsg = tr("Keresés…", "Searching…", "Suche…")
-                AppScope.scope.launch {
-                    val found = Updater.check()
-                    updateMsg = if (found == null) tr("Ez a legfrissebb verzió (vagy nem érhető el a GitHub).", "This is the latest version (or GitHub can't be reached).", "Das ist die neueste Version (oder GitHub ist nicht erreichbar).") else null
+            // ---- Értesítések: csendes órák
+            SettingsCard {
+                SectionTitle(tr("Csendes órák", "Quiet hours", "Ruhezeiten"))
+                SwitchRow(tr("Éjszaka ne szóljon és ne rezegjen", "No sound or vibration at night", "Nachts kein Ton und keine Vibration"), stored.quietOn) { on -> update { it.copy(quietOn = on) } }
+                if (stored.quietOn) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(Modifier.weight(1f)) { ChoiceField(tr("Ettől", "From", "Von"), QUIET_HOURS, stored.quietFrom) { h -> update { it.copy(quietFrom = h) } } }
+                        Box(Modifier.weight(1f)) { ChoiceField(tr("Eddig", "Until", "Bis"), QUIET_HOURS, stored.quietTo) { h -> update { it.copy(quietTo = h) } } }
+                    }
+                    if (stored.quietFrom == stored.quietTo) {
+                        Text(
+                            tr("A kezdő és a záró óra azonos: így a csendes órák nem működnek.", "Start and end hours are the same, so quiet hours won't work.", "Start- und Endzeit sind gleich, daher funktionieren die Ruhezeiten nicht."),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    Text(
+                        Platform.current.quietHint,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Neon.TextDim,
+                    )
                 }
-            }) { Text(tr("Frissítés keresése", "Check for updates", "Nach Updates suchen")) }
-            updateMsg?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Neon.TextDim) }
+            }
 
-            Button(
-                onClick = {
-                    saveAll()
-                    onDone()
-                },
-                enabled = draft.isReady,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(tr("Mentés", "Save", "Speichern")) }
+            // ---- Általános: pénznem, indítás, tippek
+            SettingsCard {
+                SectionTitle(tr("Általános", "General", "Allgemein"))
+                ChoiceField(tr("Árak pénzneme", "Price currency", "Währung der Preise"), CURRENCIES, currency) { to ->
+                    if (to != currency) confirmCurrency = to
+                }
+                Text(
+                    tr("Pénznemváltáskor az eddigi árelőzmények törlődnek.", "Changing the currency clears the price history so far.", "Beim Wechsel der Währung wird der bisherige Preisverlauf gelöscht."),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Neon.TextDim,
+                )
+                if (Platform.current.autostartSupported) {
+                    var auto by remember { mutableStateOf(Platform.current.autostart) }
+                    SwitchRow(tr("Indítás a Windows-zal (a tálcán, a háttérben figyel)", "Start with Windows (watches in the background, from the tray)", "Mit Windows starten (beobachtet im Hintergrund, aus dem Infobereich)"), auto) {
+                        auto = it
+                        // (a rendszerleíró-adatbázis írása lassú lehet: ne akassza meg az ablakot)
+                        AppScope.scope.launch { autostartLock.withLock { Platform.current.autostart = auto } }
+                    }
+                }
+                run {
+                    var tipsOn by remember { mutableStateOf(!Tips.allOff) }
+                    SwitchRow(tr("Tippek a figyelés szerkesztésekor", "Tips while editing a watch", "Tipps beim Bearbeiten einer Beobachtung"), tipsOn) {
+                        tipsOn = it
+                        Tips.allOff = !it
+                        if (it) Tips.showAgain()
+                    }
+                }
+            }
+
+            // ---- Szinkronizálás
+            SettingsCard {
+                SectionTitle(tr("Szinkronizálás", "Sync", "Synchronisierung"))
+                SyncSection()
+            }
+
+            // ---- Verzió
+            SettingsCard {
+                SectionTitle(tr("Verzió", "Version", "Version"))
+                Text(
+                    tr("Telepítve: ${Updater.currentVersion}.", "Installed: ${Updater.currentVersion}.", "Installiert: ${Updater.currentVersion}."),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                var updateMsg by remember { mutableStateOf<String?>(null) }
+                if (Platform.current.updatesViaStore) Text(
+                    tr("A frissítéseket a Google Play telepíti.", "Updates are installed by Google Play.", "Updates werden über Google Play installiert."),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Neon.TextDim,
+                ) else OutlinedButton(onClick = {
+                    updateMsg = tr("Keresés…", "Searching…", "Suche…")
+                    AppScope.scope.launch {
+                        val found = Updater.check()
+                        updateMsg = if (found == null) tr("Ez a legfrissebb verzió (vagy nem érhető el a GitHub).", "This is the latest version (or GitHub can't be reached).", "Das ist die neueste Version (oder GitHub ist nicht erreichbar).") else null
+                    }
+                }) { Text(tr("Frissítés keresése", "Check for updates", "Nach Updates suchen")) }
+                updateMsg?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Neon.TextDim) }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+
+/** A Beállítások egy csoportja: halvány kártya, egységes belső térközzel. */
+@Composable
+private fun SettingsCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(Neon.Surface, RoundedCornerShape(16.dp))
+            .border(0.5.dp, Neon.Line, RoundedCornerShape(16.dp))
+            .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        content = content,
+    )
+}
+
+/** Lenyitható alcsoport (alapból csukva): fejléc egysoros összefoglalóval és nyíllal. */
+@Composable
+private fun CollapsibleSection(
+    title: String,
+    summary: String,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    var open by androidx.compose.runtime.saveable.rememberSaveable(title) { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(role = androidx.compose.ui.semantics.Role.Button) { open = !open },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.bodyLarge)
+                Text(summary, style = MaterialTheme.typography.bodySmall, color = Neon.TextDim)
+            }
+            Icon(
+                if (open) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                contentDescription = if (open) tr("Becsukás", "Collapse", "Einklappen") else tr("Kinyitás", "Expand", "Ausklappen"),
+                tint = Neon.TextDim,
+            )
+        }
+        AnimatedVisibility(
+            visible = open,
+            enter = expandVertically(tween(300)) + fadeIn(tween(300)),
+            exit = shrinkVertically(tween(250)) + fadeOut(tween(200)),
+        ) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
         }
     }
 }
@@ -1605,7 +1798,7 @@ internal fun AirportField(label: String, selected: Place?, onSelect: (Place?) ->
             supportingText = {
                 Text(
                     when {
-                        selected != null -> selected.subtitle
+                        selected != null -> selected.detail
                         text.isNotBlank() && results.isEmpty() -> tr("Nincs találat", "No results", "Keine Treffer")
                         else -> tr("Kezdj el gépelni, pl. Budapest, London, Bécs", "Start typing, e.g. Budapest, London, Vienna", "Tippe los, z. B. Budapest, London, Wien")
                     },

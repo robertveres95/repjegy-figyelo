@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -195,7 +196,7 @@ internal fun TipBubble(onOpenGuide: (KeyProvider) -> Unit) {
                 .padding(start = 14.dp, top = 8.dp, end = 4.dp, bottom = 4.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("💡", style = MaterialTheme.typography.titleMedium)
+                Icon(Icons.Filled.Info, contentDescription = null, tint = Neon.Green, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.size(8.dp))
                 Text(
                     t.title,
