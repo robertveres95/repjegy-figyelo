@@ -145,7 +145,7 @@ internal fun PriceChart(w: Watch, currency: String, modifier: Modifier = Modifie
                 if (data.market.size >= 2 || (data.market.isNotEmpty() && data.own.isNotEmpty())) {
                     // A Google-görbe a saját első méréshez csatlakozik, hogy ne legyen rés
                     val m = data.market + listOfNotNull(data.own.firstOrNull())
-                    drawPath(pathOf(m), marketColor.copy(alpha = 0.7f), style = Stroke(width = 1.75.dp.toPx()))
+                    drawPath(pathOf(m), marketColor, style = Stroke(width = 2.dp.toPx()))
                 }
                 if (data.own.size >= 2) {
                     val p = pathOf(data.own)

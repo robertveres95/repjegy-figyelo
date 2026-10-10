@@ -45,10 +45,20 @@ object GoogleFlights {
         if (!again.errorStatus) return again.offers
         val pairs = pairsOf(w)
         if (pairs.size > 1 && allowFallback) {
-            val results = pairs.take(6).map { (o, d) ->
+            val pairWatches = pairs.take(6).map { (o, d) -> w.copy(from = o, to = d) }
+            val results = pairWatches.map { pw ->
                 Thread.sleep(700)
                 // Korlátozásnál (429) nem bombázzuk tovább a Google-t
-                try { fetch(w.copy(from = o, to = d), currency) } catch (e: FatalSourceException) { throw e } catch (e: Exception) { null }
+                try { fetch(pw, currency, storeInsight) } catch (e: FatalSourceException) { throw e } catch (e: Exception) { null }
+            }
+            // Több repteres keresésnél a Google néha csak repterenként válaszol: az árelőzmény ilyenkor az első
+            // (fapados-bázissal kezdődő) reptérpáré – így a görbén akkor is ott a szürke előzmény
+            if (storeInsight) {
+                val mainKey = searchUrl(w, currency)
+                if (!insights.containsKey(mainKey)) {
+                    pairWatches.firstNotNullOfOrNull { pw -> insights[searchUrl(pw, currency)] }?.let { insights[mainKey] = it }
+                }
+                pairWatches.forEach { pw -> searchUrl(pw, currency).takeIf { it != mainKey }?.let { insights.remove(it) } }
             }
             if (results.any { it != null && !it.errorStatus }) {
                 val offers = results.filterNotNull().flatMap { it.offers }

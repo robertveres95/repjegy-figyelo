@@ -56,7 +56,7 @@ class ScreenshotTest {
         val london = Watch(
             id = "s1", from = "BUD", to = "LHR,LGW,STN,LTN,LCY,SEN", fromLabel = "Budapest", toLabel = "London",
             outboundDate = d.toString(), returnDate = d.plusDays(5).toString(), travelClass = 1, adults = 2,
-            children = 0, infantsInSeat = 0, infantsOnLap = 0, bags = 2, stops = 0, targetPrice = 60000, notify = true,
+            children = 0, infantsInSeat = 0, infantsOnLap = 0, bags = 0, stops = 0, targetPrice = 60000, notify = true,
             flexDays = 2, depFrom = 7,
             lastPrice = 54200, lowestPrice = 54200, lastChecked = System.currentTimeMillis(),
             offers = listOf(
