@@ -64,7 +64,7 @@ data class Offer(
     val noteL: L10n? = null,               // a megjegyzés minden nyelven (a felület nyelvén látszik)
 ) {
     /** A megjegyzés a felület nyelvén. */
-    val noteText: String? get() = noteL?.takeIf { it.has(note) }?.text ?: note
+    val noteText: String? get() = noteL?.takeIf { it.has(note) }?.text ?: storedText(note)
 
     fun toJson(): JSONObject = JSONObject().apply {
         put("price", price)
@@ -110,7 +110,28 @@ data class Offer(
 /** Egy forrás eredménye az utolsó ellenőrzéskor. */
 data class SourceStatus(val source: String, val ok: Boolean, val text: String, val textL: L10n? = null) {
     /** Az állapot szövege a felület nyelvén. */
-    val shown: String get() = textL?.takeIf { it.has(text) }?.text ?: text
+    val shown: String get() = textL?.takeIf { it.has(text) }?.text ?: storedText(text) ?: text
+}
+
+private val HUNGARIAN_WORDS = Regex(
+    """\b(nincs|ajánlat|járat|hiba|kérés|válasz|becsült|poggyász|nélkül|forrás|kihagyva|sikerült)""",
+    RegexOption.IGNORE_CASE,
+)
+
+/** Csak magyarul írt-e a szöveg (ő/ű vagy gyakori magyar szó; a német ö/ü/ä önmagában nem számít). */
+internal fun looksHungarian(s: String): Boolean =
+    s.any { it in "őűŐŰ" } || HUNGARIAN_WORDS.containsMatchIn(s)
+
+/**
+ * Egy tárolt (fordítás nélküli) szöveg a felület nyelvén: a pénznemváltási figyelmeztetés az aktuális
+ * nyelven; egy régi, csak magyar szöveg nem magyar felületen helyette „a következő ellenőrzés után”
+ * jelzés (addig nem tudjuk lefordítani); minden más változatlanul.
+ */
+internal fun storedText(raw: String?): String? {
+    if (raw == null) return null
+    if (PriceChecker.isCurrencyHint(raw)) return Store.currencyHintText()
+    if (Lang.hu || !looksHungarian(raw)) return raw
+    return tr("(részletek a következő ellenőrzés után)", "(details after the next check)", "(Details nach der nächsten Prüfung)")
 }
 
 /** Egy figyelt út a keresési beállításokkal és az utolsó eredményekkel. */
@@ -165,7 +186,7 @@ data class Watch(
     val bestOffer: Offer? get() = offers.firstOrNull()
 
     /** A hibaüzenet a felület nyelvén. */
-    val errorText: String? get() = lastErrorL?.takeIf { it.has(lastError) }?.text ?: lastError
+    val errorText: String? get() = lastErrorL?.takeIf { it.has(lastError) }?.text ?: storedText(lastError)
 
     /**
      * A tárolt szövegek (hiba, forrásállapot, ajánlat-megjegyzés) minden nyelvű változatának kitöltése a

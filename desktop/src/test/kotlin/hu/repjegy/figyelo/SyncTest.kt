@@ -147,19 +147,42 @@ class SyncTest {
         val stored = DealAlerts.all.value.single()
         val other = DealAlert("o1", "VIE", "Wien", "2026-12", 2, 30000, "HUF", 2000L, editedAt = 2000L)
         val newerMine = stored.copy(maxPrice = 25000, editedAt = stored.editedAt + 10, notified = emptyMap())
-        val (merged, tomb) = DealAlerts.mergeFromSync(listOf(other, newerMine), mapOf("gone" to 5L))
+        val goneAt = System.currentTimeMillis()
+        val (merged, tomb) = DealAlerts.mergeFromSync(listOf(other, newerMine), mapOf("gone" to goneAt))
         assertEquals(listOf("m1", "o1"), merged.map { it.id })
         assertEquals(25000, merged.first { it.id == "m1" }.maxPrice, "a később módosított nyer")
         assertTrue(merged.first { it.id == "m1" }.notified.isEmpty(), "más határnál a jelzések törlődnek")
-        assertEquals(5L, tomb["gone"])
-        // A felhőfájlban 2-es verzió, és visszaolvasható
+        assertEquals(goneAt, tomb["gone"])
+        // A riasztások miatt nem kell 2-es verzió (a régi, 1.3.x app így tovább szinkronizálja a figyeléseit)
         val text = Sync.serialize(emptyList(), emptyMap(), "HUF", null, merged, tomb)
-        assertEquals(2, org.json.JSONObject(text).getInt("version"))
+        assertEquals(1, org.json.JSONObject(text).getInt("version"))
+        // „Minden héten” figyelésnél viszont igen
+        val weekly = Sync.serialize(listOf(w("a").copy(weeklyUntil = "2026-12-31")), emptyMap(), "HUF", null, merged, tomb)
+        assertEquals(2, org.json.JSONObject(weekly).getInt("version"))
         val snap = assertNotNull(Sync.parse(text))
         assertEquals(merged.map { it.toSyncJson().toString() }, snap.alerts.map { it.toSyncJson().toString() })
         // Törlés egy másik eszközön: a törlésjel erősebb a régebbi beállításnál
         val (afterDelete, _) = DealAlerts.mergeFromSync(snap.alerts, mapOf("o1" to 99_999_999_999L))
         assertEquals(listOf("m1"), afterDelete.map { it.id })
+        DealAlerts.all.value.forEach { DealAlerts.remove(it.id) }
+    }
+
+    @Test fun dealAlertTombstonesExpireFromCloudAndMergeIsNotCapped() {
+        if (runCatching { Store.prefs }.isFailure) Store.init(DesktopPrefs)
+        DealAlerts.mergeFromSync(emptyList(), emptyMap())
+        DealAlerts.all.value.forEach { DealAlerts.remove(it.id) }
+        val now = System.currentTimeMillis()
+        val ancient = now - 200L * 24 * 3_600_000L
+        // A régi törlésjel még kiszűri a nála régebbi riasztást, de a felhőbe már nem kerül vissza
+        val stale = DealAlert("old", "BUD", "Budapest", null, 1, 20000, "HUF", ancient - 10, editedAt = ancient - 10)
+        val (m, t) = DealAlerts.mergeFromSync(listOf(stale), mapOf("old" to ancient, "recent" to now))
+        assertTrue(m.none { it.id == "old" })
+        assertTrue("old" !in t.keys, "a lejárt törlésjel ne kerüljön vissza a felhőbe")
+        assertEquals(now, t["recent"])
+        // Több riasztás, mint amennyi egy eszközön felvehető: összefésüléskor egy sem vész el
+        val many = (1..DealAlerts.MAX + 2).map { i -> DealAlert("a$i", "BUD", "Budapest", null, 1, 20000, "HUF", now + i, editedAt = now + i) }
+        val (all, _) = DealAlerts.mergeFromSync(many, emptyMap())
+        assertEquals(DealAlerts.MAX + 2, all.size)
         DealAlerts.all.value.forEach { DealAlerts.remove(it.id) }
     }
 }

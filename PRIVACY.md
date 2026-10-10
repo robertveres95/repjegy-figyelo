@@ -1,4 +1,4 @@
-# REFI – Adatkezelés / Privacy Policy
+# REFI – Adatkezelés / Privacy Policy / Datenschutz
 
 **Magyarul**
 
@@ -28,4 +28,18 @@ REFI is a flight-price tracker (Android, Windows and a Chrome extension). It has
 
 Contact: robertveres95@gmail.com
 
-Utolsó módosítás / Last updated: 2026-10-10
+**Deutsch**
+
+REFI ist ein Flugpreis-Tracker (Android, Windows und eine Chrome-Erweiterung). Es hat keinen eigenen Server, sammelt keine Daten und enthält keine Werbung, keine Analyse und kein Tracking.
+
+- Beobachtungen und Einstellungen werden nur auf deinem Gerät gespeichert.
+- Für die Synchronisierung werden deine Beobachtungen (und deine SerpApi- / Ignav-Schlüssel, falls du welche eingegeben hast) im versteckten App-Datenbereich **deines eigenen Google Drive** gespeichert (Berechtigung `drive.appdata`), auf den nur REFI zugreifen kann. REFI sieht deine anderen Drive-Dateien nicht und gibt diese Daten an niemanden weiter.
+- Um Preise zu prüfen, ruft die App direkt die öffentlichen Seiten von Airlines und Suchmaschinen auf (Google Flights, Ryanair, Wizz Air und – wenn du einen Schlüssel hinterlegst – SerpApi / Ignav). Diese erhalten nur die Suche selbst (Strecke, Daten, Anzahl der Reisenden), keine personenbezogenen Daten.
+- Wechselkurse stammen aus Daten der Europäischen Zentralbank (frankfurter.dev, ersatzweise open.er-api.com).
+- Die Chrome-Erweiterung liest nur denselben versteckten Drive-Bereich und speichert die zuletzt heruntergeladenen Beobachtungen in deinem Browser zwischen; die Schlüssel speichert sie nie.
+- Eine geteilte Nachricht enthält die Sucheinstellungen der Beobachtung und, falls vorhanden, den aktuell besten Preis (niemals Schlüssel); du entscheidest, an wen du sie schickst.
+- Die Synchronisierung kannst du in der App jederzeit ausschalten; den Zugriff kannst du in den Sicherheitseinstellungen deines Google-Kontos (Drittanbieter-Zugriff) widerrufen.
+
+Kontakt: robertveres95@gmail.com
+
+Utolsó módosítás / Last updated / Zuletzt aktualisiert: 2026-10-10

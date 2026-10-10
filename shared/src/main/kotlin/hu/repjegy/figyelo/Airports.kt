@@ -41,6 +41,8 @@ object Airports {
         "LPA" to "Gran Canaria", "PMI" to "Mallorca", "DXB" to "Dubai", "DWC" to "Dubai", "BSL" to "Basel",
         "TLV" to "Tel Aviv", "AUH" to "Abu Dhabi", "BTS" to "Bratislava", "TGM" to "Târgu Mureș",
         "GOA" to "Genua", "TRN" to "Turin", "SVQ" to "Sevilla", "ZIA" to "Moskau",
+        "ZRH" to "Zürich", "LUX" to "Luxemburg", "ANR" to "Antwerpen", "IKA" to "Teheran", "THR" to "Teheran",
+        "DAM" to "Damaskus", "TSR" to "Timișoara", "HKG" to "Hongkong", "GOT" to "Göteborg",
     )
 
     /** A felület nyelvén a város neve a kód(ok) alapján (pl. "MXP" → Milánó / Milan / Mailand), ha ismert. */
@@ -82,6 +84,8 @@ object Airports {
         "TLV" to "Tel-Aviv", "DOH" to "Doha", "AUH" to "Abu-Dzabi", "BKK" to "Bangkok", "DMK" to "Bangkok",
         "FLR" to "Firenze", "CGN" to "Köln", "NUE" to "Nürnberg", "TRN" to "Torino", "GOA" to "Genova",
         "ZIA" to "Moszkva", "PSA" to "Pisa", "SVQ" to "Sevilla", "OPO" to "Porto",
+        "ZRH" to "Zürich", "ANR" to "Antwerpen", "IKA" to "Teherán", "THR" to "Teherán", "DAM" to "Damaszkusz",
+        "GOT" to "Göteborg",
     )
 
     /**
@@ -126,6 +130,7 @@ object Airports {
         "TRS" to "Trieste", "TUF" to "Tours", "TZL" to "Tuzla", "VBS" to "Brescia", "VCE" to "Venice",
         "VDE" to "El Hierro", "VIT" to "Vitoria", "VRN" to "Verona", "VST" to "Västerås", "VVO" to "Vladivostok",
         "VXE" to "São Vicente", "WMI" to "Warsaw", "XRY" to "Jerez", "ZAG" to "Zagreb", "ZIA" to "Moscow",
+        "GOT" to "Gothenburg", "TSR" to "Timișoara",
     )
 
     /** A nyers településnév tisztítása: zárójeles és vesszős kiegészítések nélkül (pl. „Firenze (FI)” → „Firenze”). */
@@ -195,13 +200,15 @@ object Airports {
             .map { it.second.place }
     }
 
+    /** Reptérkód → országkód. Egyszerre töltődik fel (a betöltés végén), így sosem félkész. */
     private val countryCodes = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     /** A reptér országkódja (pl. "HU"), ha ismert. */
     fun countryOf(code: String?): String? {
         if (code == null) return null
-        // Az országkód nyelvfüggetlen: elég egyszer betölteni (nyelvváltás után nem olvassuk újra a listát)
-        if (countryCodes.isEmpty()) load()
+        // Az országkód nyelvfüggetlen: elég egyszer betölteni (nyelvváltás után nem olvassuk újra a listát).
+        // A load() zárolt: ha épp egy másik szál tölt, megvárjuk.
+        if (countryCodes.isEmpty()) runCatching { load() }
         return countryCodes[code.uppercase()]
     }
 
@@ -218,6 +225,7 @@ object Airports {
         entriesByLang[lang]?.let { return it }
         val locale = Lang.locale
         val countryName = { cc: String -> Locale("", cc).getDisplayCountry(locale).ifBlank { cc } }
+        val countries = HashMap<String, String>()
 
         val airports = Platform.current.openAsset("airports.tsv").bufferedReader().useLines { lines ->
             lines.mapNotNull { line ->
@@ -227,7 +235,7 @@ object Airports {
                 val name = p[1]
                 val city = englishCityFixes[code] ?: cleanCity(p[2]).ifBlank { name }
                 val country = countryName(p[3])
-                countryCodes[code] = p[3]
+                countries[code] = p[3]
                 val rank = p[4].toIntOrNull() ?: 2
                 val huName = hungarianNames[code]
                 val deName = germanNames[code]
@@ -275,6 +283,7 @@ object Airports {
         }
 
         val all = groups + airports
+        countryCodes.putAll(countries)
         byCodesByLang[lang] = all.associate { it.place.codes to it.place }
         return all.also { entriesByLang[lang] = it }
     }

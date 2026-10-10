@@ -1,7 +1,16 @@
 'use strict';
-// Nyelv: magyar böngészőben magyar, német böngészőben német, máshol angol (a popup, a demó és a háttér is ezt használja)
+// Nyelv: magyar böngészőben magyar, német böngészőben német, máshol angol (a popup, a demó és a háttér is ezt használja).
+// A böngésző felületének nyelve (chrome.i18n) dönt, mint a _locales szövegeinél – így a kis ablak, a háttér
+// (ikonfelirat) és a bővítmény neve/leírása egy nyelven szól; a demó oldalon (nincs chrome.i18n) a navigator.language.
 const REFI_LANG = (() => {
-  const l = (typeof navigator !== 'undefined' && navigator.language || '').toLowerCase();
+  let l = '';
+  try {
+    if (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.getUILanguage === 'function') {
+      l = chrome.i18n.getUILanguage() || '';
+    }
+  } catch { /* nincs chrome.i18n */ }
+  if (!l && typeof navigator !== 'undefined') l = navigator.language || '';
+  l = String(l).toLowerCase();
   return l.startsWith('hu') ? 'hu' : l.startsWith('de') ? 'de' : 'en';
 })();
 /** Szöveg a böngésző nyelvén (német hiányában angolul). */

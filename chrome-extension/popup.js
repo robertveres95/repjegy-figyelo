@@ -150,6 +150,31 @@ function sparkline(w) {
   return svg;
 }
 
+/**
+ * Az appból jövő többnyelvű szöveg ({hu, en, de}) a felület nyelvén – ha a nyers szöveg valamelyik
+ * változata (különben az L elavult, és a nyers szöveg a friss). Fordítás nélküli magyar hibaüzenet
+ * más nyelvű böngészőben nem jelenik meg magyarul: a következő ellenőrzés után az app már többnyelvűt ír.
+ */
+function loc(L, raw) {
+  if (raw == null) return '';
+  const s = String(raw);
+  if (L && typeof L === 'object' && typeof L.hu === 'string' && typeof L.en === 'string') {
+    const de = typeof L.de === 'string' && L.de ? L.de : L.en;
+    if (s === L.hu || s === L.en || s === de) return t(L.hu, L.en, de);
+  }
+  if (REFI_LANG !== 'hu' && /[őűŐŰ]|\b(nincs|ajánlat|járat|hiba|kérés|válasz)/i.test(s)) {
+    return t('', '(details after the next check in the app)', '(Details nach der nächsten Prüfung in der App)');
+  }
+  return s;
+}
+
+/** Városnév ugyanazon a nyelven, mint a többi szöveg (REFI_LANG); ismeretlen kódnál a cities.js szerint. */
+function cityName(codes, label) {
+  const e = typeof REFI_CITIES !== 'undefined' ? REFI_CITIES[String(codes || '').toUpperCase()] : null;
+  if (!Array.isArray(e)) return refiCity(codes, label);
+  return e[{ hu: 0, de: 2 }[REFI_LANG] ?? 1] || e[1] || label || codes || '';
+}
+
 function card(w, cur) {
   const li = el('li', 'card');
   const best = (w.offers || [])[0];
@@ -161,7 +186,7 @@ function card(w, cur) {
 
   const top = el('div', 'row');
   top.append(
-    el('span', 'route', `${refiCity(w.from, w.fromLabel)} → ${refiCity(w.to, w.toLabel)}`),
+    el('span', 'route', `${cityName(w.from, w.fromLabel)} → ${cityName(w.to, w.toLabel)}`),
     el('span', 'price', price != null ? money(price, cur) : '—'),
   );
   li.append(top);
@@ -181,7 +206,7 @@ function card(w, cur) {
 
   if (off) li.append(el('div', 'badge warn', t('AZ INDULÁS ELMÚLT', 'DEPARTURE HAS PASSED', 'ABFLUG IST VORBEI')));
   else if (ok) li.append(el('div', 'badge', t('▼ CÉLÁR ALATT', '▼ BELOW TARGET PRICE', '▼ UNTER DEM ZIELPREIS')));
-  else if (w.lastError && price == null) li.append(el('div', 'badge warn', w.lastError.slice(0, 80)));
+  else if (w.lastError && price == null) li.append(el('div', 'badge warn', loc(w.lastErrorL, w.lastError).slice(0, 80)));
 
   const s = sparkline(w);
   if (s) li.append(s);

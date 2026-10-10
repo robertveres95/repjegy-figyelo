@@ -132,7 +132,9 @@ private sealed interface Screen {
 }
 
 private val dateFormat get() = DateTimeFormatter.ofPattern(tr("yyyy. MMM d., EEE", "d MMM yyyy, EEE", "EEE, d. MMM yyyy"), Lang.locale)
-private val typedDateFormat = DateTimeFormatter.ofPattern("yyyy.MM.dd")
+/** Begépelhető dátum: magyarul 2026.10.16, angolul és németül 2026-10-16 (mindkettőt elfogadjuk). */
+private val typedDateFormat: DateTimeFormatter
+    get() = DateTimeFormatter.ofPattern(if (Lang.hu) "yyyy.MM.dd" else "yyyy-MM-dd")
 
 /** A legkésőbbi megadható utazási nap (a légitársaságok kb. egy évre előre árulnak). */
 internal fun maxTravelDate(today: LocalDate): LocalDate = today.plusMonths(12)
@@ -178,7 +180,8 @@ fun AppRoot() {
     // (a háttérben érkező frissítéskeresés közben épp szerkeszthet)
     val showUpdate = update != null && !showSplash && screen == Screen.Home
     // Új verzió első megnyitásakor: mi változott (a bejelentkezés után, frissítési kérés nélkül)
-    val whatsNew = remember { runCatching { WhatsNew.pending() }.getOrDefault(emptyList()) }
+    // Nyelvváltáskor az új nyelven (a szövegek a lekéréskor fordítódnak)
+    val whatsNew = remember(Lang.code) { runCatching { WhatsNew.pending() }.getOrDefault(emptyList()) }
     var whatsNewOpen by remember { mutableStateOf(whatsNew.isNotEmpty()) }
     val showWhatsNew = whatsNewOpen && !showSplash && !loginGate && !showUpdate
     // Ami alatta van, csak akkor reagálhat (pl. megosztott kód), ha semmi sem takarja
@@ -912,7 +915,7 @@ private fun detailLine(w: Watch): String {
     parts += tr("${w.adults} felnőtt", if (w.adults == 1) "1 adult" else "${w.adults} adults", if (w.adults == 1) "1 Erwachsener" else "${w.adults} Erwachsene")
     if (w.children > 0) parts += tr("${w.children} gyerek", if (w.children == 1) "1 child" else "${w.children} children", if (w.children == 1) "1 Kind" else "${w.children} Kinder")
     val infants = w.infantsInSeat + w.infantsOnLap
-    if (infants > 0) parts += tr("$infants csecsemő", if (infants == 1) "1 infant" else "$infants infants", if (infants == 1) "1 Kleinkind" else "$infants Kleinkinder")
+    if (infants > 0) parts += tr("$infants csecsemő", if (infants == 1) "1 infant" else "$infants infants", if (infants == 1) "1 Säugling" else "$infants Säuglinge")
     val pax = parts.joinToString(", ")
     val cls = TRAVEL_CLASSES.firstOrNull { it.first == w.travelClass }?.second ?: ""
     val extra = mutableListOf(pax, cls)
@@ -1010,7 +1013,8 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
                 tr("„Minden héten” legfeljebb $MAX_WEEKS hétre állítható.", "“Every week” can be set for at most $MAX_WEEKS weeks.", "„Jede Woche“ ist für höchstens $MAX_WEEKS Wochen möglich.")
             weekly && lastWeekly(outDate, weeklyUntil).isBefore(today) -> tr("Az indulás dátuma nem lehet a múltban.", "The departure date can't be in the past.", "Das Abflugdatum darf nicht in der Vergangenheit liegen.")
             !weekly && outDate.plusDays(flexDays.toLong()).isBefore(today) -> tr("Az indulás dátuma nem lehet a múltban.", "The departure date can't be in the past.", "Das Abflugdatum darf nicht in der Vergangenheit liegen.")
-            outDate.isAfter(maxTravelDate(today)) || (roundTrip && retDate.isAfter(maxTravelDate(today))) ->
+            outDate.isAfter(maxTravelDate(today)) || (roundTrip && retDate.isAfter(maxTravelDate(today))) ||
+                (weekly && weeklyUntil.isAfter(maxTravelDate(today))) ->
                 tr("Legfeljebb ${maxTravelDate(today).format(typedDateFormat)}-ig lehet dátumot megadni.", "Dates can be set up to ${maxTravelDate(today).format(typedDateFormat)} at most.", "Daten sind höchstens bis ${maxTravelDate(today).format(typedDateFormat)} möglich.")
             roundTrip && retDate.isBefore(outDate) -> tr("A visszaút nem lehet az indulás előtt.", "The return can't be before the departure.", "Der Rückflug darf nicht vor dem Abflug liegen.")
             adults + children + infantsInSeat + infantsOnLap > 9 -> tr("Legfeljebb 9 utas adható meg.", "At most 9 passengers are allowed.", "Höchstens 9 Reisende sind möglich.")
@@ -1134,9 +1138,11 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
                 if (showCal) PriceCalendarDialog(calFrom.codes, calTo.codes, outDate, onPick = { picked ->
                     val days = java.time.temporal.ChronoUnit.DAYS.between(outDate, retDate).coerceAtLeast(0)
                     val span = java.time.temporal.ChronoUnit.DAYS.between(outDate, weeklyUntil)
+                    // A visszaút és a „minden héten” vége se lógjon túl a megadható utolsó napon
+                    val latest = maxTravelDate(today)
                     outDate = picked
-                    retDate = picked.plusDays(days)
-                    if (span >= 0) weeklyUntil = picked.plusDays(span)
+                    retDate = minOf(picked.plusDays(days), latest)
+                    if (span >= 0) weeklyUntil = minOf(picked.plusDays(span), latest)
                 }, onClose = { showCal = false })
             }
             if (roundTrip) {
@@ -1181,8 +1187,8 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
             ChoiceField(tr("Osztály", "Class", "Klasse"), TRAVEL_CLASSES, travelClass) { travelClass = it }
             Stepper(tr("Felnőtt", "Adults", "Erwachsene"), tr("12 év felett", "over 12", "über 12"), adults, 1..9) { adults = it }
             Stepper(tr("Gyerek", "Children", "Kinder"), tr("2–11 év", "ages 2–11", "2–11 Jahre"), children, 0..8) { children = it }
-            Stepper(tr("Csecsemő saját ülésen", "Infants in own seat", "Kleinkinder mit eigenem Sitz"), tr("2 év alatt", "under 2", "unter 2"), infantsInSeat, 0..4) { infantsInSeat = it }
-            Stepper(tr("Csecsemő ölben", "Infants on lap", "Kleinkinder auf dem Schoß"), tr("2 év alatt, felnőttenként 1", "under 2, 1 per adult", "unter 2, 1 pro Erwachsenem"), infantsOnLap, 0..adults) { infantsOnLap = it }
+            Stepper(tr("Csecsemő saját ülésen", "Infants in own seat", "Säuglinge mit eigenem Sitz"), tr("2 év alatt", "under 2", "unter 2"), infantsInSeat, 0..4) { infantsInSeat = it }
+            Stepper(tr("Csecsemő ölben", "Infants on lap", "Säuglinge auf dem Schoß"), tr("2 év alatt, felnőttenként 1", "under 2, 1 per adult", "unter 2, 1 pro Erwachsenem"), infantsOnLap, 0..adults) { infantsOnLap = it }
 
             SectionTitle(tr("Poggyász és átszállás", "Bags and stops", "Gepäck und Umstiege"))
             Stepper(tr("Kézipoggyász", "Cabin bags", "Handgepäck"), tr("összesen, minden utasra", "in total, for all passengers", "insgesamt, für alle Reisenden"), bags, 0..maxBags) { bags = it }
@@ -1192,11 +1198,11 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
                     "A fapadosoknál (Ryanair, Wizz Air, easyJet…) a poggyász díját becsült összeggel " +
                         "adom hozzá az árhoz. A hagyományos légitársaságoknál úgy számolok, hogy a " +
                         "poggyász benne van a jegyárban (a legolcsóbb „light” jegyeknél ez nem mindig igaz).",
-                    "For low-cost airlines (Ryanair, Wizz Air, easyJet…) I add an estimated bag fee " +
-                        "to the price. For traditional airlines I assume the bags are included " +
+                    "For low-cost airlines (Ryanair, Wizz Air, easyJet…) we add an estimated bag fee " +
+                        "to the price. For traditional airlines we assume the bags are included " +
                         "in the fare (not always true for the cheapest “light” fares).",
-                    "Bei Billigfliegern (Ryanair, Wizz Air, easyJet…) rechne ich eine geschätzte Gepäckgebühr " +
-                        "zum Preis dazu. Bei klassischen Airlines gehe ich davon aus, dass das Gepäck im " +
+                    "Bei Billigfliegern (Ryanair, Wizz Air, easyJet…) rechnen wir eine geschätzte Gepäckgebühr " +
+                        "zum Preis dazu. Bei klassischen Airlines gehen wir davon aus, dass das Gepäck im " +
                         "Ticketpreis enthalten ist (bei den günstigsten „Light“-Tarifen nicht immer).",
                 ),
                 style = MaterialTheme.typography.bodySmall,
@@ -1739,16 +1745,24 @@ private fun DateField(
     // A hibás beírást a Mentés is lássa (különben csendben a korábbi dátum mentődne)
     LaunchedEffect(error) { onValidChange(error == null) }
 
-    // Ha a dátum máshonnan változik (pl. naptárból vagy az indulás eltolja a visszautat), frissüljön a mező
-    // A hibaüzenet a legkorábbi dátum (pl. az indulás) változásakor is újraértékelődik
-    LaunchedEffect(date, minDate) {
+    fun rangeError(d: LocalDate): String? = when {
+        d.isBefore(minDate) -> tr("Legkorábban: ${minDate.format(typedDateFormat)}", "Earliest: ${minDate.format(typedDateFormat)}", "Frühestens: ${minDate.format(typedDateFormat)}")
+        d.isAfter(maxDate) -> tr("Legkésőbb: ${maxDate.format(typedDateFormat)}", "Latest: ${maxDate.format(typedDateFormat)}", "Spätestens: ${maxDate.format(typedDateFormat)}")
+        else -> null
+    }
+
+    // Ha a dátum máshonnan változik (pl. naptárból vagy az indulás eltolja a visszautat), frissüljön a mező.
+    // A hibaüzenet a tartomány (legkorábbi / legkésőbbi nap) szerint újraértékelődik: pl. ha az
+    // indulás eltolása a visszautat a megadható utolsó nap utánra viszi, az piros lesz
+    LaunchedEffect(date, minDate, maxDate) {
         val typed = parseTypedDate(text)
-        if (typed != date) {
-            text = date.format(typedDateFormat)
-            error = null
-        } else if (error != null && !date.isBefore(minDate) && !date.isAfter(maxDate)) {
-            error = null
-        }
+        if (typed != date) text = date.format(typedDateFormat)
+        error = rangeError(date)
+    }
+    // Nyelvváltáskor a mező az új nyelv dátumformátumát mutassa
+    val langCode = Lang.code
+    LaunchedEffect(langCode) {
+        if (parseTypedDate(text) == date) text = date.format(typedDateFormat)
     }
 
     OutlinedTextField(
@@ -1756,16 +1770,15 @@ private fun DateField(
         onValueChange = { v ->
             text = v.filter { it.isDigit() || it in ".-/ " }.take(12)
             val parsed = parseTypedDate(text)
-            error = when {
-                parsed == null -> tr("Formátum: 2026.10.16", "Format: 2026.10.16 (year.month.day)", "Format: 2026.10.16 (Jahr.Monat.Tag)")
-                parsed.isBefore(minDate) -> tr("Legkorábban: ${minDate.format(typedDateFormat)}", "Earliest: ${minDate.format(typedDateFormat)}", "Frühestens: ${minDate.format(typedDateFormat)}")
-                parsed.isAfter(maxDate) -> tr("Legkésőbb: ${maxDate.format(typedDateFormat)}", "Latest: ${maxDate.format(typedDateFormat)}", "Spätestens: ${maxDate.format(typedDateFormat)}")
-                else -> null
+            error = if (parsed == null) {
+                tr("Formátum: 2026.10.16", "Format: 2026-10-16 (year-month-day)", "Format: 2026-10-16 (Jahr-Monat-Tag)")
+            } else {
+                rangeError(parsed)
             }
             if (parsed != null && !parsed.isBefore(minDate) && !parsed.isAfter(maxDate)) onPick(parsed)
         },
         label = { Text(label) },
-        placeholder = { Text(tr("éééé.hh.nn", "yyyy.mm.dd", "jjjj.mm.tt")) },
+        placeholder = { Text(tr("éééé.hh.nn", "yyyy-mm-dd", "JJJJ-MM-TT")) },
         supportingText = {
             Text(error ?: date.format(DateTimeFormatter.ofPattern("EEEE", Lang.locale)))
         },

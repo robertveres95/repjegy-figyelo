@@ -58,7 +58,7 @@ private fun stepsFor(p: KeyProvider): List<GuideStep> = when (p) {
                 "SerpApi ist ein Dienst, der REFI die Ergebnisse von Google Flights zuverlässig und „offiziell“ liefert. " +
                     "Die Google-Suche ohne Schlüssel hakt manchmal oder zeigt einen Fehler – mit SerpApi gibt es auch dann " +
                     "einen Preis, und SerpApi findet außerdem mehr Flüge.\n\n" +
-                    "250 Suchen pro Monat sind kostenlos, und es wird keine Bankkarte verlangt – es kann dich also nie versehentlich Geld kosten.",
+                    "250 Suchen pro Monat sind kostenlos, und es wird keine Kreditkarte verlangt – es kann dich also nie versehentlich Geld kosten.",
             ),
         ),
         GuideStep(
@@ -109,7 +109,7 @@ private fun stepsFor(p: KeyProvider): List<GuideStep> = when (p) {
                 "Ignav ist ein Flugsuchdienst mit eigener Datenquelle – er kann also Angebote finden, " +
                     "die die anderen Quellen nicht sehen. Je mehr Stellen REFI durchsucht, desto größer die Chance " +
                     "auf ein günstigeres Ticket.\n\n" +
-                    "Die ersten 1000 Suchen sind kostenlos (ein einmaliges Kontingent, nicht monatlich). Es wird keine Bankkarte verlangt – " +
+                    "Die ersten 1000 Suchen sind kostenlos (ein einmaliges Kontingent, nicht monatlich). Es wird keine Kreditkarte verlangt – " +
                     "wenn das Kontingent aufgebraucht ist, hört es einfach auf und kostet dich von selbst nie Geld.",
             ),
         ),

@@ -38,7 +38,7 @@ interface PlatformApi {
         get() = tr(
             "Ilyenkor a riasztás hang és rezgés nélkül érkezik; reggel ott vár az értesítések között.",
             "During these hours alerts arrive without sound or vibration; they'll be waiting in your notifications in the morning.",
-            "In dieser Zeit kommen Benachrichtigungen ohne Ton und Vibration; am Morgen warten sie bei deinen Benachrichtigungen.",
+            "In dieser Zeit kommen Benachrichtigungen ohne Ton und Vibration; am Morgen findest du sie in deinen Benachrichtigungen.",
         )
 
     fun openUrl(url: String)
@@ -95,6 +95,9 @@ interface PlatformApi {
 
     /** A figyelések megváltoztak (pl. a kezdőképernyő-widget frissítéséhez). */
     fun watchesChanged() {}
+
+    /** A felület nyelve megváltozott (pl. értesítési csatornák nevének, widgetnek, tálcaikonnak a frissítése). */
+    fun languageChanged() {}
 
     /**
      * Google-hozzáférési token a Drive alkalmazásadat-területéhez (szinkronizálás).

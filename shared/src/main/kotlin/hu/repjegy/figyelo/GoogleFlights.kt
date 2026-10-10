@@ -15,11 +15,15 @@ import java.util.Locale
 object GoogleFlights {
     const val NAME = "Google Flights"
 
-    fun searchUrl(w: Watch, currency: String): String =
+    /** A lekérdezés címe ([hl]: az oldal nyelve; a feldolgozás az angol oldalra épül). */
+    fun searchUrl(w: Watch, currency: String, hl: String = "en"): String =
         "https://www.google.com/travel/flights?tfs=" +
-            URLEncoder.encode(tfs(w), "UTF-8") + "&hl=en&curr=$currency" +
+            URLEncoder.encode(tfs(w), "UTF-8") + "&hl=$hl&curr=$currency" +
             // „Minden járat és ár” nézet (a fast-flights is ezt kéri), különben kimaradhat a legolcsóbb
             "&tfu=EgQIABABIgA"
+
+    /** Ugyanez a keresés a felhasználónak megnyitva: a felület nyelvén. */
+    fun userUrl(w: Watch, currency: String): String = searchUrl(w, currency, Lang.code)
 
     /** Diagnosztikához: az utolsó lekérés nyers jellemzői (hány elem, hiba-jelzés). */
     @Volatile
@@ -123,6 +127,7 @@ object GoogleFlights {
         }
 
         val offers = mutableListOf<Offer>()
+        val openUrl = userUrl(w, currency)
         var seen = 0
         var failed = 0
         for (groupIndex in listOf(2, 3)) {
@@ -130,7 +135,7 @@ object GoogleFlights {
             for (i in 0 until group.length()) {
                 val item = group.optJSONArray(i) ?: continue
                 seen++
-                val r = runCatching { parseItem(item, url, w, currency) }
+                val r = runCatching { parseItem(item, openUrl, w, currency) }
                 if (r.isFailure) failed++
                 r.getOrNull()?.let(offers::add)
             }

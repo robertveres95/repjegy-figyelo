@@ -20,7 +20,8 @@ object PriceCalendar {
     fun month(from: String, to: String, ym: YearMonth, currency: String, today: LocalDate = LocalDate.now()): Map<LocalDate, Day> {
         val settings = Store.settings.value
         val start = maxOf(ym.atDay(1), today)
-        val end = ym.atEndOfMonth()
+        // Egy évnél későbbre nem lehet figyelést felvenni – a naptár se mutasson oda árat
+        val end = minOf(ym.atEndOfMonth(), maxTravelDate(today))
         if (start.isAfter(end)) return emptyMap()
         val probe = Watch(
             id = "cal", from = from, to = to, outboundDate = start.toString(), returnDate = null, travelClass = 1,
@@ -45,7 +46,9 @@ object PriceCalendar {
                 runCatching {
                     WizzAir.dayFares(o, dst, start, end).forEach { f ->
                         val d = runCatching { LocalDate.parse(f.departure) }.getOrNull() ?: return@forEach
-                        offer(d, Rates.convert(f.amount, f.currency, currency), WizzAir.NAME)
+                        // Egy hibás árfolyam (pl. ismeretlen pénznem) ne vigye el a többi napot
+                        val v = runCatching { Rates.convert(f.amount, f.currency, currency) }.getOrNull() ?: return@forEach
+                        offer(d, v, WizzAir.NAME)
                     }
                 }.onFailure { errors++ }
             }

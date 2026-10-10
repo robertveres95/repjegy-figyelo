@@ -231,12 +231,12 @@ internal fun DiscoverScreen(
                     }
                     Text(
                         tr(
-                            "Jelenleg a Ryanair járataiból keres (az ő árkeresője tud „bárhová” keresni). " +
-                                "Az ár egy főre szól, poggyász nélkül.",
-                            "For now it searches Ryanair flights (their fare finder can search “anywhere”). " +
-                                "Prices are per person, without baggage.",
-                            "Derzeit sucht es unter den Flügen von Ryanair (deren Tarifsuche kann „überallhin“ suchen). " +
-                                "Die Preise gelten pro Person, ohne Gepäck.",
+                            "Jelenleg a Ryanair árkeresőjét használja (az tud „bárhová” keresni), csak oda útnál " +
+                                "a Wizz Air járatait is. Az ár egy főre szól, poggyász nélkül.",
+                            "For now it uses Ryanair’s fare finder (which can search “anywhere”), and for one-way " +
+                                "trips Wizz Air flights too. Prices are per person, without baggage.",
+                            "Derzeit nutzt REFI die Tarifsuche von Ryanair (die „überallhin“ suchen kann) und bei " +
+                                "reinen Hinflügen auch Wizz Air. Die Preise gelten pro Person, ohne Gepäck.",
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -345,7 +345,7 @@ private fun DealAlertRow(a: DealAlert, currency: String) {
         } else if (a.lastChecked != null && a.lastError == null) {
             Text(tr("Most nincs a határ alatti út – szólunk, ha lesz.", "No trips below your limit right now – we’ll let you know when there are.", "Gerade gibt es keine Flüge unter deinem Limit – wir sagen dir Bescheid, sobald es welche gibt."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        a.lastError?.let { StatusText(tr("Legutóbb nem sikerült: $it", "Last check failed: $it", "Letzte Prüfung fehlgeschlagen: $it"), true) }
+        a.errorText?.let { StatusText(tr("Legutóbb nem sikerült: $it", "Last check failed: $it", "Letzte Prüfung fehlgeschlagen: $it"), true) }
         Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
             TextButton(onClick = { AppScope.scope.launch { DealAlerts.checkOne(a) } }) { Text(tr("Ellenőrzés most", "Check now", "Jetzt prüfen")) }
             TextButton(onClick = { confirm = true }) { Text(tr("Törlés", "Delete", "Löschen"), color = MaterialTheme.colorScheme.error) }

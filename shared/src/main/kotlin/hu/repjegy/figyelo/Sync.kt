@@ -285,13 +285,15 @@ object Sync {
         JSONObject()
             .put("format", FORMAT)
             // 2: „minden héten” figyelés is van benne. A régebbi appok (1.3.x) ezt nem ismerik, ezért
-            // ilyenkor nem olvassák és nem írják felül (különben elveszne a beállítás) – frissítést kérnek
-            .put("version", if (watches.any { it.weeklyUntil != null } || alerts.isNotEmpty() || alertTombstones.isNotEmpty()) 2 else 1)
+            // ilyenkor nem olvassák és nem írják felül (különben elveszne a beállítás) – frissítést kérnek.
+            // A riasztások miatt nem kell: azokat a régi app egyszerűen figyelmen kívül hagyja, a figyelései
+            // pedig továbbra is szinkronizálódnak (a riasztásokat az újabb eszközök a helyi példányból visszaírják)
+            .put("version", if (watches.any { it.weeklyUntil != null }) 2 else 1)
             .put("currency", currency)
             .put("updatedAt", System.currentTimeMillis())
             .put("watches", JSONArray().apply { watches.forEach { put(it.toJson()) } })
             .put("tombstones", JSONObject().apply { tombstones.forEach { (k, v) -> put(k, v) } })
-            // „Bárhová, olcsón” riasztások beállításai (a 2-es formátumtól)
+            // „Bárhová, olcsón” riasztások beállításai (az 1-es verziójú fájlban is lehetnek)
             .apply {
                 if (alerts.isNotEmpty()) put("alerts", JSONArray().apply { alerts.forEach { put(it.toSyncJson()) } })
                 if (alertTombstones.isNotEmpty()) put("alertTombstones", JSONObject().apply { alertTombstones.forEach { (k, v) -> put(k, v) } })

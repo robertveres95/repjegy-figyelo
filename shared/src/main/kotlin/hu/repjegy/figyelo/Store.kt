@@ -330,12 +330,15 @@ object Store {
         }
     }
 
-    /** Pénznemváltási figyelmeztetés (a [PriceChecker.isCurrencyHint] mindkét nyelven felismeri). */
+    /** Pénznemváltási figyelmeztetés (a [PriceChecker.isCurrencyHint] minden nyelven felismeri). */
     private fun currencyHint(): String = trs(
         "Pénznemet váltottál: add meg újra a célárat, és kapcsold vissza az értesítést.",
         "You changed the currency: enter the target price again and turn notifications back on.",
         "Du hast die Währung geändert: Gib den Zielpreis erneut ein und schalte die Benachrichtigung wieder ein.",
     )
+
+    /** A pénznemváltási figyelmeztetés a felület nyelvén (a régebben, más nyelven tárolt helyett). */
+    internal fun currencyHintText(): String = currencyHint()
 
     private fun persist(list0: List<Watch>) {
         // A tárolt szövegek minden nyelven (nyelvváltás után is a felület nyelvén látszanak)

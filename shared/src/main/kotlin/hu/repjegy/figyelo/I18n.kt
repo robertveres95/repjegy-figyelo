@@ -20,6 +20,12 @@ object Lang {
     private const val KEY = "language"
     private val CODES = listOf(HU_CODE, EN_CODE, DE_CODE)
 
+    /**
+     * A készülék nyelve induláskor – egyszer olvassuk ki, mert a [Locale.setDefault] (a dátumválasztók
+     * miatt) később átállítja az alapértelmezettet, és abból az „auto” már nem a készülék nyelve lenne.
+     */
+    private val systemLang: String = runCatching { Locale.getDefault().language }.getOrDefault("en")
+
     /** A választott beállítás (auto / hu / en / de). Compose-állapot: váltáskor az egész felület újrarajzolódik. */
     var setting by mutableStateOf(System.getProperty("refi.lang")?.takeIf { it in CODES } ?: AUTO)
         private set
@@ -28,7 +34,7 @@ object Lang {
     val code: String
         get() = when (setting) {
             HU_CODE, EN_CODE, DE_CODE -> setting
-            else -> when (Locale.getDefault().language) {
+            else -> when (systemLang) {
                 "hu" -> HU_CODE
                 "de" -> DE_CODE
                 else -> EN_CODE
@@ -51,18 +57,44 @@ object Lang {
     fun load() {
         if (System.getProperty("refi.lang") != null) return
         val saved = runCatching { Store.prefs.getString(KEY, null) }.getOrNull()
-        // Frissítés egy korábbi (csak magyar) verzióról: marad magyar, akkor is, ha a gép más nyelvű –
-        // csak az új telepítések követik a készülék nyelvét
-        if (saved == null && runCatching { Store.prefs.getString("seenVersion", null) }.getOrNull() != null) {
-            set(HU_CODE)
-            return
+        val seen = runCatching { Store.prefs.getString("seenVersion", null) }.getOrNull()
+        val initial = decideInitial(saved, seen)
+        if (initial == null) {
+            // Új telepítés: az „auto” mentése, hogy a következő indításkor (amikor a seenVersion már
+            // létezik) ne higgyük egy korábbi, csak magyar verzióról való frissítésnek
+            setting = AUTO
+            runCatching { Store.prefs.edit { putString(KEY, AUTO) } }
+            applyLocale()
+        } else if (saved == null) {
+            // Frissítés egy korábbi (csak magyar) verzióról: marad magyar, akkor is, ha a gép más nyelvű
+            set(initial)
+        } else {
+            setting = initial
+            applyLocale()
         }
-        setting = saved?.takeIf { it == AUTO || it in CODES } ?: AUTO
+    }
+
+    /**
+     * Az induló beállítás a mentett választásból és abból, hogy volt-e már korábbi verzió:
+     * mentett érték → az (érvénytelen esetén „auto”); nincs mentett, de volt korábbi verzió → magyar;
+     * új telepítés → null (= „auto”, és ezt menteni kell).
+     */
+    internal fun decideInitial(saved: String?, seenVersion: String?): String? = when {
+        saved != null -> saved.takeIf { it == AUTO || it in CODES } ?: AUTO
+        seenVersion != null -> HU_CODE
+        else -> null
+    }
+
+    /** A JVM alapértelmezett nyelve is a felületé legyen (pl. az asztali dátumválasztó ezt olvassa). */
+    private fun applyLocale() {
+        runCatching { Locale.setDefault(locale) }
     }
 
     fun set(value: String) {
         setting = value
         runCatching { Store.prefs.edit { putString(KEY, value) } }
+        applyLocale()
+        runCatching { Platform.current.languageChanged() }
         // A reptérlista az új nyelven a háttérben töltődjön be (ne a felület szálán, az első kártyánál)
         runCatching { AppScope.scope.launch { runCatching { Airports.preload() } } }
     }
@@ -123,6 +155,28 @@ fun trs(hu: String, en: String, de: String? = null): String {
     Texts.remember(out, l)
     return out
 }
+
+/**
+ * Összetett szöveg (pl. „előtag (belső hibaüzenet)”) a felület nyelvén: a részekből minden nyelven
+ * összerakja, és a [Texts] megjegyzi, hogy eltárolva is lefordítható legyen. A vágást a részeken
+ * kell elvégezni ([textL10n]), nem az eredményen (különben a [Texts.find] már nem ismerné fel).
+ */
+fun composeText(vararg parts: L10n): String {
+    val l = parts.reduce { acc, p -> acc + p }
+    val out = l.text
+    Texts.remember(out, l)
+    return out
+}
+
+/** Egy (esetleg [trs]-sel készült) szöveg minden nyelven, legfeljebb [max] karakterre vágva. */
+fun textL10n(s: String, max: Int = Int.MAX_VALUE): L10n {
+    val l = Texts.find(s) ?: L10n.of(s)
+    return if (maxOf(l.hu.length, l.en.length, l.de?.length ?: 0) <= max) l
+    else L10n(l.hu.take(max), l.en.take(max), l.de?.take(max))
+}
+
+/** Hosszú (pl. szerver-) hibaüzenet rövidítése úgy, hogy a fordítása is megmaradjon. */
+fun shortText(s: String, max: Int): String = if (s.length <= max) s else composeText(textL10n(s, max))
 
 /** A [trs]-sel készült szövegek nyelvi változatai (a legutóbbi néhány száz). */
 object Texts {

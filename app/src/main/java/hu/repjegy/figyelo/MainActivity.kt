@@ -1,7 +1,10 @@
 package hu.repjegy.figyelo
 
 import android.Manifest
+import android.content.ContextWrapper
 import android.content.pm.PackageManager
+import android.content.res.Configuration
+import android.content.res.Resources
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -13,13 +16,16 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 
@@ -55,9 +61,29 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val settings by Store.settings.collectAsState()
-            NeonTheme(mode = settings.themeMode, textScale = settings.textScale) {
-                Surface(Modifier.fillMaxSize(), color = Neon.Black) {
-                    AppRoot()
+            // A Material-komponensek (pl. a dátumválasztó hónap- és napnevei, gombjai) a felület
+            // nyelvét kövessék, ne a készülékét
+            val langCode = Lang.code
+            val baseConfig = LocalConfiguration.current
+            val activityContext = LocalContext.current
+            val cfg = remember(langCode, baseConfig) {
+                Configuration(baseConfig).apply { setLocale(Lang.locale) }
+            }
+            val localizedContext = remember(cfg, activityContext) {
+                val res = activityContext.createConfigurationContext(cfg).resources
+                // Az Activity marad az alap (ha valami azt keresné), csak az erőforrások lokalizáltak
+                object : ContextWrapper(activityContext) {
+                    override fun getResources(): Resources = res
+                }
+            }
+            CompositionLocalProvider(
+                LocalConfiguration provides cfg,
+                LocalContext provides localizedContext,
+            ) {
+                NeonTheme(mode = settings.themeMode, textScale = settings.textScale) {
+                    Surface(Modifier.fillMaxSize(), color = Neon.Black) {
+                        AppRoot()
+                    }
                 }
             }
         }

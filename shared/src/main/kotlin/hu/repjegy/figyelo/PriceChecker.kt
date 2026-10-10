@@ -141,9 +141,16 @@ object PriceChecker {
                         when (e) {
                             is SkipSourceException -> SourceStatus(name, true, e.message ?: trs("kihagyva", "skipped", "übersprungen"))
                             // Talált ajánlatot, de nem minden kérése sikerült: nem számít teljes válasznak
-                            is PartialSourceException -> SourceStatus(name, false, trs("${e.offers.size} ajánlat, ${e.message}", "${e.offers.size} ${if (e.offers.size == 1) "offer" else "offers"}, ${e.message}", "${e.offers.size} ${if (e.offers.size == 1) "Angebot" else "Angebote"}, ${e.message}").take(160))
+                            is PartialSourceException -> {
+                                val n = e.offers.size
+                                // Részenként fordítva (és a belső üzenetet vágva), hogy nyelvváltás után is lefordítható legyen
+                                SourceStatus(name, false, composeText(
+                                    L10n("$n ajánlat, ", "$n ${if (n == 1) "offer" else "offers"}, ", "$n ${if (n == 1) "Angebot" else "Angebote"}, "),
+                                    textL10n(e.message ?: "", 140),
+                                ))
+                            }
                             // A szerverek hibaszövege lehet hosszú (akár HTML) – röviden tároljuk
-                            else -> SourceStatus(name, false, (e.message ?: e.javaClass.simpleName).take(160))
+                            else -> SourceStatus(name, false, shortText(e.message ?: e.javaClass.simpleName, 160))
                         }
                     },
                 )

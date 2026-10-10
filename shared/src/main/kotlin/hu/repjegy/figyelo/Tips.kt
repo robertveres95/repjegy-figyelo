@@ -55,7 +55,7 @@ internal object Tips {
                 "With a free SerpApi key, REFI sees Google prices even when the plain search stalls. " +
                     "250 searches a month are free, and with a Google account it takes 2 minutes. We’ll guide you through it.",
                 "Mit einem kostenlosen SerpApi-Schlüssel sieht REFI Google-Preise auch dann, wenn die normale Suche hakt. " +
-                    "250 Suchen pro Monat sind kostenlos, und mit einem Google-Konto ist das in 2 Minuten erledigt. Wir führen dich durch.",
+                    "250 Suchen pro Monat sind kostenlos, und mit einem Google-Konto ist das in 2 Minuten erledigt. Wir führen dich Schritt für Schritt hindurch.",
             ),
             tr("Megmutatom, hogyan", "Show me how", "Zeig mir, wie"), KeyProvider.SERPAPI,
         ))
@@ -67,7 +67,7 @@ internal object Tips {
                 "Ignav searches its own data source, so it can find deals the others miss. The first " +
                     "1000 searches are free, no bank card needed. We’ll help you step by step.",
                 "Ignav sucht in einer eigenen Datenquelle und kann so Angebote finden, die den anderen entgehen. Die ersten " +
-                    "1000 Suchen sind kostenlos, ohne Bankkarte. Wir helfen dir Schritt für Schritt.",
+                    "1000 Suchen sind kostenlos, ohne Kreditkarte. Wir helfen dir Schritt für Schritt.",
             ),
             tr("Megmutatom, hogyan", "Show me how", "Zeig mir, wie"), KeyProvider.IGNAV,
         ))

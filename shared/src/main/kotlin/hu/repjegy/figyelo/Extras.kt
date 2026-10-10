@@ -176,7 +176,7 @@ internal fun Watch.sanitized(): Watch? {
 object Backup {
     const val FORMAT = "refi-backup"
 
-    fun fileName(today: LocalDate = LocalDate.now()) = "REFI-mentes-$today.json"
+    fun fileName(today: LocalDate = LocalDate.now()) = tr("REFI-mentes", "REFI-backup", "REFI-Sicherung") + "-$today.json"
 
     fun export(watches: List<Watch>, settings: Settings): String = JSONObject()
         .put("format", FORMAT)

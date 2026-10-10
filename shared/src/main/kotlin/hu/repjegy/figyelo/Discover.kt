@@ -111,9 +111,11 @@ object Discover {
             }
         }
         // Wizz Air „olcsó járatok” (csak egyirányú utaknál): további úti célok, amerre a Ryanair nem repül
+        // A fapados-bázisok előre (pl. London: STN, LTN), legfeljebb 4 reptér; annyi hónapot kérünk, hogy az időszak vége is benne legyen
         if (nights == null && Store.settings.value.wizzOn) {
-            for (origin in origins.take(3)) {
-                runCatching { all += wizz(origin, start, end, currency) }
+            val months = (ChronoUnit.MONTHS.between(YearMonth.from(today), YearMonth.from(end)) + 1).toInt().coerceIn(1, 12)
+            for (origin in origins.sortedBy { if (it in LOW_COST_BASES) 0 else 1 }.take(4)) {
+                runCatching { all += wizz(origin, start, end, currency, months) }
             }
         }
         if (all.isEmpty() && lastError != null) throw lastError
@@ -127,8 +129,8 @@ object Discover {
     }
 
     /** A Wizz Air ajánlói egy reptérről, a keresett időszakra szűrve. */
-    private fun wizz(origin: String, start: LocalDate, end: LocalDate, currency: String): List<Result> =
-        WizzAir.cheapFlights(origin).mapNotNull { f ->
+    private fun wizz(origin: String, start: LocalDate, end: LocalDate, currency: String, months: Int): List<Result> =
+        WizzAir.cheapFlights(origin, months).mapNotNull { f ->
             val day = f.departure?.take(10)?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return@mapNotNull null
             if (day.isBefore(start) || day.isAfter(end)) return@mapNotNull null
             val to = f.to ?: return@mapNotNull null

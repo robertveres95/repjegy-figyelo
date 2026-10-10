@@ -76,7 +76,7 @@ compose.desktop {
             // MSI-verzió: a build sorszáma a harmadik tag, így minden új kiadás a régi fölé települ
             val (major, minor) = versionName.split('.').map { it.toInt() }
             packageVersion = "$major.$minor.$buildNumber"
-            description = "REFI – repjegy figyelő"
+            description = "REFI – flight price tracker"
             vendor = "REFI"
             // Teljes Java-futtatókörnyezet (TLS, magyar dátumformák stb.)
             includeAllModules = true

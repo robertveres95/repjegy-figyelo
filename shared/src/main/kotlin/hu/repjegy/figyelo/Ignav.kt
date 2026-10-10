@@ -81,7 +81,7 @@ object Ignav {
         if (json == null) throw IOException(trs("hibás válasz", "invalid response", "ungültige Antwort"))
 
         val itineraries = json.optJSONArray("itineraries") ?: JSONArray()
-        val url = GoogleFlights.searchUrl(w.copy(from = origin, to = destination), currency)
+        val url = GoogleFlights.userUrl(w.copy(from = origin, to = destination), currency)
         val offers = mutableListOf<Offer>()
         for (i in 0 until itineraries.length()) {
             val itin = itineraries.optJSONObject(i) ?: continue

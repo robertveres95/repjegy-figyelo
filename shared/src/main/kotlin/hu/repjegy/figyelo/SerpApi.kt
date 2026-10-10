@@ -29,7 +29,7 @@ object SerpApi {
             "stops" to w.stops.toString(),
             "sort_by" to "2",
             "currency" to currency,
-            "hl" to "hu",
+            "hl" to Lang.code,
             "gl" to "hu", // magyarországi árakat kérünk (különben amerikai „piacról” keres)
             "api_key" to apiKey,
         )
@@ -47,7 +47,7 @@ object SerpApi {
 
         val flightsUrl = json.optJSONObject("search_metadata")
             ?.optString("google_flights_url")?.takeIf { it.isNotBlank() }
-            ?: GoogleFlights.searchUrl(w, currency)
+            ?: GoogleFlights.userUrl(w, currency)
 
         val offers = mutableListOf<Offer>()
         for (key in listOf("best_flights", "other_flights")) {

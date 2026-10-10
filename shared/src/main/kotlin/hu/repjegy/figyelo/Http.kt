@@ -28,11 +28,19 @@ class PartialSourceException(
     /** Letiltás miatt maradt félbe: a külső ciklus (pl. rugalmas dátumok) se próbálkozzon tovább. */
     val fatal: Boolean = false,
 ) :
-    IOException(
-        trs("részleges válasz: $failed/$total kérés hibázott", "partial answer: $failed/$total requests failed", "teilweise Antwort: $failed/$total Anfragen fehlgeschlagen") +
-            (cause?.message?.let { " ($it)" } ?: "").take(120),
-        cause,
+    IOException(partialMessage(failed, total, cause), cause)
+
+/** „részleges válasz: 2/5 kérés hibázott (belső hiba)” minden nyelven (a [Texts] megjegyzi). */
+private fun partialMessage(failed: Int, total: Int, cause: Exception?): String {
+    val head = L10n(
+        "részleges válasz: $failed/$total kérés hibázott",
+        "partial answer: $failed/$total requests failed",
+        "teilweise Antwort: $failed/$total Anfragen fehlgeschlagen",
     )
+    val inner = cause?.message?.takeIf { it.isNotBlank() } ?: return composeText(head)
+    // A belső üzenetet vágjuk (nem az egészet), hogy a fordítás felismerhető maradjon
+    return composeText(head, L10n.of(" ("), textL10n(inner, 117), L10n.of(")"))
+}
 
 /** Több kérés (reptérpár vagy dátum) eredményének összegzése: hiba, részleges vagy teljes. */
 internal inline fun <K> collectOffers(keys: List<K>, betweenEach: () -> Unit = {}, search: (K) -> List<Offer>): List<Offer> {

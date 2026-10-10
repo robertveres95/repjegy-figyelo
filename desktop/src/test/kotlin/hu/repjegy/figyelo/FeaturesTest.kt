@@ -482,4 +482,137 @@ class FeaturesTest {
         assertEquals(LocalDate.of(2026, 10, 31), e)
         assertEquals(13, Discover.periods(today).size)
     }
+
+    // ---------------- Nyelv: első indítás és frissítés
+    @Test fun initialLanguageDecision() {
+        // Új telepítés: „auto” (és mentjük), így a 2. indításkor sem lesz magyar
+        assertNull(Lang.decideInitial(null, null))
+        // Frissítés egy régi (csak magyar) verzióról: magyar marad
+        assertEquals(Lang.HU_CODE, Lang.decideInitial(null, "1.3.2"))
+        // Mentett választás: az nyer
+        assertEquals(Lang.AUTO, Lang.decideInitial(Lang.AUTO, "1.4.0"))
+        assertEquals(Lang.EN_CODE, Lang.decideInitial(Lang.EN_CODE, null))
+        assertEquals(Lang.AUTO, Lang.decideInitial("xx", "1.4.0"))
+    }
+
+    // ---------------- Összetett tárolt szövegek fordítása
+    @Test fun compositeStatusesAreTranslatable() {
+        try {
+            Lang.set(Lang.HU_CODE)
+            val inner = trs("nincs válasz a szervertől", "no answer from the server", "keine Antwort vom Server")
+            val e = PartialSourceException(emptyList(), 1, 3, java.io.IOException(inner))
+            assertEquals("részleges válasz: 1/3 kérés hibázott (nincs válasz a szervertől)", e.message)
+            val l = assertNotNull(Texts.find(e.message))
+            assertEquals("partial answer: 1/3 requests failed (no answer from the server)", l.en)
+            assertEquals("teilweise Antwort: 1/3 Anfragen fehlgeschlagen (keine Antwort vom Server)", l.de)
+            // Egymásba ágyazva (a belső maga is összetett)
+            val outer = PartialSourceException(emptyList(), 2, 4, e)
+            assertTrue(assertNotNull(Texts.find(outer.message)).en.startsWith("partial answer: 2/4 requests failed (partial answer: 1/3"))
+            // Hosszú belső üzenet: a részt vágjuk, az egész felismerhető marad
+            val long = PartialSourceException(emptyList(), 1, 2, java.io.IOException("x".repeat(500)))
+            assertNotNull(Texts.find(long.message))
+            assertTrue(long.message!!.length < 200)
+            val wizz = WizzAir.rejectedMessage(listOf("InvalidDate"))
+            assertEquals("a Wizz Air elutasította a kérést (InvalidDate)", wizz)
+            assertEquals("Wizz Air rejected the request (InvalidDate)", assertNotNull(Texts.find(wizz)).en)
+            assertEquals("Wizz Air hat die Anfrage abgelehnt (unbekannter Grund)", assertNotNull(Texts.find(WizzAir.rejectedMessage(emptyList()))).de)
+            // A tárolt figyelésben angol felületen angolul
+            val w = watch().copy(sourceStatus = listOf(SourceStatus("Google Flights", false, e.message!!))).withL10n()
+            val back = Watch.fromJson(w.toJson())
+            Lang.set(Lang.EN_CODE)
+            assertEquals("partial answer: 1/3 requests failed (no answer from the server)", back.sourceStatus.single().shown)
+        } finally {
+            Lang.set(Lang.HU_CODE)
+        }
+    }
+
+    // ---------------- Régi, csak magyar tárolt szövegek nem magyar felületen
+    @Test fun oldHungarianTextsFallBackInOtherLanguages() {
+        val old = "Egyik forrás sem válaszolt időben"
+        try {
+            Lang.set(Lang.EN_CODE)
+            assertEquals("(details after the next check)", watch().copy(lastError = old).errorText)
+            assertEquals("(details after the next check)", SourceStatus("Ryanair", false, "3 ajánlat, kérés hibázott").shown)
+            assertEquals("(details after the next check)", Offer(1, "x", note = "becsült ár").noteText)
+            assertEquals("(details after the next check)", watch().copy(lastError = "Hibás válasz a Győr felől").errorText)
+            // Német vagy angol (és nem felismerhető) szöveg változatlan marad
+            assertEquals("Keine Flüge gefunden", watch().copy(lastError = "Keine Flüge gefunden").errorText)
+            assertEquals("HTTP 500", SourceStatus("Ryanair", false, "HTTP 500").shown)
+            // Pénznemváltási figyelmeztetés: mindig a felület nyelvén
+            val hint = "Pénznemet váltottál: add meg újra a célárat, és kapcsold vissza az értesítést."
+            assertTrue(watch().copy(lastError = hint).errorText!!.startsWith("You changed the currency"))
+            Lang.set(Lang.DE_CODE)
+            assertEquals("(Details nach der nächsten Prüfung)", watch().copy(lastError = old).errorText)
+            assertTrue(watch().copy(lastError = hint).errorText!!.startsWith("Du hast die Währung geändert"))
+            assertEquals("(Details nach der nächsten Prüfung)", DealAlert("x", "BUD", "Budapest", null, 1, 1, "HUF", 0L, lastError = old).errorText)
+            Lang.set(Lang.HU_CODE)
+            assertEquals(old, watch().copy(lastError = old).errorText)
+        } finally {
+            Lang.set(Lang.HU_CODE)
+        }
+    }
+
+    // ---------------- Foglalási linkek és fájlnév a felület nyelvén
+    @Test fun bookingLinksFollowLanguage() {
+        val w = watch()
+        try {
+            Lang.set(Lang.EN_CODE)
+            assertTrue(Ryanair.bookingUrl(w, "BUD", "STN").startsWith("https://www.ryanair.com/gb/en/trip/"))
+            assertEquals("en-gb", WizzAir.siteLocale())
+            assertTrue(GoogleFlights.userUrl(w, "HUF").contains("&hl=en&"))
+            assertEquals("REFI-backup-2026-10-08.json", Backup.fileName(today))
+            Lang.set(Lang.DE_CODE)
+            assertTrue(Ryanair.bookingUrl(w, "BUD", "STN").startsWith("https://www.ryanair.com/de/de/trip/"))
+            assertEquals("de-de", WizzAir.siteLocale())
+            assertTrue(GoogleFlights.userUrl(w, "HUF").contains("&hl=de&"))
+            // A lekérdezés maga angol marad (a feldolgozás arra épül)
+            assertTrue(GoogleFlights.searchUrl(w, "HUF").contains("&hl=en&"))
+            assertEquals("REFI-Sicherung-2026-10-08.json", Backup.fileName(today))
+            Lang.set(Lang.HU_CODE)
+            assertTrue(Ryanair.bookingUrl(w, "BUD", "STN").startsWith("https://www.ryanair.com/hu/hu/trip/"))
+            assertEquals("hu-hu", WizzAir.siteLocale())
+            assertEquals("REFI-mentes-2026-10-08.json", Backup.fileName(today))
+        } finally {
+            Lang.set(Lang.HU_CODE)
+        }
+    }
+
+    // ---------------- Új városnevek
+    @Test fun extraCityNames() {
+        try {
+            Lang.set(Lang.EN_CODE)
+            assertEquals("Gothenburg", Airports.cityName("GOT"))
+            assertEquals("Timișoara", Airports.cityName("TSR"))
+            Lang.set(Lang.DE_CODE)
+            assertEquals("Zürich", Airports.cityName("ZRH"))
+            assertEquals("Teheran", Airports.cityName("IKA"))
+            assertEquals("Damaskus", Airports.cityName("DAM"))
+            assertEquals("CH", Airports.countryOf("ZRH"))
+            Lang.set(Lang.HU_CODE)
+            assertEquals("Temesvár", Airports.cityName("TSR"))
+        } finally {
+            Lang.set(Lang.HU_CODE)
+        }
+    }
+
+    // ---------------- Bárhová-riasztás: helyi állapot és hibaszöveg
+    @Test fun dealAlertLocalStateRoundTrip() {
+        val msg = trs("a forrás most nem érhető el", "the source is unavailable right now", "die Quelle ist gerade nicht erreichbar")
+        val a = DealAlert("d1", "BUD", "Budapest", null, 1, 20000, "EUR", 0L, notified = mapOf("BCN" to 50),
+            notifiedCurrency = "HUF", lastError = msg, lastErrorL = Texts.find(msg))
+        val back = assertNotNull(DealAlert.fromJson(a.toJson()))
+        assertEquals(a, back)
+        // A szinkronizált részben nincs eszközönkénti állapot
+        val sync = a.toSyncJson()
+        assertFalse(sync.has("notifiedCurrency") || sync.has("notified") || sync.has("lastErrorL"))
+        try {
+            Lang.set(Lang.EN_CODE)
+            assertEquals("the source is unavailable right now", back.errorText)
+        } finally {
+            Lang.set(Lang.HU_CODE)
+        }
+        // Az átváltott határral (más pénznemben) is jól szűr, a régi pénznemű jelzéseket figyelmen kívül hagyva
+        fun r(code: String, p: Int) = Discover.Result(code, code, "", p, null, null, "BUD")
+        assertEquals(listOf("BCN"), DealAlerts.fresh(a, listOf(r("BCN", 7_000_000), r("MAD", 9_000_000)), limit = 8_000_000, notified = emptyMap()).map { it.code })
+    }
 }

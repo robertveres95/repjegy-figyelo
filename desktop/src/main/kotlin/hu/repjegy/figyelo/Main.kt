@@ -425,7 +425,7 @@ object DesktopPlatform : PlatformApi {
         // .ics fájl az ideiglenes mappában; a Windows a beállított naptár appal (Outlook, Naptár) nyitja meg
         return runCatching {
             val dir = File(System.getProperty("java.io.tmpdir"), "REFI-naptar").apply { mkdirs() }
-            val f = File(dir, "REFI-repules-${System.currentTimeMillis()}.ics")
+            val f = File(dir, tr("REFI-repules", "REFI-flight", "REFI-Flug") + "-${System.currentTimeMillis()}.ics")
             f.writeText(RefiCalendar.ics(events), Charsets.UTF_8)
             if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
                 Desktop.getDesktop().open(f); true

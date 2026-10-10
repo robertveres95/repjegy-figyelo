@@ -17,7 +17,7 @@ internal const val MAX_PAIRS_FLEX = 4
  * gyakran a lista végén vannak, és a sima sorrendnél kimaradnának.
  */
 /** Fapados-bázisok a több repteres városokban: ezek kerüljenek előre, ha kevés párt kérdezünk. */
-private val LOW_COST_BASES = setOf("STN", "LTN", "SEN", "LGW", "BGY", "MXP", "CIA", "TSF", "CRL", "BVA", "WMI", "SAW", "DWC", "DMK")
+internal val LOW_COST_BASES = setOf("STN", "LTN", "SEN", "LGW", "BGY", "MXP", "CIA", "TSF", "CRL", "BVA", "WMI", "SAW", "DWC", "DMK")
 
 internal fun pairsOf(w: Watch, max: Int = MAX_PAIRS): List<Pair<String, String>> {
     val from = w.from.split(',').sortedBy { if (it in LOW_COST_BASES) 0 else 1 }
@@ -118,8 +118,15 @@ object Ryanair {
         return offers
     }
 
-    private fun bookingUrl(w: Watch, origin: String, destination: String): String =
-        "https://www.ryanair.com/hu/hu/trip/flights/select?adults=${w.adults}&teens=0" +
+    /** A Ryanair foglalóoldalának nyelvi része a felület nyelvén. */
+    internal fun siteLocale(): String = when (Lang.code) {
+        Lang.HU_CODE -> "hu/hu"
+        Lang.DE_CODE -> "de/de"
+        else -> "gb/en"
+    }
+
+    internal fun bookingUrl(w: Watch, origin: String, destination: String): String =
+        "https://www.ryanair.com/${siteLocale()}/trip/flights/select?adults=${w.adults}&teens=0" +
             "&children=${w.children + w.infantsInSeat}&infants=${w.infantsOnLap}" +
             "&dateOut=${w.outboundDate}&dateIn=${w.returnDate ?: ""}&isConnectedFlight=false" +
             "&isReturn=${w.isRoundTrip}&discount=0&originIata=$origin&destinationIata=$destination"
@@ -148,6 +155,24 @@ object WizzAir {
     fun search(w: Watch, currency: String, maxPairs: Int = MAX_PAIRS): List<Offer> {
         if (w.travelClass != 1) throw SkipSourceException(trs("csak turista osztály", "economy class only", "nur Economy Class"))
         return searchPairs(w, maxPairs) { o, d -> searchPair(w, o, d, currency, retry = true) }
+    }
+
+    /** A Wizz Air foglalóoldalának nyelve a felület nyelvén. */
+    internal fun siteLocale(): String = when (Lang.code) {
+        Lang.HU_CODE -> "hu-hu"
+        Lang.DE_CODE -> "de-de"
+        else -> "en-gb"
+    }
+
+    /** „A Wizz Air elutasította a kérést (kódok)” minden nyelven (a [Texts] is megjegyzi). */
+    internal fun rejectedMessage(codes: List<String>): String {
+        val detail = codes.joinToString().take(80)
+        val inner = if (detail.isEmpty()) L10n("ismeretlen ok", "unknown reason", "unbekannter Grund") else L10n.of(detail)
+        val l = L10n("a Wizz Air elutasította a kérést", "Wizz Air rejected the request", "Wizz Air hat die Anfrage abgelehnt") +
+            L10n.of(" (") + inner + L10n.of(")")
+        val text = l.text
+        Texts.remember(text, l)
+        return text
     }
 
     @Synchronized
@@ -216,10 +241,7 @@ object WizzAir {
                 // „InvalidMarket” = ezen az útvonalon a Wizz nem repül → valóban nincs járat.
                 // Minden más elutasítás (pl. utasszám, dátum, megváltozott kérés) hiba, nem „nincs járat”.
                 if (codes.isNotEmpty() && codes.all { it == "InvalidMarket" }) return emptyList()
-                throw IOException(
-                    trs("a Wizz Air elutasította a kérést", "Wizz Air rejected the request", "Wizz Air hat die Anfrage abgelehnt") +
-                        " (${codes.joinToString().ifEmpty { trs("ismeretlen ok", "unknown reason", "unbekannter Grund") }.take(80)})",
-                )
+                throw IOException(rejectedMessage(codes))
             }
             if (retry) return searchPair(w, origin, destination, currency, retry = false)
             // 401/403 = letiltás (a többi párt sem érdemes kérdezni); egy furcsa 400 csak ennél a párnál hiba
@@ -252,7 +274,7 @@ object WizzAir {
                 stops = 0,
                 returnDeparture = inbound?.departure,
                 returnStops = if (inbound != null) 0 else null,
-                url = "https://wizzair.com/hu-hu/booking/select-flight/${outbound.from ?: origin}/${outbound.to ?: destination}/" +
+                url = "https://wizzair.com/${siteLocale()}/booking/select-flight/${outbound.from ?: origin}/${outbound.to ?: destination}/" +
                     "${w.outboundDate}/${w.returnDate ?: "null"}/${w.adults}/" +
                     "${w.children + w.infantsInSeat}/${w.infantsOnLap}/null",
                 note = lowCostNote(w),

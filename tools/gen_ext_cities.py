@@ -33,7 +33,7 @@ js = ("'use strict';\n// Városnevek a felület nyelvén [magyar, angol, német]
       "function refiCity(codes, label) {\n"
       "  const e = REFI_CITIES[String(codes || '').toUpperCase()];\n"
       "  if (!e) return label || codes || '';\n"
-      "  const l = (typeof navigator !== 'undefined' && navigator.language || '').toLowerCase();\n"
+      "  const l = (typeof REFI_LANG !== 'undefined' ? REFI_LANG : (typeof navigator !== 'undefined' && navigator.language || '')).toLowerCase();\n"
       "  return l.startsWith('hu') ? e[0] : l.startsWith('de') ? e[2] : e[1];\n"
       "}\n")
 (root / "chrome-extension/cities.js").write_text(js, encoding="utf-8")

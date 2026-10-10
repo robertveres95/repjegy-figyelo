@@ -135,6 +135,8 @@ private fun MonthGrid(
     val lead = first.dayOfWeek.value - 1 // hétfő = 0
     val cells = lead + month.lengthOfMonth()
     val rows = (cells + 6) / 7
+    // Ennél későbbi napra nem lehet figyelést menteni (a légitársaságok kb. egy évre előre árulnak)
+    val latest = remember(today) { maxTravelDate(today) }
     if (days.isEmpty()) {
         Text(
             tr("Ebben a hónapban nincs fapados járat ezen az úton.", "No low-cost flights on this route this month.",
@@ -154,6 +156,7 @@ private fun MonthGrid(
                     val date = month.atDay(idx + 1)
                     val day = days[date]
                     val past = date.isBefore(today)
+                    val tooLate = date.isAfter(latest)
                     val color = when {
                         day == null || tiers == null -> Neon.Surface
                         day.pricePerPerson <= tiers.first -> Neon.Mint.copy(alpha = 0.35f)
@@ -167,14 +170,14 @@ private fun MonthGrid(
                             .aspectRatio(0.8f)
                             .background(color, RoundedCornerShape(8.dp))
                             .border(if (date == selected) 2.dp else 0.dp, if (date == selected) Neon.Green else Neon.Surface, RoundedCornerShape(8.dp))
-                            .clickable(enabled = !past && day != null) { onPick(date) }
+                            .clickable(enabled = !past && !tooLate && day != null) { onPick(date) }
                             .semantics { contentDescription = "${date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))} $label" }
                             .padding(2.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
                     ) {
                         Text("${date.dayOfMonth}", style = MaterialTheme.typography.labelMedium,
-                            color = if (past) Neon.TextDim else Neon.Text)
+                            color = if (past || tooLate) Neon.TextDim else Neon.Text)
                         if (label.isNotEmpty()) Text(label, fontSize = 9.sp, maxLines = 1, color = Neon.Text)
                     }
                 }
@@ -183,9 +186,9 @@ private fun MonthGrid(
     }
 }
 
-/** Rövid ár a cellába: 12 300 Ft → „12,3e”; 45 € → „45€”. */
+/** Rövid ár a cellába: 12 300 Ft → „12,3e” (németül „12,3 Tsd.”); 45 € → „45€”. */
 internal fun shortPrice(p: Int, currency: String): String = when {
-    currency == "HUF" && p >= 10_000 -> tr("${p / 1000}e", "${p / 1000}k", "${p / 1000}T")
-    currency == "HUF" -> tr("${"%.1f".format(java.util.Locale.ROOT, p / 1000.0).replace('.', ',')}e", "${"%.1f".format(java.util.Locale.ROOT, p / 1000.0)}k", "${"%.1f".format(java.util.Locale.ROOT, p / 1000.0).replace('.', ',')}T")
+    currency == "HUF" && p >= 10_000 -> tr("${p / 1000}e", "${p / 1000}k", "${p / 1000} Tsd.")
+    currency == "HUF" -> tr("${"%.1f".format(java.util.Locale.ROOT, p / 1000.0).replace('.', ',')}e", "${"%.1f".format(java.util.Locale.ROOT, p / 1000.0)}k", "${"%.1f".format(java.util.Locale.ROOT, p / 1000.0).replace('.', ',')} Tsd.")
     else -> "$p${currencySymbol(currency)}"
 }

@@ -11,7 +11,7 @@ import java.util.UUID
 /**
  * „Bárhová, olcsón” riasztás: egy indulási helyről, egy időszakban bármelyik úti célra – szól, ha
  * valahová a megadott fejenkénti ár alá (vagy az eddig jelzettnél olcsóbbra) megy a jegy.
- * Ez a Felfedezés figyelős változata. Csak ezen az eszközön tárolódik (nem szinkronizálódik).
+ * Ez a Felfedezés figyelős változata. A beállításai szinkronizálódnak, az állapota (jelzések, találatok) helyi.
  */
 data class DealAlert(
     val id: String,
@@ -31,7 +31,14 @@ data class DealAlert(
     val latest: List<Discover.Result> = emptyList(),
     /** Utolsó felhasználói módosítás (szinkronizáláshoz). */
     val editedAt: Long = createdAt,
+    /** A [notified] árak pénzneme (csak helyi; más pénznemben ellenőrizve a jelzések nem érvényesek). */
+    val notifiedCurrency: String? = null,
+    /** A hibaüzenet minden nyelven (csak helyi). */
+    val lastErrorL: L10n? = null,
 ) {
+    /** A hibaüzenet a felület nyelvén. */
+    val errorText: String? get() = lastErrorL?.takeIf { it.has(lastError) }?.text ?: storedText(lastError)
+
     /** A szinkronizált rész: csak a beállítások (az eszközönkénti állapot – jelzett árak, találatok – nem). */
     fun toSyncJson(): JSONObject = JSONObject()
         .put("id", id).put("fromCodes", fromCodes).put("fromLabel", fromLabel).putOpt("month", month)
@@ -57,7 +64,9 @@ data class DealAlert(
         .put("id", id).put("fromCodes", fromCodes).put("fromLabel", fromLabel)
         .putOpt("month", month).put("tripType", tripType).put("maxPrice", maxPrice).put("currency", currency)
         .put("createdAt", createdAt).put("editedAt", editedAt).putOpt("lastChecked", lastChecked).putOpt("lastError", lastError)
+        .putOpt("lastErrorL", lastErrorL?.takeIf { it.has(lastError) }?.toJson())
         .put("notified", JSONObject().apply { notified.forEach { (k, v) -> put(k, v) } })
+        .putOpt("notifiedCurrency", notifiedCurrency)
         .put("latest", JSONArray().apply {
             latest.forEach { r ->
                 put(JSONObject().put("code", r.code).put("city", r.city).put("country", r.country)
@@ -83,6 +92,8 @@ data class DealAlert(
                 lastChecked = o.optLong("lastChecked", 0L).takeIf { it > 0 },
                 lastError = o.optString("lastError", "").takeIf { it.isNotBlank() },
                 notified = n?.keys()?.asSequence()?.associateWith { n.optInt(it) }.orEmpty(),
+                notifiedCurrency = o.optString("notifiedCurrency", "").takeIf { it.isNotBlank() },
+                lastErrorL = L10n.fromJson(o.optJSONObject("lastErrorL")),
                 latest = (0 until l.length()).mapNotNull { i ->
                     l.optJSONObject(i)?.let { r ->
                         Discover.Result(
@@ -133,9 +144,11 @@ object DealAlerts {
     @Synchronized
     fun remove(id: String) {
         ensureLoaded()
+        val existing = _all.value.firstOrNull { it.id == id }
         save(_all.value.filterNot { it.id == id })
-        // Törlésjel: a többi eszközön is törlődjön (és onnan ne jöjjön vissza)
-        saveTombstones(tombstones() + (id to Store.stamp(0L)))
+        // Törlésjel: a többi eszközön is törlődjön (és onnan ne jöjjön vissza). Legalább az utolsó
+        // módosítás utánra kerül, hogy egy siető órájú eszköz módosítása után is nyerjen.
+        saveTombstones(tombstones() + (id to Store.stamp(existing?.editedAt ?: 0L)))
         Sync.scheduleSoon()
     }
 
@@ -147,11 +160,16 @@ object DealAlerts {
         return o.keys().asSequence().associateWith { o.optLong(it, 0L) }
     }
 
+    /** A 120 napnál régebbi törlésjelek elhagyása (addigra minden eszköz megkapta őket). */
+    private fun pruneTombstones(t: Map<String, Long>): Map<String, Long> {
+        val cutoff = System.currentTimeMillis() - 120L * 24 * 3_600_000L
+        return t.filterValues { it >= cutoff }
+    }
+
     @Synchronized
     private fun saveTombstones(t: Map<String, Long>) {
-        val cutoff = System.currentTimeMillis() - 120L * 24 * 3_600_000L
         val o = JSONObject()
-        t.filterValues { it >= cutoff }.forEach { (k, v) -> o.put(k, v) }
+        pruneTombstones(t).forEach { (k, v) -> o.put(k, v) }
         Store.prefs.edit { putString(TOMB_KEY, o.toString()) }
     }
 
@@ -163,7 +181,7 @@ object DealAlerts {
     fun mergeFromSync(remote: List<DealAlert>, remoteTomb: Map<String, Long>): Pair<List<DealAlert>, Map<String, Long>> {
         ensureLoaded()
         val localTomb = tombstones()
-        val tomb = (localTomb.keys + remoteTomb.keys).associateWith { maxOf(localTomb[it] ?: 0L, remoteTomb[it] ?: 0L) }
+        val allTomb = (localTomb.keys + remoteTomb.keys).associateWith { maxOf(localTomb[it] ?: 0L, remoteTomb[it] ?: 0L) }
         val local = _all.value.associateBy { it.id }
         val rem = remote.associateBy { it.id }
         val merged = (local.keys + rem.keys).mapNotNull { id ->
@@ -177,11 +195,14 @@ object DealAlerts {
                     maxPrice = r.maxPrice, currency = r.currency, editedAt = r.editedAt,
                     // Más feltételek: a korábbi jelzések már nem érvényesek
                     notified = if (r.maxPrice == l.maxPrice && r.currency == l.currency) l.notified else emptyMap(),
+                    notifiedCurrency = if (r.maxPrice == l.maxPrice && r.currency == l.currency) l.notifiedCurrency else null,
                 )
                 else -> l
             }
-            newer.takeUnless { (tomb[id] ?: 0L) >= newer.editedAt }
-        }.sortedBy { it.createdAt }.take(MAX)
+            newer.takeUnless { (allTomb[id] ?: 0L) >= newer.editedAt }
+        }.sortedBy { it.createdAt }
+        // A lejárt törlésjelek a felhőből is tűnjenek el (a fenti szűréshez még mind számított)
+        val tomb = pruneTombstones(allTomb)
         save(merged)
         saveTombstones(tomb)
         return merged to tomb
@@ -202,11 +223,19 @@ object DealAlerts {
      * Az újonnan jelzendő találatok: a határ alattiak közül azok, amelyekről még nem szóltunk, vagy
      * azóta legalább 5%-kal olcsóbbak lettek.
      */
-    internal fun fresh(a: DealAlert, results: List<Discover.Result>): List<Discover.Result> =
+    internal fun fresh(
+        a: DealAlert,
+        results: List<Discover.Result>,
+        limit: Int = a.maxPrice,
+        notified: Map<String, Int> = a.notified,
+    ): List<Discover.Result> =
         results.filter { r ->
-            r.pricePerPerson <= a.maxPrice &&
-                (a.notified[r.code]?.let { prev -> r.pricePerPerson * 100 <= prev * 95 } ?: true)
+            r.pricePerPerson <= limit &&
+                (notified[r.code]?.let { prev -> r.pricePerPerson * 100 <= prev * 95 } ?: true)
         }
+
+    /** A jelzett árak pénzneme (a régebbi, ezt még nem tároló változatnál a riasztás pénzneme). */
+    private fun notifiedCur(a: DealAlert): String = a.notifiedCurrency ?: a.currency
 
     /** A háttér-ellenőrzésből: a régóta nem nézett riasztások lefuttatása. [force]: most mindegyik. */
     suspend fun checkDue(force: Boolean = false) {
@@ -254,12 +283,14 @@ object DealAlerts {
         val now = System.currentTimeMillis()
         r.onFailure { e ->
             if (e is kotlinx.coroutines.CancellationException) throw e
-            update(a.id) { it.copy(lastChecked = now, lastError = e.message?.take(160) ?: trs("hiba", "error", "Fehler")) }
+            // Vágás úgy, hogy a fordítás megmaradjon (a Texts.find a teljes szöveget ismeri)
+            val msg = e.message?.let { shortText(it, 160) } ?: trs("hiba", "error", "Fehler")
+            update(a.id) { it.copy(lastChecked = now, lastError = msg, lastErrorL = Texts.find(msg)) }
         }
         r.onSuccess { results ->
-            val sameCur = a.currency == currency
-            val cur = a.copy(maxPrice = limit, currency = currency, notified = if (sameCur) a.notified else emptyMap())
-            val news = fresh(cur, results)
+            // A korábbi jelzések csak ugyanabban a pénznemben összevethetők
+            val validNotified = if (notifiedCur(a) == currency) a.notified else emptyMap()
+            val news = fresh(a, results, limit, validNotified)
             // Letiltott értesítésnél nem vesszük „jelzettnek” (bekapcsolás után szólunk róla)
             val blocked = runCatching { Platform.current.notificationsBlocked() }.getOrDefault(false)
             if (news.isNotEmpty() && !blocked) {
@@ -275,12 +306,18 @@ object DealAlerts {
                 Platform.current.notifyMessage("deal-${a.id}", title, text, null)
             }
             update(a.id) {
-                it.copy(
-                    maxPrice = limit, currency = currency, lastChecked = now, lastError = null,
-                    notified = (if (it.currency == currency) it.notified else emptyMap()) +
-                        (if (blocked) emptyMap() else news.associate { n -> n.code to n.pricePerPerson }),
-                    latest = results.sortedBy { x -> x.pricePerPerson }.take(5),
-                )
+                // A beállítások (szinkronizált rész) érintetlenek maradnak: az átváltott határt nem mentjük
+                if (it.editedAt != a.editedAt) {
+                    // Közben módosultak a feltételek: ez az eredmény már nem rájuk vonatkozik
+                    it.copy(lastChecked = now, lastError = null, lastErrorL = null)
+                } else {
+                    it.copy(
+                        lastChecked = now, lastError = null, lastErrorL = null, notifiedCurrency = currency,
+                        notified = (if (notifiedCur(it) == currency) it.notified else emptyMap()) +
+                            (if (blocked) emptyMap() else news.associate { n -> n.code to n.pricePerPerson }),
+                        latest = results.sortedBy { x -> x.pricePerPerson }.take(5),
+                    )
+                }
             }
         }
     }

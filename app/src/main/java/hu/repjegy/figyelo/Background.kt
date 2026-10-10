@@ -183,6 +183,12 @@ class AndroidPlatform private constructor(private val context: Context) : Platfo
         }
     }
 
+    /** Nyelvváltás: az értesítési csatornák neve és a widget szövegei az új nyelven. */
+    override fun languageChanged() {
+        Notifier.relocalizeChannels(context)
+        AppScope.scope.launch { runCatching { RefiWidget().updateAll(context) } }
+    }
+
     override fun openNotificationSettings() {
         try {
             context.startActivity(
@@ -326,16 +332,32 @@ object Notifier {
     private const val UPDATE_CHANNEL_ID = "app_updates"
     private const val UPDATE_NOTIFICATION_ID = 4242
 
+    private fun createUpdateChannel(manager: NotificationManager) {
+        manager.createNotificationChannel(
+            NotificationChannel(UPDATE_CHANNEL_ID, tr("Frissítések", "Updates", "Updates"), NotificationManager.IMPORTANCE_DEFAULT)
+                .apply { description = tr("Értesítés, ha az appból új verzió jelent meg", "Notifies you when a new version of the app is out", "Benachrichtigung, wenn eine neue Version der App erschienen ist") }
+        )
+    }
+
+    /**
+     * Nyelvváltáskor a csatornák nevének frissítése (ugyanazzal az azonosítóval újra létrehozva
+     * az Android csak a nevet és a leírást írja át; a hang/rezgés beállítás marad).
+     */
+    fun relocalizeChannels(context: Context) {
+        runCatching { createChannel(context) }
+        runCatching {
+            val manager = context.getSystemService(NotificationManager::class.java)
+            if (manager.getNotificationChannel(UPDATE_CHANNEL_ID) != null) createUpdateChannel(manager)
+        }
+    }
+
     fun update(context: Context, release: Updater.Release) {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) return
         val manager = context.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(
-            NotificationChannel(UPDATE_CHANNEL_ID, tr("Frissítések", "Updates", "Updates"), NotificationManager.IMPORTANCE_DEFAULT)
-                .apply { description = tr("Értesítés, ha az appból új verzió jelent meg", "Notifies you when a new version of the app is out", "Benachrichtigung, wenn eine neue Version der App erschienen ist") }
-        )
+        createUpdateChannel(manager)
         val intent = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val pending = PendingIntent.getActivity(
             context, UPDATE_NOTIFICATION_ID, intent,
