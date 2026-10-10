@@ -931,7 +931,6 @@ private fun WatchCard(
                     androidx.compose.material3.FilledTonalButton(
                         onClick = { onOpen(url) },
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                        modifier = Modifier.weight(1f, fill = false),
                     ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
