@@ -97,6 +97,8 @@ object Lang {
         runCatching { Platform.current.languageChanged() }
         // A reptérlista az új nyelven a háttérben töltődjön be (ne a felület szálán, az első kártyánál)
         runCatching { AppScope.scope.launch { runCatching { Airports.preload() } } }
+        // A Chrome-bővítmény is váltson (a szinkronfájlban az app nyelve)
+        runCatching { Sync.scheduleSoon() }
     }
 
     val OPTIONS: List<Pair<String, String>>

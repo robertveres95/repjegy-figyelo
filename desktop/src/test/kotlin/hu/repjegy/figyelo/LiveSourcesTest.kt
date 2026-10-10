@@ -90,6 +90,14 @@ class LiveSourcesTest {
             val r = Discover.search("BUD", 0, 0, null, "HUF")
             "${r.size} úti cél; " + r.take(5).joinToString { "${it.code} ${it.pricePerPerson}" }
         }.getOrElse { "HIBA: $it" })
+        out.appendLine("=== ÁRNAPTÁR ODA-VISSZA (3 éj) BUD→London $ym: " + runCatching {
+            val m = PriceCalendar.roundTrip("BUD", "LHR,LGW,STN,LTN,LCY,SEN", ym, 3, "HUF")
+            "${m.size} nap; legolcsóbb: " + m.values.sortedBy { it.pricePerPerson }.take(3).joinToString { "${it.date} ${it.pricePerPerson} Ft (${it.source})" }
+        }.getOrElse { "HIBA: $it" })
+        out.appendLine("=== FELFEDEZÉS hosszú hétvége (Ryanair + Wizz) BUD: " + runCatching {
+            val r = Discover.search("BUD", 0, 1, null, "HUF")
+            "${r.size} úti cél; " + r.take(6).joinToString { "${it.code} ${it.pricePerPerson} ${it.departure}→${it.returnDeparture}" }
+        }.getOrElse { "HIBA: $it" })
         File("build/diag/live.txt").writeText(out.toString())
         println(out)
     }

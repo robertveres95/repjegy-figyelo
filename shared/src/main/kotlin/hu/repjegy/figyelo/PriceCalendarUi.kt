@@ -47,16 +47,19 @@ import java.time.format.TextStyle
  * piros = drága). Egy napra koppintva az lesz az indulás napja.
  */
 @Composable
-fun PriceCalendarDialog(from: String, to: String, initial: LocalDate, onPick: (LocalDate) -> Unit, onClose: () -> Unit) {
+fun PriceCalendarDialog(from: String, to: String, initial: LocalDate, onPick: (LocalDate) -> Unit, onClose: () -> Unit, nights: Int? = null) {
     val currency = Store.settings.value.currency
     val today = remember { LocalDate.now() }
     var month by remember { mutableStateOf(YearMonth.from(maxOf(initial, today))) }
     val lastMonth = remember { YearMonth.from(maxTravelDate(today)) }
     // null = töltés; a hibát külön tartjuk
-    val state by produceState<Pair<Map<LocalDate, PriceCalendar.Day>?, String?>>(null to null, from, to, month, currency) {
+    val state by produceState<Pair<Map<LocalDate, PriceCalendar.Day>?, String?>>(null to null, from, to, month, currency, nights) {
         value = null to null
         value = withContext(Dispatchers.IO) {
-            runCatching { PriceCalendar.month(from, to, month, currency, today) }
+            runCatching {
+                if (nights != null) PriceCalendar.roundTrip(from, to, month, nights, currency, today)
+                else PriceCalendar.month(from, to, month, currency, today)
+            }
                 .fold({ it to null }, { null to (it.message ?: "?") })
         }
     }
@@ -105,7 +108,11 @@ fun PriceCalendarDialog(from: String, to: String, initial: LocalDate, onPick: (L
                     else -> MonthGrid(month, days, today, initial, currency) { onPick(it); onClose() }
                 }
                 Text(
-                    tr(
+                    if (nights != null) tr(
+                        "Egy főre, oda-vissza ($nights éj), poggyász nélkül – a Ryanair és a Wizz Air árnaptárából. Koppints egy napra: az lesz az indulás, a visszaút $nights nappal később.",
+                        "Per person, round trip ($nights ${if (nights == 1) "night" else "nights"}), without bags – from the Ryanair and Wizz Air fare calendars. Tap a day to make it the departure date; the return is $nights ${if (nights == 1) "day" else "days"} later.",
+                        "Pro Person, Hin- und Rückflug ($nights ${if (nights == 1) "Nacht" else "Nächte"}), ohne Gepäck – aus den Preiskalendern von Ryanair und Wizz Air. Tippe auf einen Tag für den Abflug; der Rückflug ist $nights ${if (nights == 1) "Tag" else "Tage"} später.",
+                    ) else tr(
                         "Egy főre, csak oda, poggyász nélkül – a Ryanair és a Wizz Air árnaptárából. Koppints egy napra: az lesz az indulás.",
                         "Per person, one way, without bags – from the Ryanair and Wizz Air fare calendars. Tap a day to make it the departure date.",
                         "Pro Person, nur Hinflug, ohne Gepäck – aus den Preiskalendern von Ryanair und Wizz Air. Tippe auf einen Tag, um ihn als Abflug zu wählen.",

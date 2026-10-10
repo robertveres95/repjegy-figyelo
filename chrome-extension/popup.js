@@ -66,14 +66,15 @@ async function loadFile(token) {
   const data = await (await drive(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`, token)).json();
   if (data.format !== 'refi-sync' || (data.version || 1) > 2) throw new Error(t('Ismeretlen adatformátum – frissítsd a bővítményt.', 'Unknown data format – please update the extension.', 'Unbekanntes Datenformat – bitte aktualisiere die Erweiterung.'));
   // A kulcsokat (SerpApi, Ignav) nem tároljuk el és nem mutatjuk
-  return { watches: data.watches || [], currency: data.currency || 'HUF', updatedAt: data.updatedAt || null };
+  return { watches: data.watches || [], currency: data.currency || 'HUF', updatedAt: data.updatedAt || null, uiLang: data.uiLang || null };
 }
 
 // ------------------------------------------------------------ megjelenítés
 
-const DATE_LOCALE = { hu: 'hu-HU', de: 'de-DE' }[REFI_LANG] || 'en-GB';
-const fmtMonth = new Intl.DateTimeFormat(DATE_LOCALE, { month: 'short', day: 'numeric' });
-const fmtTime = new Intl.DateTimeFormat(DATE_LOCALE, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+// A nyelv az app beállításából is jöhet (indításkor), ezért a formázók lusták
+const dateLocale = () => ({ hu: 'hu-HU', de: 'de-DE' }[REFI_LANG] || 'en-GB');
+const fmtMonth = { format: (d) => new Intl.DateTimeFormat(dateLocale(), { month: 'short', day: 'numeric' }).format(d) };
+const fmtTime = { format: (d) => new Intl.DateTimeFormat(dateLocale(), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(d) };
 
 function money(v, cur) {
   try {
@@ -301,6 +302,11 @@ async function doRefresh(interactive) {
     }
     if (myEpoch !== epoch) return; // közben kijelentkezett
     await store.set({ data });
+    // Az appban közben más nyelvet választott: újratöltjük az ablakot az új nyelvvel
+    if (data.uiLang && data.uiLang !== REFI_LANG && ['hu', 'en', 'de'].includes(data.uiLang)) {
+      location.reload();
+      return;
+    }
     show('loading', false);
     show('refresh'); show('signout');
     render(data);
@@ -327,6 +333,11 @@ function localize() {
 }
 
 async function start() {
+  // Az appban választott nyelv (a legutóbb letöltött adatból), még a szövegek kiírása előtt
+  try {
+    const cached = await store.get('data');
+    if (cached && cached.uiLang) refiUseLang(cached.uiLang);
+  } catch { /* nincs mentett adat */ }
   localize();
   // Ha a bejelentkezés a háttérben befejeződik, amíg ez az ablak nyitva van, frissítünk
   if (hasChrome) {

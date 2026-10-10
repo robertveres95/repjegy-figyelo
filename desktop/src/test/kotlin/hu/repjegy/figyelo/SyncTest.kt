@@ -185,4 +185,15 @@ class SyncTest {
         assertEquals(DealAlerts.MAX + 2, all.size)
         DealAlerts.all.value.forEach { DealAlerts.remove(it.id) }
     }
+
+    @Test fun appLanguageTravelsToTheExtension() {
+        try {
+            Lang.set(Lang.DE_CODE)
+            val text = Sync.serialize(emptyList(), emptyMap(), "HUF")
+            assertEquals("de", org.json.JSONObject(text).getString("uiLang"))
+            assertEquals("de", Sync.parse(text)!!.uiLang)
+        } finally {
+            Lang.set(Lang.HU_CODE)
+        }
+    }
 }

@@ -112,10 +112,14 @@ object Discover {
         }
         // Wizz Air „olcsó járatok” (csak egyirányú utaknál): további úti célok, amerre a Ryanair nem repül
         // A fapados-bázisok előre (pl. London: STN, LTN), legfeljebb 4 reptér; annyi hónapot kérünk, hogy az időszak vége is benne legyen
-        if (nights == null && Store.settings.value.wizzOn) {
+        if (Store.settings.value.wizzOn) {
             val months = (ChronoUnit.MONTHS.between(YearMonth.from(today), YearMonth.from(end)) + 1).toInt().coerceIn(1, 12)
             for (origin in origins.sortedBy { if (it in LOW_COST_BASES) 0 else 1 }.take(4)) {
-                runCatching { all += wizz(origin, start, end, currency, months) }
+                runCatching {
+                    val oneWay = wizz(origin, start, end, currency, months)
+                    // Oda-vissza út: a legolcsóbb néhány célhoz a visszaút legolcsóbb napja a kért éjszakaszámon belül
+                    all += if (nights == null) oneWay else wizzRoundTrip(origin, oneWay, nights, maxPrice, currency)
+                }
             }
         }
         if (all.isEmpty() && lastError != null) throw lastError
@@ -129,6 +133,28 @@ object Discover {
     }
 
     /** A Wizz Air ajánlói egy reptérről, a keresett időszakra szűrve. */
+    /** Ennyi (a legolcsóbb odaútú) úti célnak nézzük meg a visszaútját – célonként egy kérés. */
+    private const val WIZZ_ROUND_TRIP_TARGETS = 8
+
+    private fun wizzRoundTrip(origin: String, oneWay: List<Result>, nights: IntRange, maxPrice: Int?, currency: String): List<Result> =
+        oneWay.groupBy { it.code }.map { (_, l) -> l.minBy { it.pricePerPerson } }
+            .filter { maxPrice == null || it.pricePerPerson < maxPrice }
+            .sortedBy { it.pricePerPerson }
+            .take(WIZZ_ROUND_TRIP_TARGETS)
+            .mapNotNull { out ->
+                val day = out.outDate ?: return@mapNotNull null
+                val back = runCatching {
+                    WizzAir.dayFares(out.code, out.fromCode, day.plusDays(nights.first.toLong()), day.plusDays(nights.last.toLong()))
+                }.getOrNull().orEmpty().mapNotNull { f ->
+                    val p = runCatching { Rates.convert(f.amount, f.currency, currency) }.getOrNull() ?: return@mapNotNull null
+                    f to p
+                }.minByOrNull { it.second } ?: return@mapNotNull null
+                out.copy(
+                    pricePerPerson = out.pricePerPerson + ceil(back.second).toInt(),
+                    returnDeparture = back.first.departure?.take(10)?.let { "${it}T00:00" },
+                )
+            }
+
     private fun wizz(origin: String, start: LocalDate, end: LocalDate, currency: String, months: Int): List<Result> =
         WizzAir.cheapFlights(origin, months).mapNotNull { f ->
             val day = f.departure?.take(10)?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return@mapNotNull null

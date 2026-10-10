@@ -1143,7 +1143,8 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
                     outDate = picked
                     retDate = minOf(picked.plusDays(days), latest)
                     if (span >= 0) weeklyUntil = minOf(picked.plusDays(span), latest)
-                }, onClose = { showCal = false })
+                }, onClose = { showCal = false },
+                    nights = if (roundTrip) java.time.temporal.ChronoUnit.DAYS.between(outDate, retDate).toInt().coerceAtLeast(0) else null)
             }
             if (roundTrip) {
                 DateField(tr("Visszaút", "Return", "Rückflug"), retDate, minDate = outDate, onValidChange = { retValid = it }) { retDate = it }

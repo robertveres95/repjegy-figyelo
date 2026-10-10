@@ -218,7 +218,7 @@ object Sync {
         val sameAlerts = remote != null && remote.alerts.size == alerts.size &&
             remote.alerts.sortedBy { it.createdAt }.zip(alerts.sortedBy { it.createdAt }).all { (a, b) -> a.sameSettings(b) } &&
             remote.alertTombstones == alertTomb
-        if (remote != null && remote.currency == currency && sameAlerts &&
+        if (remote != null && remote.currency == currency && sameAlerts && remote.uiLang == Lang.code &&
             remote.watches.associateBy { it.id } == merged.first.associateBy { it.id } &&
             remote.tombstones == merged.second &&
             (remote.keys == keys || (remote.keys == null && keys.editedAt == 0L))
@@ -276,6 +276,7 @@ object Sync {
         val keys: Store.SyncedKeys? = null,
         val alerts: List<DealAlert> = emptyList(),
         val alertTombstones: Map<String, Long> = emptyMap(),
+        val uiLang: String? = null,
     )
 
     internal fun serialize(
@@ -291,6 +292,8 @@ object Sync {
             .put("version", if (watches.any { it.weeklyUntil != null }) 2 else 1)
             .put("currency", currency)
             .put("updatedAt", System.currentTimeMillis())
+            // Az app nyelve: a Chrome-bővítmény is ezen a nyelven szól
+            .put("uiLang", Lang.code)
             .put("watches", JSONArray().apply { watches.forEach { put(it.toJson()) } })
             .put("tombstones", JSONObject().apply { tombstones.forEach { (k, v) -> put(k, v) } })
             // „Bárhová, olcsón” riasztások beállításai (az 1-es verziójú fájlban is lehetnek)
@@ -331,7 +334,8 @@ object Sync {
         val alerts = (0 until al.length()).mapNotNull { i -> al.optJSONObject(i)?.let(DealAlert::fromJson) }
         val at = json.optJSONObject("alertTombstones")
         val atomb = at?.keys()?.asSequence()?.associateWith { at.optLong(it, 0L) }.orEmpty()
-        return Snapshot(list, tomb, cur, skipped = arr.length() - list.size, keys = k, alerts = alerts, alertTombstones = atomb)
+        return Snapshot(list, tomb, cur, skipped = arr.length() - list.size, keys = k, alerts = alerts, alertTombstones = atomb,
+            uiLang = json.optString("uiLang", "").takeIf { it.isNotBlank() })
     }
 
     /** Más pénznemben tárolt figyelések célárának átváltása (az árak törlődnek, a következő ellenőrzés frissíti). */

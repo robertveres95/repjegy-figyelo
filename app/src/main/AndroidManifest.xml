@@ -31,6 +31,15 @@
             </intent-filter>
         </activity>
 
+        <!-- Értesítés-gombok: az értesítés eltüntetése, majd a cél megnyitása (láthatatlan, azonnal bezárul) -->
+        <activity
+            android:name=".NotificationActionActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <!-- Kezdőképernyő-widget: a figyelt utak legjobb árai -->
         <receiver
             android:name=".RefiWidgetReceiver"

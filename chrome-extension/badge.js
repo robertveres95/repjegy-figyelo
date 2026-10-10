@@ -2,7 +2,7 @@
 // Nyelv: magyar böngészőben magyar, német böngészőben német, máshol angol (a popup, a demó és a háttér is ezt használja).
 // A böngésző felületének nyelve (chrome.i18n) dönt, mint a _locales szövegeinél – így a kis ablak, a háttér
 // (ikonfelirat) és a bővítmény neve/leírása egy nyelven szól; a demó oldalon (nincs chrome.i18n) a navigator.language.
-const REFI_LANG = (() => {
+let REFI_LANG = (() => {
   let l = '';
   try {
     if (typeof chrome !== 'undefined' && chrome.i18n && typeof chrome.i18n.getUILanguage === 'function') {
@@ -13,7 +13,14 @@ const REFI_LANG = (() => {
   l = String(l).toLowerCase();
   return l.startsWith('hu') ? 'hu' : l.startsWith('de') ? 'de' : 'en';
 })();
-/** Szöveg a böngésző nyelvén (német hiányában angolul). */
+/**
+ * Az appban választott nyelv (a szinkronfájl „uiLang” mezője) felülírja a böngészőét: így a bővítmény
+ * ugyanazon a nyelven szól, mint a REFI app.
+ */
+function refiUseLang(code) {
+  if (code === 'hu' || code === 'en' || code === 'de') REFI_LANG = code;
+}
+/** Szöveg a felület nyelvén (német hiányában angolul). */
 function t(hu, en, de) { return REFI_LANG === 'hu' ? hu : REFI_LANG === 'de' ? (de ?? en) : en; }
 
 // Jelvény a bővítmény ikonján: hány figyelés ára van most a célár alatt (a REFI app szabálya
@@ -49,6 +56,7 @@ function refiBelowTargetCount(data) {
 }
 
 async function refiSetBadge(data) {
+  if (data && data.uiLang) refiUseLang(data.uiLang);
   if (typeof chrome === 'undefined' || !chrome.action) return;
   const n = refiBelowTargetCount(data);
   try {

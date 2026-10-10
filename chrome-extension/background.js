@@ -158,7 +158,7 @@ async function refreshBadge() {
     if (gen !== generation) return; // közben kijelentkezett
     // Ugyanaz az alak, mint amit a kis ablak ment (a kulcsokat nem tároljuk)
     await chrome.storage.local.set({
-      data: { watches: raw.watches || [], currency: raw.currency || 'HUF', updatedAt: raw.updatedAt || null },
+      data: { watches: raw.watches || [], currency: raw.currency || 'HUF', updatedAt: raw.updatedAt || null, uiLang: raw.uiLang || null },
     });
   } catch { /* nincs net / átmeneti hiba: a következő körben újra */ }
 }

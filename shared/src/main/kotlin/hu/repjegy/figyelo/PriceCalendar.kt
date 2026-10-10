@@ -17,6 +17,24 @@ object PriceCalendar {
     /** Legfeljebb ennyi reptérpárt kérdezünk (több repteres városoknál). */
     private const val MAX_PAIRS_CAL = 4
 
+    /**
+     * Oda-vissza árnaptár: minden indulási napra az odaút + a [nights] éjszakával későbbi visszaút legolcsóbb
+     * ára (egy főre). A visszaút a következő hónapba is átnyúlhat.
+     */
+    fun roundTrip(from: String, to: String, ym: YearMonth, nights: Int, currency: String, today: LocalDate = LocalDate.now()): Map<LocalDate, Day> {
+        val out = month(from, to, ym, currency, today)
+        if (out.isEmpty()) return emptyMap()
+        val back = month(to, from, ym, currency, today).toMutableMap()
+        val next = ym.plusMonths(1)
+        if (!next.atDay(1).isAfter(maxTravelDate(today))) {
+            runCatching { month(to, from, next, currency, today) }.getOrNull()?.let { back.putAll(it) }
+        }
+        return out.mapNotNull { (d, o) ->
+            val r = back[d.plusDays(nights.toLong())] ?: return@mapNotNull null
+            d to Day(d, o.pricePerPerson + r.pricePerPerson, if (o.source == r.source) o.source else "${o.source} + ${r.source}")
+        }.toMap()
+    }
+
     fun month(from: String, to: String, ym: YearMonth, currency: String, today: LocalDate = LocalDate.now()): Map<LocalDate, Day> {
         val settings = Store.settings.value
         val start = maxOf(ym.atDay(1), today)
