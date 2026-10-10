@@ -148,6 +148,9 @@ private val typedDateFormat: DateTimeFormatter
     get() = DateTimeFormatter.ofPattern(if (Lang.hu) "yyyy.MM.dd" else "yyyy-MM-dd")
 
 /** A legkésőbbi megadható utazási nap (a légitársaságok kb. egy évre előre árulnak). */
+/** A kártyák kezdetben kinyitva (csak a képernyőkép-teszthez). */
+internal var expandCardsInitially = false
+
 internal fun maxTravelDate(today: LocalDate): LocalDate = today.plusMonths(12)
 
 /** A „Rugalmasság” lista „minden héten” eleme. */
@@ -707,7 +710,7 @@ private fun WatchCard(
     val belowTarget = best != null && w.alertable(best)
     var showAll by remember { mutableStateOf(false) }
     // Fokozatos feltárás: alapból csak a lényeg (ár, tanács), a részletek egy koppintásra
-    var expanded by androidx.compose.runtime.saveable.rememberSaveable(w.id) { mutableStateOf(false) }
+    var expanded by androidx.compose.runtime.saveable.rememberSaveable(w.id) { mutableStateOf(expandCardsInitially) }
 
     NeonCard(
         modifier = modifier.fillMaxWidth(),
@@ -916,34 +919,34 @@ private fun WatchCard(
                 }
             }
 
-            // ---- Fő műveletek (mindig látszanak). Nagy betűméretnél új sorba törnek.
-            androidx.compose.foundation.layout.FlowRow(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                val center = Modifier.align(Alignment.CenterVertically)
-                if (isChecking) {
-                    CircularProgressIndicator(
-                        center.padding(12.dp).size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = Neon.Green,
-                    )
-                    Text(tr("KERESÉS…", "SEARCHING…", "SUCHE…"), style = MaterialTheme.typography.labelSmall, color = Neon.Green, modifier = center)
-                } else {
-                    TextButton(onClick = onCheck, enabled = canCheck && !w.isExpired(), modifier = center) {
-                        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(tr("Ellenőrzés", "Check", "Prüfen"), maxLines = 1)
-                    }
-                }
-                best?.url?.let { url ->
-                    TextButton(onClick = { onOpen(url) }, modifier = center) {
+            // ---- Fő műveletek (mindig látszanak): egy kiemelt gomb (az ajánlat megnyitása), mellette
+            // ikongombok (ellenőrzés, szerkesztés) – egy sorban, nagy betűméretnél is
+            androidx.compose.material3.HorizontalDivider(Modifier.padding(top = 8.dp), color = Neon.Line.copy(alpha = 0.6f))
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                val url = best?.url
+                if (url != null) {
+                    androidx.compose.material3.FilledTonalButton(
+                        onClick = { onOpen(url) },
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        modifier = Modifier.weight(1f, fill = false),
+                    ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(tr("Megnyitás", "Open", "Öffnen"), maxLines = 1)
+                        Spacer(Modifier.width(8.dp))
+                        Text(tr("Ajánlat megnyitása", "Open offer", "Angebot öffnen"), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
-                TextButton(onClick = onEdit, modifier = center) {
-                    Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(tr("Szerkesztés", "Edit", "Bearbeiten"), maxLines = 1)
+                Spacer(Modifier.weight(1f))
+                if (isChecking) {
+                    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Neon.Green)
+                    }
+                } else {
+                    IconButton(onClick = onCheck, enabled = canCheck && !w.isExpired()) {
+                        Icon(Icons.Filled.Refresh, contentDescription = tr("Ellenőrzés most", "Check now", "Jetzt prüfen"))
+                    }
+                }
+                IconButton(onClick = onEdit) {
+                    Icon(Icons.Filled.Edit, contentDescription = tr("Szerkesztés", "Edit", "Bearbeiten"))
                 }
             }
         }

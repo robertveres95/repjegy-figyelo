@@ -95,6 +95,12 @@ class ScreenshotTest {
         listOf(london, milan, jfk).forEach { Store.upsert(it) }
 
         shot("01-fooldal") { HomeScreen(onAdd = {}, onEdit = {}, onSettings = {}) }
+        expandCardsInitially = true
+        try {
+            shot("18-kartya-reszletek", heightDp = 2600) { HomeScreen(onAdd = {}, onEdit = {}, onSettings = {}) }
+        } finally {
+            expandCardsInitially = false
+        }
         shot("02-fooldal-nappali", theme = THEME_DAY) { HomeScreen(onAdd = {}, onEdit = {}, onSettings = {}) }
         shot("03-fooldal-extra-nagy-betu", textScale = 130) { HomeScreen(onAdd = {}, onEdit = {}, onSettings = {}) }
         shot("04-szerkesztes", heightDp = 2300) { EditScreen(id = "s1", onDone = {}) }
