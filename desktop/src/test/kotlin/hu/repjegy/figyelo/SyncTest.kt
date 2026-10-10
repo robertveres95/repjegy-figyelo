@@ -137,6 +137,8 @@ class SyncTest {
     }
 
     @Test fun dealAlertsSyncMergeAndTombstones() {
+        // A riasztások a tároló beállításai közt élnek (a képernyőkép-teszthez hasonlóan)
+        if (runCatching { Store.prefs }.isFailure) Store.init(DesktopPrefs)
         // Helyi riasztás + egy másik eszközön létrehozott + egy, amit ott töröltek
         DealAlerts.mergeFromSync(emptyList(), emptyMap())
         DealAlerts.all.value.forEach { DealAlerts.remove(it.id) }
