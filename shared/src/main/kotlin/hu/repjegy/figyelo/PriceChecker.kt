@@ -36,6 +36,13 @@ object PriceChecker {
                 } catch (_: Exception) {
                 }
             }
+        // „Bárhová, olcsón” riasztások (12 óránként)
+        try {
+            DealAlerts.checkDue()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+        }
     }
 
     private fun loadAttempts(): MutableMap<String, Long> {

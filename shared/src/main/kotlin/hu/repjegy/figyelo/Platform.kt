@@ -58,9 +58,14 @@ interface PlatformApi {
     var autostart: Boolean
         get() = false
         set(_) {}
+    /** Repülőutak felvétele a naptárba (Android: a naptár app; Windows: .ics fájl megnyitása). */
+    fun addToCalendar(events: List<CalEvent>): Boolean = false
+
     fun openAsset(name: String): InputStream
     fun notifyPriceDrop(w: Watch, currency: String)
     fun notifyUpdate(release: Updater.Release)
+    /** Általános értesítés (pl. „Bárhová, olcsón” riasztás). [key]: ugyanazzal a kulccsal a régit cseréli. */
+    fun notifyMessage(key: String, title: String, text: String, url: String?) {}
 
     /** Az automatikus ellenőrzés újraütemezése (gyakoriság változásakor). */
     fun reschedule()

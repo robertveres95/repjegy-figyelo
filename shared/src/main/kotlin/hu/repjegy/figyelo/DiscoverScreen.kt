@@ -26,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -221,6 +222,34 @@ internal fun DiscoverScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    // „Bárhová, olcsón” riasztás ugyanezekkel a feltételekkel
+                    val alerts by DealAlerts.all.collectAsState()
+                    var alertMsg by remember { mutableStateOf<String?>(null) }
+                    OutlinedButton(
+                        onClick = {
+                            val origin = from
+                            val limit = maxPrice.toIntOrNull()?.takeIf { it > 0 }
+                            alertMsg = when {
+                                origin == null -> "Válassz indulási helyet."
+                                limit == null -> "Add meg a „Max. ár / fő” mezőt – ez alatt szólunk."
+                                alerts.size >= DealAlerts.MAX -> "Legfeljebb ${DealAlerts.MAX} ilyen riasztásod lehet."
+                                else -> {
+                                    val month = if (period <= 0) null
+                                    else java.time.YearMonth.now().plusMonths((period - 1).toLong()).toString()
+                                    val a = DealAlerts.create(origin, month, tripType, limit, currency)
+                                    DealAlerts.add(a)
+                                    AppScope.scope.launch { DealAlerts.checkOne(a) }
+                                    "Kész! 12 óránként megnézzük, és szólunk, ha bárhová ${formatPrice(limit, currency)}/fő alá megy."
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("🔔 Szólj, ha bárhová ennyi alá megy") }
+                    alertMsg?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Neon.Mint) }
+                    if (alerts.isNotEmpty()) {
+                        SectionTitle("BÁRHOVÁ-RIASZTÁSAID")
+                        alerts.forEach { a -> DealAlertRow(a, currency) }
+                    }
                     (formError ?: error)?.let { StatusText(it, true) }
                     if (loading) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -268,4 +297,42 @@ internal fun DiscoverScreen(
             }
         }
     }
+}
+
+/** Egy „bárhová, olcsón” riasztás: feltételek, legutóbbi találatok, törlés. */
+@Composable
+private fun DealAlertRow(a: DealAlert, currency: String) {
+    var confirm by remember(a.id) { mutableStateOf(false) }
+    Column(
+        Modifier.fillMaxWidth().border(0.6.dp, Neon.Line, RoundedCornerShape(14.dp)).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            "${a.fromLabel} → bárhová, ${DealAlerts.periodLabel(a)}",
+            style = MaterialTheme.typography.titleSmall, color = Neon.Green,
+        )
+        Text(
+            "${Discover.TRIP_TYPES.firstOrNull { it.first == a.tripType }?.second ?: ""} · max. ${formatPrice(a.maxPrice, a.currency)}/fő",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (a.latest.isNotEmpty()) {
+            a.latest.take(3).forEach { r ->
+                Text("✈ ${r.city}: ${formatPrice(r.pricePerPerson, currency)}/fő · ${Discover.describeDates(r)}", style = MaterialTheme.typography.bodySmall)
+            }
+        } else if (a.lastChecked != null && a.lastError == null) {
+            Text("Most nincs a határ alatti út – szólunk, ha lesz.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        a.lastError?.let { StatusText("Legutóbb nem sikerült: $it", true) }
+        Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+            TextButton(onClick = { AppScope.scope.launch { DealAlerts.checkOne(a) } }) { Text("Ellenőrzés most") }
+            TextButton(onClick = { confirm = true }) { Text("Törlés", color = MaterialTheme.colorScheme.error) }
+        }
+    }
+    if (confirm) AlertDialog(
+        onDismissRequest = { confirm = false },
+        title = { Text("Riasztás törlése?") },
+        text = { Text("${a.fromLabel} → bárhová, ${DealAlerts.periodLabel(a)}") },
+        confirmButton = { TextButton(onClick = { DealAlerts.remove(a.id); confirm = false }) { Text("Törlés") } },
+        dismissButton = { TextButton(onClick = { confirm = false }) { Text("Mégse") } },
+    )
 }

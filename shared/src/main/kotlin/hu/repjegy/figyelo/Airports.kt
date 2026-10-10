@@ -98,6 +98,15 @@ object Airports {
             .map { it.second.place }
     }
 
+    private val countryCodes = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /** A reptér országkódja (pl. "HU"), ha ismert. */
+    fun countryOf(code: String?): String? {
+        if (code == null) return null
+        load()
+        return countryCodes[code.uppercase()]
+    }
+
     /** Mentett kód(ok) visszaalakítása választott hellyé (szerkesztéshez). */
     fun placeFor(codes: String, label: String?): Place {
         load().firstOrNull { it.place.codes == codes }?.let { return it.place }
@@ -118,6 +127,7 @@ object Airports {
                 val name = p[1]
                 val city = p[2].substringBefore(',').trim().ifBlank { name }
                 val country = countryName(p[3])
+                countryCodes[code] = p[3]
                 val rank = p[4].toIntOrNull() ?: 2
                 val huName = hungarianNames[code]
                 val shownCity = huName ?: city

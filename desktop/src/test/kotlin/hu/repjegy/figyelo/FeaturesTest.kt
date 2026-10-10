@@ -332,6 +332,47 @@ class FeaturesTest {
         assertEquals(LocalDate.parse("2026-12-04"), lastWeekly(LocalDate.parse("2026-11-13"), LocalDate.parse("2026-12-09")))
     }
 
+    // ---------------- Előrejelzés, csoportos költség, naptár, bárhová-riasztás
+    @Test fun forecastGroupCalendarDeals() {
+        val now = LocalDate.of(2026, 10, 8).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        fun w(prices: List<Int>, out: String = "2026-12-20") = watch(out = out, ret = null).copy(
+            bags = 0, checkedBag = false, offers = listOf(Offer(prices.last(), "x")),
+            history = prices.mapIndexed { i, p -> PricePoint(now - (prices.size - 1 - i) * 86_400_000L, p) },
+        )
+        assertEquals(Verdict.Tone.WAIT, forecastFor(w(listOf(100, 97, 95, 92, 90, 88)), today, now)!!.tone)
+        assertEquals(Verdict.Tone.GOOD, forecastFor(w(listOf(80, 84, 86, 90, 93, 95)), today, now)!!.tone)
+        assertNull(forecastFor(w(listOf(90, 90, 91, 90, 90, 90)), today, now), "stabil árnál nincs mondanivaló")
+        assertNull(forecastFor(w(listOf(100, 90)), today, now), "kevés mérés")
+        assertTrue(forecastFor(w(listOf(100, 90), out = "2026-10-20"), today, now)!!.text.contains("12 nap"))
+        assertEquals(-2.0, trendPercentPerDay(listOf(PricePoint(0, 101), PricePoint(86_400_000L, 99)))!!, 0.01)
+
+        // Fejenként: 3 ülő utas (2 felnőtt + 1 gyerek)
+        val g = watch()
+        val line = groupCostLine(g, Offer(90000, "x"), "HUF", 30000)!!
+        assertTrue(line.contains("40") && line.contains("3 fő") && line.contains("transzfer"), line)
+        assertNull(groupCostLine(watch().copy(adults = 1, children = 0, infantsOnLap = 0), Offer(1000, "x"), "HUF", null))
+
+        // Naptár: oda és vissza, UTC-re váltva a reptér zónájából (télen Budapest = UTC+1)
+        val o = Offer(50000, "Google Flights", "Wizz Air", "BUD", "LTN", "2026-11-13T12:50", "2026-11-13T14:35", 0,
+            "2026-11-17T20:00", "2026-11-17T23:30", 0, "https://example.com/b")
+        val evs = RefiCalendar.eventsFor(watch(), o)
+        assertEquals(2, evs.size)
+        val ics = RefiCalendar.ics(evs, 0L)
+        assertTrue(ics.contains("DTSTART:20261113T115000Z"), ics)
+        assertTrue(ics.contains("BEGIN:VCALENDAR") && ics.contains("SUMMARY:✈ LTN → BUD"))
+        assertTrue(ics.lines().all { it.toByteArray(Charsets.UTF_8).size <= 75 }, "75 bájtos sorok")
+
+        // Bárhová-riasztás: időszak-index, lejárat, újonnan jelzendők, JSON
+        val a = DealAlert("d1", "BUD", "Budapest", "2026-12", 1, 20000, "HUF", 0L, notified = mapOf("BCN" to 15000))
+        assertEquals(3, a.periodIndex(today))
+        assertTrue(a.copy(month = "2026-09").isExpired(today))
+        assertEquals(0, a.copy(month = null).periodIndex(today))
+        fun r(code: String, p: Int) = Discover.Result(code, code, "", p, null, null, "BUD")
+        assertEquals(listOf("STN", "BCN"), DealAlerts.fresh(a, listOf(r("STN", 19000), r("BCN", 14000), r("MAD", 25000))).map { it.code })
+        assertTrue(DealAlerts.fresh(a, listOf(r("BCN", 14800))).isEmpty(), "5%-nál kisebb esésről nem szólunk újra")
+        assertEquals(a.copy(latest = listOf(r("STN", 19000))), DealAlert.fromJson(a.copy(latest = listOf(r("STN", 19000))).toJson()))
+    }
+
     // ---------------- Reptéri transzfer
     @Test fun transfers() {
         val stn = assertNotNull(Transfers.infoFor("stn"))

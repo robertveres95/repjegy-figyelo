@@ -554,6 +554,9 @@ internal fun HomeScreen(
                         val copied = Platform.current.shareText(ShareCode.message(w, settings.currency))
                         if (copied) toast = "A figyelés kódja a vágólapra került – illeszd be egy üzenetbe."
                     },
+                    onCalendar = { evs ->
+                        if (!Platform.current.addToCalendar(evs)) toast = "Nem sikerült megnyitni a naptárat."
+                    },
                 )
             }
         }
@@ -590,22 +593,35 @@ private fun BlockedNotificationsCard() {
     }
 }
 
-/** A távoli reptér belvárosi transzferének becsült költsége (ha a legjobb ajánlat ilyenre érkezik). */
+/**
+ * A legjobb ajánlat alatti kiegészítők: a távoli reptér belvárosi transzferének becsült költsége,
+ * a fejenkénti teljes költség, és a „Naptárba” gomb.
+ */
 @Composable
-private fun TransferLine(w: Watch, best: Offer, currency: String) {
-    val info = Transfers.infoFor(best.toCode) ?: return
+private fun CostLines(w: Watch, best: Offer, currency: String, onCalendar: (List<CalEvent>) -> Unit) {
+    val info = Transfers.infoFor(best.toCode)
     // Az árfolyam lekérése hálózatot is igényelhet: nem a felület szálán
-    val rate by androidx.compose.runtime.produceState<Double?>(null, currency) {
-        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    val rate by androidx.compose.runtime.produceState<Double?>(null, currency, info != null) {
+        if (info != null) value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             runCatching { Rates.convert(1.0, "EUR", currency) }.getOrNull()
         }
     }
-    Text(
+    if (info != null) Text(
         Transfers.line(w, info, currency) { eur -> rate?.let { eur * it } },
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 4.dp),
     )
+    val transferTotal = info?.let { i -> rate?.let { r -> Math.round(Transfers.totalEur(w, i) * r).toInt() } }
+    groupCostLine(w, best, currency, transferTotal)?.let {
+        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
+    }
+    val events = remember(best, w.from, w.to) { RefiCalendar.eventsFor(w, best) }
+    if (events.isNotEmpty()) {
+        TextButton(onClick = { onCalendar(events) }, contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)) {
+            Text(if (events.size > 1) "📅 Oda- és visszaút a naptárba" else "📅 Naptárba", style = MaterialTheme.typography.labelLarge)
+        }
+    }
 }
 
 @Composable
@@ -620,6 +636,7 @@ private fun WatchCard(
     onEdit: () -> Unit,
     onOpen: (String) -> Unit,
     onShare: () -> Unit = {},
+    onCalendar: (List<CalEvent>) -> Unit = {},
 ) {
     val good = Neon.Green
     val best = w.bestOffer
@@ -701,12 +718,24 @@ private fun WatchCard(
                     modifier = Modifier.padding(top = 6.dp),
                 )
             }
+            forecastFor(w)?.let { f ->
+                Text(
+                    f.text,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = when (f.tone) {
+                        Verdict.Tone.GOOD -> Neon.Mint
+                        Verdict.Tone.WAIT -> Neon.Amber
+                        Verdict.Tone.NEUTRAL -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
             savingsLine(w, currency)?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = Neon.Mint, modifier = Modifier.padding(top = 2.dp))
             }
             if (best != null) {
                 OfferDetails(best, highlight = true)
-                TransferLine(w, best, currency)
+                CostLines(w, best, currency, onCalendar)
             }
 
             // Árgörbe: a Google árelőzménye + a saját mérések (ha van mit mutatni)

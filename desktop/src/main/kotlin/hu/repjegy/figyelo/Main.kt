@@ -391,6 +391,21 @@ object DesktopPlatform : PlatformApi {
         if (!ok) runCatching { ProcessBuilder(sys32("rundll32.exe"), "url.dll,FileProtocolHandler", uri.toASCIIString()).start() }
     }
 
+    override fun addToCalendar(events: List<CalEvent>): Boolean {
+        if (events.isEmpty()) return false
+        // .ics fájl az ideiglenes mappában; a Windows a beállított naptár appal (Outlook, Naptár) nyitja meg
+        val dir = File(System.getProperty("java.io.tmpdir"), "REFI-naptar").apply { mkdirs() }
+        val f = File(dir, "REFI-repules-${System.currentTimeMillis()}.ics")
+        f.writeText(RefiCalendar.ics(events), Charsets.UTF_8)
+        return runCatching {
+            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
+                Desktop.getDesktop().open(f); true
+            } else {
+                ProcessBuilder(sys32("rundll32.exe"), "url.dll,FileProtocolHandler", f.absolutePath).start(); true
+            }
+        }.getOrDefault(false)
+    }
+
     override fun openAsset(name: String): InputStream =
         DesktopPlatform::class.java.getResourceAsStream("/$name")
             ?: error("Hiányzó erőforrás: $name")
@@ -404,7 +419,12 @@ object DesktopPlatform : PlatformApi {
         }
         val title = "${w.routeTitle}: ${formatPrice(best.price, currency)}"
         // Csendes órákban nem ugrik fel; a csendes idő végén összefoglalót küldünk
-        if (Store.settings.value.isQuiet()) QuietQueue.add(title) else TrayNotifier.send(title, text)
+        if (Store.settings.value.isQuiet()) QuietQueue.add(title)
+        else ToastCenter.show(title, text, best.url, ShareCode.message(w, currency))
+    }
+
+    override fun notifyMessage(key: String, title: String, text: String, url: String?) {
+        if (Store.settings.value.isQuiet()) QuietQueue.add(title) else ToastCenter.show(title, text, url, null)
     }
 
     override suspend fun googleAccessToken(interactive: Boolean): String? = GoogleAuthDesktop.token(interactive)
@@ -604,6 +624,9 @@ fun main(args: Array<String>) {
                 if (req.show) show()
             }
         }
+
+        // Értesítőablak gombokkal (árcsökkenés, bárhová-riasztás)
+        ToastWindow(onOpenApp = { show() })
 
         Tray(
             state = trayState,

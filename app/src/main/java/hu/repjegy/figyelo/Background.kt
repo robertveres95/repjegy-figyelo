@@ -88,8 +88,27 @@ class AndroidPlatform private constructor(private val context: Context) : Platfo
 
     override fun openUrl(url: String) = openUrl(context, url)
     override fun openAsset(name: String): InputStream = context.assets.open(name)
+
+    override fun addToCalendar(events: List<CalEvent>): Boolean {
+        // Fordított sorrendben indítjuk: így az odaút ablaka van felül, mentés után jön a visszaút
+        var ok = false
+        for (e in events.reversed()) {
+            val intent = android.content.Intent(android.content.Intent.ACTION_INSERT)
+                .setData(android.provider.CalendarContract.Events.CONTENT_URI)
+                .putExtra(android.provider.CalendarContract.EXTRA_EVENT_BEGIN_TIME, e.startMillis())
+                .putExtra(android.provider.CalendarContract.EXTRA_EVENT_END_TIME, e.endMillis())
+                .putExtra(android.provider.CalendarContract.Events.TITLE, e.title)
+                .putExtra(android.provider.CalendarContract.Events.EVENT_LOCATION, e.location)
+                .putExtra(android.provider.CalendarContract.Events.DESCRIPTION, e.notes)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            ok = runCatching { context.startActivity(intent); true }.getOrDefault(false) || ok
+        }
+        return ok
+    }
     override fun notifyPriceDrop(w: Watch, currency: String) = Notifier.priceDrop(context, w, currency)
     override fun notifyUpdate(release: Updater.Release) = Notifier.update(context, release)
+    override fun notifyMessage(key: String, title: String, text: String, url: String?) =
+        Notifier.message(context, key, title, text, url)
     override fun reschedule() = Scheduler.schedule(context)
 
     override fun notificationsBlocked(): Boolean {
@@ -318,6 +337,34 @@ object Notifier {
             .build()
         try {
             NotificationManagerCompat.from(context).notify(UPDATE_NOTIFICATION_ID, notification)
+        } catch (_: SecurityException) {
+        }
+    }
+
+    fun message(context: Context, key: String, title: String, text: String, url: String?) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) return
+        val intent = (url?.takeIf(::isSafeWebUrl)?.let { Intent(Intent.ACTION_VIEW, Uri.parse(it.trim())) }
+            ?: Intent(context, MainActivity::class.java))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val pending = PendingIntent.getActivity(
+            context, key.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val quiet = Store.settings.value.isQuiet()
+        val n = NotificationCompat.Builder(context, if (quiet) QUIET_CHANNEL_ID else CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_flight)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setPriority(if (quiet) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_HIGH)
+            .apply { if (!quiet) setVibrate(VIBRATION) else setSilent(true) }
+            .setContentIntent(pending)
+            .setAutoCancel(true)
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(key.hashCode(), n)
         } catch (_: SecurityException) {
         }
     }
