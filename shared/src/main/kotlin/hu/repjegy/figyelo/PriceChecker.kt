@@ -24,6 +24,14 @@ object PriceChecker {
     private class SourceRun(val name: String, val search: suspend () -> List<Offer>)
 
     suspend fun checkAll() {
+        // „Bárhová, olcsón” riasztások előbb (12 óránként, olcsó): így a háttérfutás időkorlátja
+        // sok figyelésnél sem akadályozza meg őket
+        try {
+            DealAlerts.checkDue()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+        }
         val attempts = loadAttempts()
         Store.watches.value
             .filter { !it.isExpired() }
@@ -42,13 +50,6 @@ object PriceChecker {
                 } catch (_: Exception) {
                 }
             }
-        // „Bárhová, olcsón” riasztások (12 óránként)
-        try {
-            DealAlerts.checkDue()
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (_: Exception) {
-        }
     }
 
     private fun loadAttempts(): MutableMap<String, Long> {

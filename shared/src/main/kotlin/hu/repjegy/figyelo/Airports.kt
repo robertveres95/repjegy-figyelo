@@ -111,7 +111,8 @@ object Airports {
     /** A reptér országkódja (pl. "HU"), ha ismert. */
     fun countryOf(code: String?): String? {
         if (code == null) return null
-        load()
+        // Az országkód nyelvfüggetlen: elég egyszer betölteni (nyelvváltás után nem olvassuk újra a listát)
+        if (countryCodes.isEmpty()) load()
         return countryCodes[code.uppercase()]
     }
 

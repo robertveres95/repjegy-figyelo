@@ -147,13 +147,30 @@ object DealAlerts {
         val now = System.currentTimeMillis()
         // Lejárt hónapú riasztások törlése
         _all.value.filter { it.isExpired() }.forEach { remove(it.id) }
+        // Csendes órákban nem nézzük (különben a találatot „jelzettnek” vennénk, de nem szólnánk) –
+        // a csend vége utáni első ellenőrzés pótolja
+        if (!force && runCatching { Store.settings.value.isQuiet() }.getOrDefault(false)) return
         for (a in _all.value) {
             if (!force && a.lastChecked != null && now - a.lastChecked < INTERVAL_MS) continue
             checkOne(a)
         }
     }
 
-    suspend fun checkOne(a: DealAlert) {
+    private val inFlight = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /** Egy riasztás ellenőrzése; ugyanaz egyszerre csak egyszer fut (gomb + háttér). */
+    suspend fun checkOne(a0: DealAlert) {
+        if (!inFlight.add(a0.id)) return
+        try {
+            // A legfrissebb tárolt állapotból (egy korábbi futás azóta jelezhetett)
+            val a = _all.value.firstOrNull { it.id == a0.id } ?: return
+            checkLocked(a)
+        } finally {
+            inFlight.remove(a0.id)
+        }
+    }
+
+    private suspend fun checkLocked(a: DealAlert) {
         val currency = Store.settings.value.currency
         val period = a.periodIndex() ?: return
         // Más pénznemben megadott határ: átváltjuk (ha nem megy, most kihagyjuk)
@@ -176,7 +193,9 @@ object DealAlerts {
             val sameCur = a.currency == currency
             val cur = a.copy(maxPrice = limit, currency = currency, notified = if (sameCur) a.notified else emptyMap())
             val news = fresh(cur, results)
-            if (news.isNotEmpty() && !Platform.current.notificationsBlocked()) {
+            // Letiltott értesítésnél nem vesszük „jelzettnek” (bekapcsolás után szólunk róla)
+            val blocked = runCatching { Platform.current.notificationsBlocked() }.getOrDefault(false)
+            if (news.isNotEmpty() && !blocked) {
                 val top = news.sortedBy { it.pricePerPerson }.take(3)
                 val title = tr(
                     "Olcsó út innen: ${a.fromLabel} – ${formatPrice(top.first().pricePerPerson, currency)}/fő",
@@ -190,7 +209,8 @@ object DealAlerts {
             update(a.id) {
                 it.copy(
                     maxPrice = limit, currency = currency, lastChecked = now, lastError = null,
-                    notified = cur.notified + news.associate { n -> n.code to n.pricePerPerson },
+                    notified = (if (it.currency == currency) it.notified else emptyMap()) +
+                        (if (blocked) emptyMap() else news.associate { n -> n.code to n.pricePerPerson }),
                     latest = results.sortedBy { x -> x.pricePerPerson }.take(5),
                 )
             }
@@ -201,6 +221,7 @@ object DealAlerts {
     fun periodLabel(a: DealAlert): String {
         val m = a.month?.let { runCatching { YearMonth.parse(it) }.getOrNull() } ?: return tr("a következő 30 napban", "in the next 30 days")
         if (Lang.en) return "in " + m.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy", Lang.locale))
-        return m.format(java.time.format.DateTimeFormatter.ofPattern("yyyy. LLLL", HU)) + "-ban"
+        // „szeptemberben”, „októberben”, „novemberben”, „decemberben” – a többi hónap „-ban”
+        return m.format(java.time.format.DateTimeFormatter.ofPattern("yyyy. LLLL", HU)) + if (m.monthValue >= 9) "ben" else "ban"
     }
 }

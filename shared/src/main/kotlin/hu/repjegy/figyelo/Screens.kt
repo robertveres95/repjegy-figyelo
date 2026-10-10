@@ -458,7 +458,7 @@ internal fun HomeScreen(
                                     menuOpen = false
                                     val content = Backup.export(Store.watches.value, Store.settings.value)
                                     Platform.current.exportFile(Backup.fileName(), content) { ok ->
-                                        toast = if (ok) tr("Mentve: ${Store.watches.value.size} figyelés.", "Saved: ${Store.watches.value.size} watches.") else tr("A mentés nem sikerült.", "Saving failed.")
+                                        toast = if (ok) tr("Mentve: ${Store.watches.value.size} figyelés.", "Saved: ${Store.watches.value.size} ${if (Store.watches.value.size == 1) "watch" else "watches"}.") else tr("A mentés nem sikerült.", "Saving failed.")
                                     }
                                 },
                             )
@@ -628,7 +628,7 @@ private fun CostLines(w: Watch, best: Offer, currency: String, onCalendar: (List
     groupCostLine(w, best, currency, transferTotal)?.let {
         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
     }
-    val events = remember(best, w.from, w.to) { RefiCalendar.eventsFor(w, best) }
+    val events = remember(best, w.from, w.to, Lang.en) { RefiCalendar.eventsFor(w, best) }
     if (events.isNotEmpty()) {
         TextButton(onClick = { onCalendar(events) }, contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)) {
             Text(if (events.size > 1) tr("📅 Oda- és visszaút a naptárba", "📅 Add both flights to calendar") else tr("📅 Naptárba", "📅 Add to calendar"), style = MaterialTheme.typography.labelLarge)
@@ -895,7 +895,7 @@ private fun dateLine(w: Watch): String {
     val until = w.weeklyUntil?.let { u -> runCatching { LocalDate.parse(u).format(shortDate) }.getOrDefault(u) }
     val flex = when {
         until != null -> tr(", minden héten $until-ig", ", every week until $until")
-        w.flexDays > 0 -> tr(" (±${w.flexDays} nap)", " (±${w.flexDays} days)")
+        w.flexDays > 0 -> tr(" (±${w.flexDays} nap)", if (w.flexDays == 1) " (±1 day)" else " (±${w.flexDays} days)")
         else -> ""
     }
     return if (ret != null) tr("$out – $ret$flex · oda-vissza", "$out – $ret$flex · return") else tr("$out$flex · csak oda", "$out$flex · one way")
@@ -1147,7 +1147,7 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
             }
             if (!weekly && flexDays > 0) {
                 Text(
-                    tr("A megadott naptól ±$flexDays napon belül keresi a legolcsóbbat (az út hossza marad).", "Looks for the cheapest within ±$flexDays days of the chosen date (trip length stays the same)."),
+                    tr("A megadott naptól ±$flexDays napon belül keresi a legolcsóbbat (az út hossza marad).", "Looks for the cheapest within ±$flexDays ${if (flexDays == 1) "day" else "days"} of the chosen date (trip length stays the same)."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

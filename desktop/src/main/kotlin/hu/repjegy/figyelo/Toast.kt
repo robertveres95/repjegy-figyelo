@@ -57,11 +57,11 @@ fun ToastWindow(onOpenApp: () -> Unit) {
         runCatching { java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds }.getOrNull()
     }
     val size = DpSize(380.dp, 190.dp)
-    // A munkaterület (tálca nélküli rész) jobb alsó sarka; a bounds képpontban van, a nagyítással osztjuk
-    val scale = remember { runCatching { java.awt.Toolkit.getDefaultToolkit().screenResolution / 96f }.getOrDefault(1f).coerceAtLeast(1f) }
+    // A munkaterület (tálca nélküli rész) jobb alsó sarka. Az AWT már a nagyítással osztott (logikai)
+    // koordinátákat adja, ami megegyezik a Compose dp-vel – nem kell újra osztani.
     val pos = if (bounds != null) WindowPosition(
-        ((bounds.x + bounds.width) / scale).dp - size.width - 16.dp,
-        ((bounds.y + bounds.height) / scale).dp - size.height - 16.dp,
+        (bounds.x + bounds.width).dp - size.width - 16.dp,
+        (bounds.y + bounds.height).dp - size.height - 16.dp,
     ) else WindowPosition(Alignment.BottomEnd)
     val state = rememberWindowState(size = size, position = pos)
     var copied by remember(t.id) { mutableStateOf(false) }

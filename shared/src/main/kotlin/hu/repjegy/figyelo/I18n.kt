@@ -3,6 +3,7 @@ package hu.repjegy.figyelo
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 /**
@@ -34,12 +35,21 @@ object Lang {
     /** Indításkor a mentett választás betöltése (a tesztek a refi.lang rendszerjellemzővel rögzíthetik). */
     fun load() {
         if (System.getProperty("refi.lang") != null) return
-        setting = runCatching { Store.prefs.getString(KEY, AUTO) }.getOrNull()?.takeIf { it in listOf(AUTO, HU_CODE, EN_CODE) } ?: AUTO
+        val saved = runCatching { Store.prefs.getString(KEY, null) }.getOrNull()
+        // Frissítés egy korábbi (csak magyar) verzióról: marad magyar, akkor is, ha a gép angol nyelvű –
+        // csak az új telepítések követik a készülék nyelvét
+        if (saved == null && runCatching { Store.prefs.getString("seenVersion", null) }.getOrNull() != null) {
+            set(HU_CODE)
+            return
+        }
+        setting = saved?.takeIf { it in listOf(AUTO, HU_CODE, EN_CODE) } ?: AUTO
     }
 
     fun set(value: String) {
         setting = value
         runCatching { Store.prefs.edit { putString(KEY, value) } }
+        // A reptérlista az új nyelven a háttérben töltődjön be (ne a felület szálán, az első kártyánál)
+        runCatching { AppScope.scope.launch { runCatching { Airports.preload() } } }
     }
 
     val OPTIONS: List<Pair<String, String>>

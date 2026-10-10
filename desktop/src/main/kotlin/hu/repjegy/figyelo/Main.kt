@@ -414,10 +414,10 @@ object DesktopPlatform : PlatformApi {
     override fun addToCalendar(events: List<CalEvent>): Boolean {
         if (events.isEmpty()) return false
         // .ics fájl az ideiglenes mappában; a Windows a beállított naptár appal (Outlook, Naptár) nyitja meg
-        val dir = File(System.getProperty("java.io.tmpdir"), "REFI-naptar").apply { mkdirs() }
-        val f = File(dir, "REFI-repules-${System.currentTimeMillis()}.ics")
-        f.writeText(RefiCalendar.ics(events), Charsets.UTF_8)
         return runCatching {
+            val dir = File(System.getProperty("java.io.tmpdir"), "REFI-naptar").apply { mkdirs() }
+            val f = File(dir, "REFI-repules-${System.currentTimeMillis()}.ics")
+            f.writeText(RefiCalendar.ics(events), Charsets.UTF_8)
             if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
                 Desktop.getDesktop().open(f); true
             } else {

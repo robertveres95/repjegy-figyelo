@@ -88,7 +88,7 @@ fun groupCostLine(w: Watch, best: Offer, currency: String, transferTotal: Int?):
     val per = total / people
     val parts = buildList {
         add(tr("jegy", "ticket"))
-        if (w.wantsBags) add(tr("poggyász", "bags"))
+        if (w.wantsBags && best.bagsIncluded) add(tr("poggyász", "bags"))
         if (transferTotal != null && transferTotal > 0) add(tr("transzfer", "transfer"))
     }.joinToString(" + ")
     return tr(
@@ -136,17 +136,24 @@ object RefiCalendar {
         parse(o.departure)?.let { dep ->
             list += CalEvent(
                 "✈ $from → $to" + (o.airline?.let { " ($it)" } ?: ""),
-                dep, zoneFor(from), parse(o.arrival), zoneFor(to), tr("$from repülőtér", "$from airport"), notes(),
+                dep, zoneFor(from), arrivalIf(from, to, o.arrival), zoneFor(to), tr("$from repülőtér", "$from airport"), notes(),
             )
         }
         parse(o.returnDeparture)?.let { dep ->
             list += CalEvent(
                 "✈ $to → $from" + (o.airline?.let { " ($it)" } ?: ""),
-                dep, zoneFor(to), parse(o.returnArrival), zoneFor(from), tr("$to repülőtér", "$to airport"), notes(),
+                dep, zoneFor(to), arrivalIf(to, from, o.returnArrival), zoneFor(from), tr("$to repülőtér", "$to airport"), notes(),
             )
         }
         return list
     }
+
+    /**
+     * Az érkezés csak akkor használható, ha mindkét reptér zónáját ismerjük (vagy egyikét sem): különben az
+     * érkezési helyi időt rossz zónában értelmeznénk – ilyenkor a naptár 2 órás bejegyzést kap.
+     */
+    private fun arrivalIf(from: String, to: String, arrival: String?): LocalDateTime? =
+        if ((zoneFor(from) == null) == (zoneFor(to) == null)) parse(arrival) else null
 
     private fun parse(s: String?): LocalDateTime? = s?.let { runCatching { LocalDateTime.parse(it.take(16)) }.getOrNull() }
 
@@ -163,8 +170,10 @@ object RefiCalendar {
             sb.append("UID:refi-$nowMs-$i@repjegy-figyelo\r\n")
             sb.append("DTSTAMP:").append(java.time.Instant.ofEpochMilli(nowMs).atZone(ZoneOffset.UTC).format(utc)).append("\r\n")
             sb.append("DTSTART:").append(stamp(e.start, e.startZone)).append("\r\n")
-            val end = e.end ?: e.start.plusHours(2)
-            sb.append("DTEND:").append(stamp(end, e.endZone ?: e.startZone)).append("\r\n")
+            // Hibás (a kezdés előtti) vagy hiányzó érkezésnél 2 órás bejegyzés; a zónák nem keveredhetnek
+            val realEnd = e.end?.takeIf { e.endMillis() > e.startMillis() && (e.endZone == null) == (e.startZone == null) }
+            val endStamp = if (realEnd != null) stamp(realEnd, e.endZone) else stamp(e.start.plusHours(2), e.startZone)
+            sb.append("DTEND:").append(endStamp).append("\r\n")
             sb.append(fold("SUMMARY:" + esc(e.title)))
             sb.append(fold("LOCATION:" + esc(e.location)))
             sb.append(fold("DESCRIPTION:" + esc(e.notes)))

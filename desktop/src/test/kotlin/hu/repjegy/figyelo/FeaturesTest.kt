@@ -361,6 +361,12 @@ class FeaturesTest {
         assertTrue(ics.contains("DTSTART:20261113T115000Z"), ics)
         assertTrue(ics.contains("BEGIN:VCALENDAR") && ics.contains("SUMMARY:✈ LTN → BUD"))
         assertTrue(ics.lines().all { it.toByteArray(Charsets.UTF_8).size <= 75 }, "75 bájtos sorok")
+        // Ismeretlen zónájú érkezés (pl. JFK): nem keverünk zónát, 2 órás bejegyzés UTC-ben
+        val jfk = RefiCalendar.eventsFor(watch(), o.copy(toCode = "JFK", returnDeparture = null, returnArrival = null)).single()
+        assertNull(jfk.end)
+        assertTrue(RefiCalendar.ics(listOf(jfk), 0L).contains("DTEND:20261113T135000Z"))
+        assertEquals("2026. decemberben", DealAlerts.periodLabel(DealAlert("x", "BUD", "Budapest", "2026-12", 1, 1, "HUF", 0L)))
+        assertEquals("2026. májusban", DealAlerts.periodLabel(DealAlert("x", "BUD", "Budapest", "2027-05", 1, 1, "HUF", 0L)).replace("2027", "2026"))
 
         // Bárhová-riasztás: időszak-index, lejárat, újonnan jelzendők, JSON
         val a = DealAlert("d1", "BUD", "Budapest", "2026-12", 1, 20000, "HUF", 0L, notified = mapOf("BCN" to 15000))
