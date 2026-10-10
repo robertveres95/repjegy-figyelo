@@ -90,6 +90,10 @@ class LiveSourcesTest {
             val r = Discover.search("BUD", 0, 0, null, "HUF")
             "${r.size} úti cél; " + r.take(5).joinToString { "${it.code} ${it.pricePerPerson}" }
         }.getOrElse { "HIBA: $it" })
+        out.appendLine("=== WIZZ NAPI ÁRAK BUD→LTN $ym: " + runCatching {
+            val l = WizzAir.dayFares("BUD", "LTN", ym.atDay(1), ym.atEndOfMonth())
+            "${l.size} nap; " + l.sortedBy { it.amount }.take(3).joinToString { "${it.departure} ${it.amount} ${it.currency}" }
+        }.getOrElse { "HIBA: $it" })
         out.appendLine("=== ÁRNAPTÁR ODA-VISSZA (3 éj) BUD→London $ym: " + runCatching {
             val m = PriceCalendar.roundTrip("BUD", "LHR,LGW,STN,LTN,LCY,SEN", ym, 3, "HUF")
             "${m.size} nap; legolcsóbb: " + m.values.sortedBy { it.pricePerPerson }.take(3).joinToString { "${it.date} ${it.pricePerPerson} Ft (${it.source})" }
