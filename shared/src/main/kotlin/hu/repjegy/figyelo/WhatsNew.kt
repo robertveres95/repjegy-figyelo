@@ -27,8 +27,11 @@ object WhatsNew {
         "1.3.3" to listOf(
             "Windowson a frissítés egy kattintás: a REFI maga tölti le és telepíti az új verziót.",
             "Beállítható, hogy a REFI elinduljon-e a Windows-zal.",
-            "Még megbízhatóbb szinkronizálás, ha több eszközön is használod.",
-            "Pontosabb Wizz Air-keresés és apró javítások.",
+            "Még megbízhatóbb szinkronizálás, ha több eszközön is használod – a kulcsok és a pénznem is.",
+            "Kijelentkezéskor a többi eszközöd bejelentkezve marad; a telefonon a következő belépéskor fiókot is választhatsz.",
+            "A beállításokból kilépve rákérdezünk, ha nem mentetted a változásokat.",
+            "A tippeket egyenként vagy mindet kikapcsolhatod (és a Beállításokban vissza is kapcsolhatod).",
+            "Pontosabb Wizz Air- és Ignav-keresés, jobban olvasható felület, és sok apró javítás.",
         ),
         "1.3.2" to listOf(
             "Új, szemkímélőbb kék színvilág.",
