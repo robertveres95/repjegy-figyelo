@@ -1,7 +1,7 @@
 'use strict';
 // A Google-bejelentkezés a háttérben fut: a bővítmény kis ablaka (popup) bezárul, amikor a Google
 // bejelentkező ablaka megnyílik, ezért ott a bejelentkezés eredménye elveszne.
-importScripts('config.js');
+importScripts('config.js', 'badge.js');
 
 const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
 let generation = 0;   // kijelentkezéskor nő: egy közben futó bejelentkezés eredménye eldobandó
@@ -118,3 +118,61 @@ chrome.alarms.get('refi-update-check').then((a) => {
 });
 chrome.alarms.onAlarm.addListener((a) => { if (a.name === 'refi-update-check') checkForNewFiles(); });
 chrome.runtime.onStartup.addListener(checkForNewFiles);
+
+// ------------------------------------------------------------ jelvény
+// Félóránként csendben letöltjük a figyeléseket, és a jelvény mutatja, hány van célár alatt –
+// így a böngészőben is látszik az olcsó jegy, a kis ablak megnyitása nélkül.
+const FILE_NAME = 'refi-sync.json';
+
+async function silentToken() {
+  const { token, expires, signedOut } = await chrome.storage.local.get(['token', 'expires', 'signedOut']);
+  if (signedOut) return null;
+  if (token && expires && Date.now() < expires) return token;
+  if (pending) return pending.catch(() => null);
+  const run = signIn(false);
+  pending = run;
+  try { return await run; } catch { return null; } finally { if (pending === run) pending = null; }
+}
+
+async function driveGet(url, token) {
+  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+  if (r.status === 401) { await chrome.storage.local.remove(['token', 'expires']); return null; }
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+async function refreshBadge() {
+  const gen = generation;
+  try {
+    const token = await silentToken();
+    if (!token) return;
+    const q = encodeURIComponent(`name='${FILE_NAME}'`);
+    const list = await driveGet(
+      `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id)&orderBy=createdTime&pageSize=1`, token);
+    if (!list) return;
+    const id = list.files && list.files[0] && list.files[0].id;
+    const raw = id ? await driveGet(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`, token) : { format: 'refi-sync', watches: [] };
+    if (!raw || raw.format !== 'refi-sync' || (raw.version || 1) > 1) return;
+    if (gen !== generation) return; // közben kijelentkezett
+    // Ugyanaz az alak, mint amit a kis ablak ment (a kulcsokat nem tároljuk)
+    await chrome.storage.local.set({
+      data: { watches: raw.watches || [], currency: raw.currency || 'HUF', updatedAt: raw.updatedAt || null },
+    });
+  } catch { /* nincs net / átmeneti hiba: a következő körben újra */ }
+}
+
+// Bármi frissíti az adatot (a kis ablak vagy a háttér), a jelvény követi; kijelentkezéskor eltűnik
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.data) refiSetBadge(changes.data.newValue);
+});
+chrome.alarms.get('refi-badge').then((a) => {
+  if (!a) chrome.alarms.create('refi-badge', { periodInMinutes: 30, delayInMinutes: 1 });
+});
+chrome.alarms.onAlarm.addListener((a) => { if (a.name === 'refi-badge') refreshBadge(); });
+chrome.runtime.onStartup.addListener(() => {
+  chrome.storage.local.get('data').then(({ data }) => refiSetBadge(data));
+  refreshBadge();
+});
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.storage.local.get('data').then(({ data }) => refiSetBadge(data));
+});

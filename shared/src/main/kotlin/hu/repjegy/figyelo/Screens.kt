@@ -583,6 +583,24 @@ private fun BlockedNotificationsCard() {
     }
 }
 
+/** A távoli reptér belvárosi transzferének becsült költsége (ha a legjobb ajánlat ilyenre érkezik). */
+@Composable
+private fun TransferLine(w: Watch, best: Offer, currency: String) {
+    val info = Transfers.infoFor(best.toCode) ?: return
+    // Az árfolyam lekérése hálózatot is igényelhet: nem a felület szálán
+    val rate by androidx.compose.runtime.produceState<Double?>(null, currency) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { Rates.convert(1.0, "EUR", currency) }.getOrNull()
+        }
+    }
+    Text(
+        Transfers.line(w, info, currency) { eur -> rate?.let { eur * it } },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp),
+    )
+}
+
 @Composable
 private fun WatchCard(
     modifier: Modifier,
@@ -664,7 +682,7 @@ private fun WatchCard(
                 }
             }
             // „Most vegyem vagy várjak?” – az eddigi árak alapján
-            verdictFor(w)?.let { v ->
+            verdictFor(w, currency = currency)?.let { v ->
                 Text(
                     v.text,
                     style = MaterialTheme.typography.bodyMedium,
@@ -676,8 +694,12 @@ private fun WatchCard(
                     modifier = Modifier.padding(top = 6.dp),
                 )
             }
+            savingsLine(w, currency)?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = Neon.Mint, modifier = Modifier.padding(top = 2.dp))
+            }
             if (best != null) {
                 OfferDetails(best, highlight = true)
+                TransferLine(w, best, currency)
             }
 
             // Árgörbe: a Google árelőzménye + a saját mérések (ha van mit mutatni)

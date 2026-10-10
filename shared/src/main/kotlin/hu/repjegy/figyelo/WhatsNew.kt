@@ -24,6 +24,12 @@ import androidx.compose.ui.unit.dp
  */
 object WhatsNew {
     val notes: List<Pair<String, List<String>>> = listOf(
+        "1.4.0" to listOf(
+            "„Vegyem most vagy várjak?” – már az első ellenőrzés után: a Google szokásos ársávja alapján megmondjuk, jó-e az ár.",
+            "Látod, mennyit nyersz a figyeléssel: mennyivel olcsóbb most, mint amikor figyelni kezdted.",
+            "Távoli repterek (pl. Stansted, Beauvais, Bergamo) esetén a belvárosi transzfer becsült ára is megjelenik.",
+            "A Chrome-bővítmény ikonján szám mutatja, hány figyelésed van célár alatt.",
+        ),
         "1.3.3" to listOf(
             "Windowson a frissítés egy kattintás: a REFI maga tölti le és telepíti az új verziót.",
             "Beállítható, hogy a REFI elinduljon-e a Windows-zal.",

@@ -265,6 +265,30 @@ class FeaturesTest {
         assertEquals(Verdict.Tone.WAIT, verdictFor(w(150, listOf(100, 110, 120, 130, 150)), today)!!.tone)
         assertEquals(Verdict.Tone.NEUTRAL, verdictFor(w(150, listOf(100, 110, 120, 130, 150), out = "2026-10-15"), today)!!.tone)
         assertEquals(Verdict.Tone.NEUTRAL, verdictFor(w(115, listOf(100, 110, 120, 130)), today)!!.tone)
+        // Kevés saját mérésnél a Google szokásos ársávja dönt (csak poggyász nélkül)
+        val m = MarketInsight(emptyList(), 100, 200, 0L)
+        assertEquals(Verdict.Tone.GOOD, verdictFor(w(90, listOf(95)).copy(market = m), today)!!.tone)
+        assertEquals(Verdict.Tone.WAIT, verdictFor(w(250, emptyList()).copy(market = m), today)!!.tone)
+        assertEquals(Verdict.Tone.NEUTRAL, verdictFor(w(250, emptyList(), out = "2026-10-15").copy(market = m), today)!!.tone)
+        assertTrue(verdictFor(w(150, emptyList()).copy(market = m), today, "HUF")!!.text.contains("általában"))
+        assertNull(verdictFor(w(90, emptyList()).copy(market = m, bags = 1), today), "poggyásszal nem összevethető")
+        // Megtakarítás: legalább 5% kell
+        val now0 = 5 * 86_400_000L
+        assertEquals(null, savingsLine(w(98, listOf(100, 99)), "HUF", now0))
+        assertTrue(savingsLine(w(80, listOf(100, 90)), "HUF", now0)!!.contains("5 napja"))
+        assertNull(savingsLine(w(120, listOf(100)), "HUF", now0))
+    }
+
+    // ---------------- Reptéri transzfer
+    @Test fun transfers() {
+        val stn = assertNotNull(Transfers.infoFor("stn"))
+        assertNull(Transfers.infoFor("BUD"))
+        val rt = watch().copy(returnDate = "2026-12-27", adults = 2)
+        assertEquals(rt.seatedPassengers * 2, Transfers.trips(rt))
+        val line = Transfers.line(rt, stn, "HUF") { it * 400.0 }
+        assertTrue(line.contains("London") && line.contains("oda-vissza"), line)
+        // Árfolyam nélkül euróban
+        assertTrue(Transfers.line(rt, stn, "HUF") { null }.contains("€"))
     }
 
     // ---------------- Csendes órák

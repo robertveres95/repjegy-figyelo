@@ -191,19 +191,21 @@ data class Verdict(val text: String, val tone: Tone) {
  * Az aktuális legjobb ár helye az eddig mért árak között, és hogy mennyi idő van még az
  * indulásig. Legalább 4 mérés kell hozzá, különben nincs mihez viszonyítani.
  */
-fun verdictFor(w: Watch, today: LocalDate = LocalDate.now()): Verdict? {
+fun verdictFor(w: Watch, today: LocalDate = LocalDate.now(), currency: String? = null): Verdict? {
     val best = w.bestOffer ?: return null
     if (!w.comparable(best)) return null
-    val prices = w.history.map { it.price }
-    // Legalább 4 mérés, és ne legyen mind ugyanaz (pl. pár perc alatti kézi ellenőrzések)
-    if (prices.size < 4 || prices.distinct().size < 2) return null
-    val span = w.history.maxOf { it.time } - w.history.minOf { it.time }
-    if (span in 1 until 12 * 3_600_000L) return null
     val now = best.price
     // Rugalmas dátumnál a legjobb ajánlat napja számít
     val depDay = best.departure?.take(10)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
         ?: runCatching { LocalDate.parse(w.outboundDate) }.getOrNull()
     val daysLeft = depDay?.let { ChronoUnit.DAYS.between(today, it) } ?: 60L
+    val prices = w.history.map { it.price }
+    // Legalább 4 mérés, és ne legyen mind ugyanaz (pl. pár perc alatti kézi ellenőrzések);
+    // amíg ennyi nincs, a Google szokásos ársávja alapján mondunk véleményt (ha van)
+    val span = if (w.history.isEmpty()) 0L else w.history.maxOf { it.time } - w.history.minOf { it.time }
+    if (prices.size < 4 || prices.distinct().size < 2 || span in 1 until 12 * 3_600_000L) {
+        return marketVerdict(w, now, daysLeft, currency)
+    }
     val lower = prices.count { it < now }
     val share = lower.toDouble() / prices.size
     // Az „eddigi legalacsonyabb” a kártyán látható minimummal egyezzen (az árgörbe csak az utolsó 120 mérést őrzi)
@@ -221,4 +223,38 @@ fun verdictFor(w: Watch, today: LocalDate = LocalDate.now()): Verdict? {
         soon -> Verdict("Átlagos ár; két héten belül az árak inkább emelkednek.", Verdict.Tone.NEUTRAL)
         else -> Verdict("Átlagos ár az eddigiekhez képest.", Verdict.Tone.NEUTRAL)
     }
+}
+
+/**
+ * Vélemény a Google szokásos ársávja alapján (amíg nincs elég saját mérés). Csak poggyász nélküli
+ * utaknál: a Google ára poggyász nélküli, a fapados csomagdíjjal növelt árunkkal nem összevethető.
+ */
+internal fun marketVerdict(w: Watch, now: Int, daysLeft: Long, currency: String?): Verdict? {
+    if (w.wantsBags) return null
+    val m = w.market ?: return null
+    val low = m.typicalLow ?: return null
+    val high = m.typicalHigh ?: return null
+    if (low <= 0 || high < low) return null
+    val band = currency?.let { " (általában ${formatPrice(low, it)} – ${formatPrice(high, it)})" } ?: ""
+    return when {
+        now < low -> Verdict("Olcsóbb a szokásosnál$band – jó alkalom a foglalásra.", Verdict.Tone.GOOD)
+        now > high && daysLeft > 14 -> Verdict("Drágább a szokásosnál$band – ha nem sürgős, érdemes várni.", Verdict.Tone.WAIT)
+        now > high -> Verdict("Drágább a szokásosnál$band, de két héten belül az árak ritkán esnek.", Verdict.Tone.NEUTRAL)
+        else -> Verdict("Szokásos ár ezen az úton$band.", Verdict.Tone.NEUTRAL)
+    }
+}
+
+/**
+ * „Ennyit nyertél a figyeléssel”: mennyivel olcsóbb most a legjobb ár, mint a (megőrzött) első
+ * mérésnél. Csak érdemi (legalább 5%-os) különbségnél, és csak összevethető árnál.
+ */
+fun savingsLine(w: Watch, currency: String, nowMs: Long = System.currentTimeMillis()): String? {
+    val best = w.bestOffer ?: return null
+    if (!w.comparable(best)) return null
+    val first = w.history.firstOrNull() ?: return null
+    val diff = first.price - best.price
+    if (diff <= 0 || diff * 20 < first.price) return null
+    val days = ((nowMs - first.time) / 86_400_000L).coerceAtLeast(0)
+    val ago = if (days < 1) "Ma" else "$days napja"
+    return "▼ $ago még ${formatPrice(first.price, currency)} volt – ennyit nyersz most: ${formatPrice(diff, currency)}"
 }
