@@ -25,6 +25,7 @@ object Store {
     fun init(storage: Prefs) {
         if (initialized) return
         prefs = storage
+        Lang.load()
         val oldSource = prefs.getString("source", null)
         val serpKey = prefs.getString("apiKey", "") ?: ""
         val ignavKey = prefs.getString("ignavKey", "") ?: ""

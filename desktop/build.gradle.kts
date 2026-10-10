@@ -58,6 +58,8 @@ tasks.test {
     for (p in listOf("refi.live", "refi.health", "refi.screens")) {
         systemProperty(p, System.getProperty(p) ?: "false")
     }
+    // A tesztek a magyar felületet ellenőrzik (a CI gépe angol nyelvű); -Drefi.lang=en az angolhoz
+    systemProperty("refi.lang", System.getProperty("refi.lang") ?: "hu")
     workingDir = projectDir
     outputs.upToDateWhen { false }
     testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }

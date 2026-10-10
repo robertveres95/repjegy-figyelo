@@ -1313,6 +1313,8 @@ internal fun SettingsScreen(onDone: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             SectionTitle("Megjelenés")
+            // A nyelv azonnal vált (mentés nélkül is)
+            ChoiceField("Nyelv / Language", Lang.OPTIONS, Lang.setting) { Lang.set(it) }
             ChoiceField("Téma", THEMES, themeMode) { mode ->
                 themeMode = mode
                 // Azonnal látszik, mentés nélkül is
