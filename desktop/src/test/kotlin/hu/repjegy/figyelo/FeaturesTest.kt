@@ -220,6 +220,20 @@ class FeaturesTest {
         assertNull(back.lastPrice, "az árak nem utaznak a kóddal")
         assertTrue(back.history.isEmpty())
         assertTrue(ShareCode.encode(w, "HUF").length < 600, "rövid maradjon: ${ShareCode.encode(w, "HUF").length}")
+        // Közös figyelés: az eredeti azonosító utazik; újbóli átvételkor a meglévő frissül
+        assertEquals(w.id, back.sharedFrom)
+        assertEquals(w, ShareCode.existingFor(back, listOf(w)), "a saját figyelésem")
+        val mine = back.copy(id = "nalam")
+        val again = ShareCode.decode(ShareCode.message(w.copy(outboundDate = "2026-11-14"), "HUF"))!!.first
+        assertEquals(mine, ShareCode.existingFor(again, listOf(watch().copy(id = "mas"), mine)))
+        // Továbbküldve is az eredeti forrás marad
+        assertEquals(w.id, ShareCode.decode(ShareCode.message(mine, "HUF"))!!.first.sharedFrom)
+        assertNull(ShareCode.existingFor(watch().copy(id = "x"), listOf(w)))
+        // Friss ár az üzenetben (csak https link)
+        val deal = ShareCode.message(w.copy(targetPrice = 100000, offers = listOf(
+            Offer(80000, "Google Flights", "Wizz Air", url = "https://example.com/x", bagsIncluded = true))), "HUF")
+        assertTrue(deal.contains("Most: 80") && deal.contains("célár alatt") && deal.contains("Foglalás: https://example.com/x"), deal)
+        assertFalse(ShareCode.message(w.copy(offers = listOf(Offer(1, "x", url = "javascript:alert(1)"))), "HUF").contains("javascript"))
     }
 
     @Test fun shareCodeRejectsGarbage() {
@@ -277,6 +291,37 @@ class FeaturesTest {
         assertEquals(null, savingsLine(w(98, listOf(100, 99)), "HUF", now0))
         assertTrue(savingsLine(w(80, listOf(100, 90)), "HUF", now0)!!.contains("5 napja"))
         assertNull(savingsLine(w(120, listOf(100)), "HUF", now0))
+    }
+
+    // ---------------- Minden héten (pl. bármelyik hétvége)
+    @Test fun weeklyMode() {
+        // 2026-11-13 péntek – 11-15 vasárnap, minden héten dec. 4-ig → 4 hétvége
+        val w = watch(out = "2026-11-13", ret = "2026-11-15").copy(weeklyUntil = "2026-12-04")
+        val pairs = w.datePairs(today)
+        assertEquals(listOf("2026-11-13" to "2026-11-15", "2026-11-20" to "2026-11-22",
+            "2026-11-27" to "2026-11-29", "2026-12-04" to "2026-12-06"), pairs)
+        assertTrue(w.isFlexible)
+        // A múltbeli hetek kimaradnak, a lejárat az utolsó héthez igazodik
+        assertEquals("2026-11-27", w.datePairs(LocalDate.of(2026, 11, 25)).first().first)
+        assertFalse(w.isExpired(LocalDate.of(2026, 12, 4)))
+        assertTrue(w.isExpired(LocalDate.of(2026, 12, 5)))
+        // Legfeljebb MAX_WEEKS hét; a hibás vég eldobódik
+        val long = w.copy(weeklyUntil = "2027-06-01").sanitized()!!
+        assertEquals(MAX_WEEKS, long.datePairs(today).size)
+        assertNull(w.copy(weeklyUntil = "2026-11-01").sanitized()!!.weeklyUntil)
+        assertEquals(0, w.copy(flexDays = 2).sanitized()!!.flexDays, "a két rugalmasság nem keveredik")
+        // Más keresés (a régi árak nem hasonlíthatók), JSON-oda-vissza, a pontos példány
+        assertTrue(w.searchKey() != w.copy(weeklyUntil = null).searchKey())
+        assertEquals(w, Watch.fromJson(w.toJson()))
+        assertNull(w.exact("2026-11-20", "2026-11-22").weeklyUntil)
+        // A szinkronfájl csak ilyenkor 2-es verziójú (a régi appok így nem írják felül)
+        assertEquals(2, JSONObject(Sync.serialize(listOf(w), emptyMap(), "HUF")).getInt("version"))
+        assertEquals(1, JSONObject(Sync.serialize(listOf(watch()), emptyMap(), "HUF")).getInt("version"))
+        assertEquals("2026-12-04", Sync.parse(Sync.serialize(listOf(w), emptyMap(), "HUF"))!!.watches.single().weeklyUntil)
+        // Megosztott kód
+        val (back, _) = assertNotNull(ShareCode.decode(ShareCode.message(w, "HUF")))
+        assertEquals("2026-12-04", back.weeklyUntil)
+        assertEquals(4, weeklyCount(LocalDate.parse("2026-11-13"), LocalDate.parse("2026-12-04")))
     }
 
     // ---------------- Reptéri transzfer

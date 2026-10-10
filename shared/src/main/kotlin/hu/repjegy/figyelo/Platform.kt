@@ -38,6 +38,12 @@ interface PlatformApi {
 
     fun openUrl(url: String)
 
+    /**
+     * A Google Play-ből telepített változat: ott a frissítést a Play végzi (a házirend tiltja a saját
+     * frissítőt), ezért a GitHub-os frissítéskeresés ki van kapcsolva.
+     */
+    val updatesViaStore: Boolean get() = false
+
     /** Tudja-e az app maga letölteni és elindítani a frissítést (Windowson igen). */
     val canSelfUpdate: Boolean get() = false
 

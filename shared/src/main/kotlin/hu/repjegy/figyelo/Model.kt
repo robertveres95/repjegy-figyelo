@@ -125,6 +125,8 @@ data class Watch(
     val depFrom: Int? = null,          // odaút indulása legkorábban (óra, 0–23)
     val depTo: Int? = null,            // odaút indulása legkésőbb (óra, 1–24; az óra vége)
     val airlines: String = "",         // csak ezek a légitársaságok (vesszővel), üres = bármelyik
+    val weeklyUntil: String? = null,   // „minden héten”: ugyanezek a napok hetente, legkésőbb ezen a napon indulva
+    val sharedFrom: String? = null,    // megosztott figyelésnél az eredeti figyelés azonosítója (újbóli átvételkor frissül)
     val editedAt: Long = 0,            // utolsó felhasználói módosítás (szinkronizáláshoz)
     // Eredmények
     val lastPrice: Int? = null,
@@ -157,9 +159,20 @@ data class Watch(
 
     fun alertable(o: Offer): Boolean = comparable(o) && o.price <= targetPrice
 
+    /** Több dátumot is keres (±napok vagy minden héten). */
+    val isFlexible: Boolean get() = flexDays > 0 || weeklyUntil != null
+
+    /** Az utolsó lehetséges indulási nap. */
+    fun lastDeparture(): LocalDate? = runCatching {
+        weeklyUntil?.let { LocalDate.parse(it) } ?: LocalDate.parse(outboundDate).plusDays(flexDays.toLong())
+    }.getOrNull()
+
     /** Lejárt, ha már a rugalmas tartomány utolsó napja is elmúlt. */
-    fun isExpired(today: LocalDate = LocalDate.now()): Boolean =
-        runCatching { LocalDate.parse(outboundDate).plusDays(flexDays.toLong()).isBefore(today) }.getOrDefault(false)
+    fun isExpired(today: LocalDate = LocalDate.now()): Boolean = lastDeparture()?.isBefore(today) ?: false
+
+    /** Egyetlen, pontos dátumpárra szűkített példány (a forrásoknak ilyet adunk át). */
+    fun exact(out: String = outboundDate, ret: String? = returnDate): Watch =
+        copy(outboundDate = out, returnDate = ret, flexDays = 0, weeklyUntil = null)
 
     /**
      * A keresendő dátumpárok rugalmas dátumnál: az út hossza marad, és csak a mai vagy
@@ -168,6 +181,15 @@ data class Watch(
     fun datePairs(today: LocalDate = LocalDate.now()): List<Pair<String, String?>> {
         val out = runCatching { LocalDate.parse(outboundDate) }.getOrNull() ?: return listOf(outboundDate to returnDate)
         val ret = returnDate?.let { r -> runCatching { LocalDate.parse(r) }.getOrNull() }
+        // Minden héten: ugyanezek a napok hetente (pl. péntek–vasárnap), időrendben, legfeljebb MAX_WEEKS hét
+        val until = weeklyUntil?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        if (until != null) {
+            return (0 until MAX_WEEKS)
+                .map { k -> out.plusWeeks(k.toLong()) to ret?.plusWeeks(k.toLong()) }
+                .filter { !it.first.isAfter(until) && !it.first.isBefore(today) }
+                .map { (o, r) -> o.toString() to r?.toString() }
+                .ifEmpty { listOf(outboundDate to returnDate) }
+        }
         return (-flexDays..flexDays)
             .map { k -> out.plusDays(k.toLong()) to ret?.plusDays(k.toLong()) }
             .filter { !it.first.isBefore(today) }
@@ -211,7 +233,7 @@ data class Watch(
     fun searchKey(): String = listOf(
         from, to, outboundDate, returnDate, travelClass, adults, children,
         infantsInSeat, infantsOnLap, bags, stops, checkedBag, flexDays, depFrom, depTo, airlines.trim().lowercase(),
-    ).joinToString("|")
+    ).joinToString("|") + (weeklyUntil?.let { "|w$it" } ?: "")
 
     fun clearResults(): Watch = copy(
         lastPrice = null, lowestPrice = null, lastChecked = null, lastError = null,
@@ -241,6 +263,8 @@ data class Watch(
         putOpt("depFrom", depFrom)
         putOpt("depTo", depTo)
         if (airlines.isNotBlank()) put("airlines", airlines)
+        putOpt("weeklyUntil", weeklyUntil)
+        putOpt("sharedFrom", sharedFrom)
         if (editedAt != 0L) put("editedAt", editedAt)
         putOpt("lastPrice", lastPrice)
         putOpt("lowestPrice", lowestPrice)
@@ -297,6 +321,8 @@ data class Watch(
                 depFrom = o.intOrNull("depFrom")?.coerceIn(0, 23),
                 depTo = o.intOrNull("depTo")?.coerceIn(1, 24),
                 airlines = o.optString("airlines", ""),
+                weeklyUntil = o.stringOrNull("weeklyUntil"),
+                sharedFrom = o.stringOrNull("sharedFrom")?.take(64),
                 editedAt = o.optLong("editedAt", 0L),
                 lastPrice = o.intOrNull("lastPrice"),
                 lowestPrice = o.intOrNull("lowestPrice"),
@@ -385,6 +411,10 @@ val FLEX_OPTIONS = listOf(
     2 to "±2 nap",
     3 to "±3 nap",
 )
+
+/** „Minden héten” mód: legfeljebb ennyi hetet nézünk (a kérések száma ne nőjön túl). */
+const val MAX_WEEKS = 9
+
 
 val HOUR_FROM_OPTIONS: List<Pair<Int?, String>> =
     listOf<Pair<Int?, String>>(null to "Bármikor") + listOf(5, 6, 7, 8, 9, 10, 12, 14, 16, 18).map { it to "%02d:00-tól".format(it) }

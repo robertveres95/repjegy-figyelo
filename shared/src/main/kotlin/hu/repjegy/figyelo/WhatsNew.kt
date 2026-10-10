@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.dp
 object WhatsNew {
     val notes: List<Pair<String, List<String>>> = listOf(
         "1.4.0" to listOf(
+            "Új rugalmasság: „Minden héten” – pl. péntek–vasárnapot megadva bármelyik hétvégét figyeli a következő hetekben, és a legolcsóbbat mutatja.",
+            "Közös figyelés: ha egy megosztott figyelést újra elküldenek (pl. új dátummal), a meglévő frissül, nem lesz belőle kettő. A megosztott üzenetben az aktuális legjobb ár és a foglalási link is benne van.",
             "„Vegyem most vagy várjak?” – már az első ellenőrzés után: a Google szokásos ársávja alapján megmondjuk, jó-e az ár.",
             "Látod, mennyit nyersz a figyeléssel: mennyivel olcsóbb most, mint amikor figyelni kezdted.",
             "Távoli repterek (pl. Stansted, Beauvais, Bergamo) esetén a belvárosi transzfer becsült ára is megjelenik.",

@@ -81,13 +81,13 @@ object PriceChecker {
         }
         try {
             // A kulcsos források és az árelőzmény a rugalmas tartomány első érvényes (nem múltbeli) napjára
-            val single = watch.datePairs().first().let { (o, r) -> watch.copy(outboundDate = o, returnDate = r, flexDays = 0) }
+            val single = watch.datePairs().first().let { (o, r) -> watch.exact(o, r) }
             val runs = buildList {
                 // Rugalmas dátumnál a kulcs nélküli források minden dátumpárt lekérdeznek
                 // (a kulcsos SerpApi/Ignav csak a pontos dátumot – azok keretét ne égessük el)
                 // Rugalmas dátumnál a kérések száma gyorsan nő (dátumok × reptérpárok), ezért
                 // ilyenkor kevesebb reptérpárt kérdezünk, és a Google repterenkénti tartaléka sem fut
-                val flex = watch.flexDays > 0
+                val flex = watch.isFlexible
                 val pairsCap = if (flex) MAX_PAIRS_FLEX else MAX_PAIRS
                 if (settings.googleOn) add(SourceRun(GoogleFlights.NAME) {
                     flexSearch(watch) {
@@ -221,11 +221,11 @@ object PriceChecker {
      */
     internal suspend fun flexSearch(w: Watch, search: (Watch) -> List<Offer>): List<Offer> {
         val pairs = w.datePairs()
-        if (pairs.size <= 1 && w.flexDays == 0) return search(w)
+        if (pairs.size <= 1 && !w.isFlexible) return search(w)
         val ctx = kotlin.coroutines.coroutineContext
         // ne zúdítsunk egyszerre sok kérést a forrásra; leállításkor (pl. háttérmunka vége) itt megáll
         return collectOffers(pairs, betweenEach = { kotlinx.coroutines.delay(400); ctx.ensureActive() }) { pair ->
-            search(w.copy(outboundDate = pair.first, returnDate = pair.second, flexDays = 0))
+            search(w.exact(pair.first, pair.second))
         }
     }
 

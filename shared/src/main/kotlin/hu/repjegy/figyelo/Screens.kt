@@ -137,6 +137,13 @@ private val typedDateFormat = DateTimeFormatter.ofPattern("yyyy.MM.dd")
 /** A legkésőbbi megadható utazási nap (a légitársaságok kb. egy évre előre árulnak). */
 internal fun maxTravelDate(today: LocalDate): LocalDate = today.plusMonths(12)
 
+/** A „Rugalmasság” lista „minden héten” eleme. */
+private const val WEEKLY_CHOICE = 7
+
+/** Hány hét fér bele a „minden héten” tartományba (az elsőt is beleértve). */
+internal fun weeklyCount(first: LocalDate, until: LocalDate): Int =
+    if (until.isBefore(first)) 0 else (java.time.temporal.ChronoUnit.DAYS.between(first, until) / 7 + 1).toInt().coerceAtMost(MAX_WEEKS)
+
 /** Begépelt dátum: 2026.10.16, 2026-10-16, 2026/10/16, 2026.10.16. vagy 2026. 10. 16. */
 internal fun parseTypedDate(raw: String): LocalDate? {
     val t = raw.trim()
@@ -844,7 +851,12 @@ internal fun StatusText(text: String, isError: Boolean) {
 private fun dateLine(w: Watch): String {
     val out = runCatching { LocalDate.parse(w.outboundDate).format(shortDate) }.getOrDefault(w.outboundDate)
     val ret = w.returnDate?.let { r -> runCatching { LocalDate.parse(r).format(shortDate) }.getOrDefault(r) }
-    val flex = if (w.flexDays > 0) " (±${w.flexDays} nap)" else ""
+    val until = w.weeklyUntil?.let { u -> runCatching { LocalDate.parse(u).format(shortDate) }.getOrDefault(u) }
+    val flex = when {
+        until != null -> ", minden héten $until-ig"
+        w.flexDays > 0 -> " (±${w.flexDays} nap)"
+        else -> ""
+    }
     return if (ret != null) "$out – $ret$flex · oda-vissza" else "$out$flex · csak oda"
 }
 
@@ -907,6 +919,13 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
     var notify by remember { mutableStateOf(init?.notify ?: true) }
     var checkedBag by remember { mutableStateOf(init?.checkedBag ?: false) }
     var flexDays by remember { mutableStateOf(init?.flexDays ?: 0) }
+    // „Minden héten” mód: a megadott napok hetente ismétlődnek eddig a napig (pl. bármelyik hétvége)
+    var weekly by remember { mutableStateOf(init?.weeklyUntil != null) }
+    var weeklyUntil by remember {
+        mutableStateOf(init?.weeklyUntil?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+            ?: (init?.outboundDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()).plusWeeks(3))
+    }
+    var untilValid by remember { mutableStateOf(true) }
     var depFrom by remember { mutableStateOf(init?.depFrom) }
     var depTo by remember { mutableStateOf(init?.depTo) }
     var airlines by remember { mutableStateOf(init?.airlines ?: "") }
@@ -938,7 +957,12 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
             from.codes.split(',').any { it in to.codes.split(',') } ->
                 "Az indulási és érkezési hely nem lehet ugyanaz."
             // Rugalmas dátumnál elég, ha a tartomány még nem múlt el
-            outDate.plusDays(flexDays.toLong()).isBefore(today) -> "Az indulás dátuma nem lehet a múltban."
+            weekly && !untilValid -> "Javítsd a pirossal jelölt dátumot."
+            weekly && weeklyUntil.isBefore(outDate) -> "A „minden héten” utolsó napja nem lehet az első indulás előtt."
+            weekly && weeklyUntil.isAfter(outDate.plusWeeks((MAX_WEEKS - 1).toLong())) ->
+                "„Minden héten” legfeljebb $MAX_WEEKS hétre állítható."
+            weekly && weeklyUntil.isBefore(today) -> "Az indulás dátuma nem lehet a múltban."
+            !weekly && outDate.plusDays(flexDays.toLong()).isBefore(today) -> "Az indulás dátuma nem lehet a múltban."
             outDate.isAfter(maxTravelDate(today)) || (roundTrip && retDate.isAfter(maxTravelDate(today))) ->
                 "Legfeljebb ${maxTravelDate(today).format(typedDateFormat)}-ig lehet dátumot megadni."
             roundTrip && retDate.isBefore(outDate) -> "A visszaút nem lehet az indulás előtt."
@@ -974,7 +998,8 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
             checkedBag = checkedBag,
             targetPrice = targetValue,
             notify = notify,
-            flexDays = flexDays,
+            flexDays = if (weekly) 0 else flexDays,
+            weeklyUntil = if (weekly) weeklyUntil.toString() else null,
             depFrom = depFrom,
             depTo = depTo,
             airlines = airlines.trim(),
@@ -1035,7 +1060,11 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
             SwitchRow("Oda-vissza út", roundTrip) { roundTrip = it }
 
             SectionTitle("Dátum")
-            DateField("Indulás", outDate, minDate = today.minusDays(flexDays.toLong()), onValidChange = { outValid = it }) {
+            DateField(
+                if (weekly) "Első indulás" else "Indulás", outDate,
+                minDate = if (weekly) minOf(outDate, today) else today.minusDays(flexDays.toLong()),
+                onValidChange = { outValid = it },
+            ) {
                 // Az út hossza marad: ha az indulás eltolódik, a visszaút vele mozog
                 // (gépelés közbeni részleges dátumnál sem vész el az eredeti hossz)
                 val days = java.time.temporal.ChronoUnit.DAYS.between(outDate, retDate).coerceAtLeast(0)
@@ -1045,8 +1074,28 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
             if (roundTrip) {
                 DateField("Visszaút", retDate, minDate = outDate, onValidChange = { retValid = it }) { retDate = it }
             }
-            ChoiceField("Rugalmasság", FLEX_OPTIONS, flexDays) { flexDays = it }
-            if (flexDays > 0) {
+            ChoiceField("Rugalmasság", FLEX_OPTIONS + (WEEKLY_CHOICE to "Minden héten (pl. bármelyik hétvége)"), if (weekly) WEEKLY_CHOICE else flexDays) {
+                weekly = it == WEEKLY_CHOICE
+                flexDays = if (weekly) 0 else it
+                if (weekly && (weeklyUntil.isBefore(outDate) || weeklyUntil.isAfter(outDate.plusWeeks((MAX_WEEKS - 1).toLong())))) {
+                    weeklyUntil = outDate.plusWeeks(3)
+                }
+            }
+            if (weekly) {
+                DateField(
+                    "Utolsó indulás legkésőbb", weeklyUntil, minDate = outDate,
+                    maxDate = minOf(outDate.plusWeeks((MAX_WEEKS - 1).toLong()), maxTravelDate(today)),
+                    onValidChange = { untilValid = it },
+                ) { weeklyUntil = it }
+                val weeks = weeklyCount(outDate, weeklyUntil)
+                Text(
+                    "Ugyanezeken a napokon minden héten keres ($weeks hét), és a legolcsóbbat mutatja. " +
+                        "Pl. péntek–vasárnapot megadva: bármelyik hétvége. (Csak a REFI 1.4-től működik – a többi eszközödön is frissíts.)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (!weekly && flexDays > 0) {
                 Text(
                     "A megadott naptól ±$flexDays napon belül keresi a legolcsóbbat (az út hossza marad).",
                     style = MaterialTheme.typography.bodySmall,
@@ -1378,7 +1427,11 @@ internal fun SettingsScreen(onDone: () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium,
             )
             var updateMsg by remember { mutableStateOf<String?>(null) }
-            OutlinedButton(onClick = {
+            if (Platform.current.updatesViaStore) Text(
+                "A frissítéseket a Google Play telepíti.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            ) else OutlinedButton(onClick = {
                 updateMsg = "Keresés…"
                 AppScope.scope.launch {
                     val found = Updater.check()

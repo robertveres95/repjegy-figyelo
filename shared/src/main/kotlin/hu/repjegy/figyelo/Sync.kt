@@ -241,6 +241,9 @@ object Sync {
 
     // ------------------------------------------------------------ formátum és összefésülés
 
+    /** Az általunk ismert legújabb formátumverzió. */
+    internal const val FORMAT_VERSION = 2
+
     internal class Snapshot(
         val watches: List<Watch>,
         val tombstones: Map<String, Long>,
@@ -252,7 +255,9 @@ object Sync {
     internal fun serialize(watches: List<Watch>, tombstones: Map<String, Long>, currency: String, keys: Store.SyncedKeys? = null): String =
         JSONObject()
             .put("format", FORMAT)
-            .put("version", 1)
+            // 2: „minden héten” figyelés is van benne. A régebbi appok (1.3.x) ezt nem ismerik, ezért
+            // ilyenkor nem olvassák és nem írják felül (különben elveszne a beállítás) – frissítést kérnek
+            .put("version", if (watches.any { it.weeklyUntil != null }) 2 else 1)
             .put("currency", currency)
             .put("updatedAt", System.currentTimeMillis())
             .put("watches", JSONArray().apply { watches.forEach { put(it.toJson()) } })
@@ -271,7 +276,7 @@ object Sync {
         val json = runCatching { JSONObject(text) }.getOrNull() ?: return null
         if (json.optString("format") != FORMAT) return null
         // Újabb, ismeretlen formátumverziót nem fésülünk össze (és nem írunk felül)
-        if (json.optInt("version", 1) > 1) return null
+        if (json.optInt("version", 1) > FORMAT_VERSION) return null
         val arr = json.optJSONArray("watches") ?: JSONArray()
         val list = (0 until arr.length()).mapNotNull { i ->
             arr.optJSONObject(i)?.let { o -> runCatching { Watch.fromJson(o).sanitized() }.getOrNull() }

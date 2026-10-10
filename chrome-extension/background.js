@@ -152,7 +152,7 @@ async function refreshBadge() {
     if (!list) return;
     const id = list.files && list.files[0] && list.files[0].id;
     const raw = id ? await driveGet(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`, token) : { format: 'refi-sync', watches: [] };
-    if (!raw || raw.format !== 'refi-sync' || (raw.version || 1) > 1) return;
+    if (!raw || raw.format !== 'refi-sync' || (raw.version || 1) > 2) return;
     if (gen !== generation) return; // közben kijelentkezett
     // Ugyanaz az alak, mint amit a kis ablak ment (a kulcsokat nem tároljuk)
     await chrome.storage.local.set({

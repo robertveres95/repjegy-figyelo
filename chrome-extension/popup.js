@@ -64,7 +64,7 @@ async function loadFile(token) {
   const id = list.files && list.files[0] && list.files[0].id;
   if (!id) return { watches: [], currency: 'HUF', updatedAt: null };
   const data = await (await drive(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`, token)).json();
-  if (data.format !== 'refi-sync' || (data.version || 1) > 1) throw new Error('Ismeretlen adatformátum – frissítsd a bővítményt.');
+  if (data.format !== 'refi-sync' || (data.version || 1) > 2) throw new Error('Ismeretlen adatformátum – frissítsd a bővítményt.');
   // A kulcsokat (SerpApi, Ignav) nem tároljuk el és nem mutatjuk
   return { watches: data.watches || [], currency: data.currency || 'HUF', updatedAt: data.updatedAt || null };
 }
@@ -96,8 +96,8 @@ function wantsBags(w) { return (w.bags || 0) > 0 || !!w.checkedBag; }
 function comparable(w, o) { return !(wantsBags(w) && o.bagsIncluded === false) && !o.partial; }
 
 function expired(w) {
-  const last = new Date(w.outboundDate + 'T00:00:00');
-  last.setDate(last.getDate() + (w.flexDays || 0) + 1);
+  const last = new Date((w.weeklyUntil || w.outboundDate) + 'T00:00:00');
+  last.setDate(last.getDate() + (w.weeklyUntil ? 0 : (w.flexDays || 0)) + 1);
   return last < new Date();
 }
 
@@ -170,7 +170,7 @@ function card(w, cur) {
   const dates = w.returnDate ? `${day(w.outboundDate)} – ${day(w.returnDate)}` : `${day(w.outboundDate)} · csak oda`;
   const second = el('div', 'row');
   second.append(
-    el('span', 'meta', `${dates}${w.flexDays ? ` (±${w.flexDays} nap)` : ''} · ${pax} fő`),
+    el('span', 'meta', `${dates}${w.weeklyUntil ? `, minden héten ${day(w.weeklyUntil)}-ig` : (w.flexDays ? ` (±${w.flexDays} nap)` : '')} · ${pax} fő`),
     el('span', 'target', `célár: ${money(w.targetPrice, cur)}`),
   );
   li.append(second);

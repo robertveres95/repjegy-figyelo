@@ -24,9 +24,12 @@ object ShareCode {
 
     fun encode(w: Watch, currency: String): String {
         val json = JSONObject()
-            .put("v", 1)
+            .put("v", if (w.weeklyUntil != null) 2 else 1)
             .put("cur", currency)
             .put("w", searchOnly(w).toJson())
+            // Az eredeti figyelés azonosítója: ha később újra elküldi (pl. módosított dátummal), a fogadónál
+            // a meglévő figyelés frissül, nem lesz belőle még egy
+            .put("src", w.sharedFrom ?: w.id)
         return PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(deflate(json.toString().toByteArray(Charsets.UTF_8)))
     }
 
@@ -34,14 +37,30 @@ object ShareCode {
     fun message(w: Watch, currency: String): String {
         val out = runCatching { LocalDate.parse(w.outboundDate).format(shortDate) }.getOrDefault(w.outboundDate)
         val ret = w.returnDate?.let { r -> runCatching { LocalDate.parse(r).format(shortDate) }.getOrDefault(r) }
-        val dates = if (ret != null) "$out – $ret" else out
+        val until = w.weeklyUntil?.let { u -> runCatching { LocalDate.parse(u).format(shortDate) }.getOrDefault(u) }
+        val dates = (if (ret != null) "$out – $ret" else out) + (until?.let { ", minden héten $it-ig" } ?: "")
+        // Ha van friss ár, az is benne van (a családnak így elég az üzenetet elolvasni)
+        val best = w.bestOffer?.takeIf { w.comparable(it) }
+        val deal = best?.let { b ->
+            val day = b.departure?.take(10)?.let { d -> runCatching { LocalDate.parse(d).format(shortDate) }.getOrNull() }
+            "Most: ${formatPrice(b.price, currency)}" + listOfNotNull(b.airline, day).joinToString(", ").let { if (it.isBlank()) "" else " ($it)" } +
+                (if (w.alertable(b)) " – a célár alatt! 🎉" else "") + "\n" +
+                (b.url?.takeIf { it.startsWith("https://") }?.let { "Foglalás: $it\n" } ?: "")
+        } ?: ""
         return "✈ REFI figyelés: ${w.routeTitle}, $dates\n" +
+            deal +
             "Célár: ${formatPrice(w.targetPrice, currency)}\n" +
             "Átvétel: REFI → ⋮ menü → Kód beillesztése (vagy oszd meg ezt az üzenetet a REFI-vel).\n" +
             encode(w, currency)
     }
 
     /** Megkeresi a kódot egy (akár hosszabb) szövegben, és figyeléssé alakítja. */
+    /** A már meglévő figyelés, amelyből (vagy amellyel közös forrásból) ez a megosztott figyelés származik. */
+    fun existingFor(w: Watch, list: List<Watch>): Watch? {
+        val src = w.sharedFrom ?: return null
+        return list.firstOrNull { it.id == src } ?: list.firstOrNull { it.sharedFrom == src }
+    }
+
     fun decode(text: String): Pair<Watch, String>? {
         val start = text.indexOf(PREFIX)
         if (start < 0) return null
@@ -50,10 +69,12 @@ object ShareCode {
         return runCatching {
             val bytes = inflate(Base64.getUrlDecoder().decode(code))
             val json = JSONObject(String(bytes, Charsets.UTF_8))
+            require(json.optInt("v", 1) <= 2) { "újabb REFI-verzió kódja" }
             val cur = json.optString("cur", "HUF").takeIf { c -> CURRENCIES.any { it.first == c } } ?: "HUF"
             val w = Watch.fromJson(json.getJSONObject("w")).sanitized() ?: error("érvénytelen figyelés")
             // Új azonosító: a saját figyeléseket sosem írja felül egy kapott kód
-            searchOnly(w).copy(id = UUID.randomUUID().toString(), notify = true) to cur
+            val src = json.optString("src", "").takeIf { it.isNotBlank() && it.length <= 64 }
+            searchOnly(w).copy(id = UUID.randomUUID().toString(), notify = true, sharedFrom = src) to cur
         }.getOrNull()
     }
 
@@ -117,7 +138,14 @@ internal fun Watch.sanitized(): Watch? {
         infantsOnLap = lap,
         bags = bags.coerceIn(0, adults + ch + seat),
         stops = stops.coerceIn(0, 3),
-        flexDays = flexDays.coerceIn(0, 3),
+        flexDays = if (weeklyUntil != null) 0 else flexDays.coerceIn(0, 3),
+        // A „minden héten” vége érvényes dátum legyen, az indulás után, legfeljebb MAX_WEEKS héten belül
+        weeklyUntil = weeklyUntil?.let { u ->
+            val until = runCatching { LocalDate.parse(u) }.getOrNull()
+            val out = runCatching { LocalDate.parse(outboundDate) }.getOrNull()
+            if (until == null || out == null || until.isBefore(out)) null
+            else minOf(until, out.plusWeeks((MAX_WEEKS - 1).toLong())).toString()
+        },
         depFrom = depFrom?.coerceIn(0, 23),
         depTo = depTo?.coerceIn(1, 24),
         airlines = airlines.take(80),
@@ -204,6 +232,10 @@ fun verdictFor(w: Watch, today: LocalDate = LocalDate.now(), currency: String? =
     // amíg ennyi nincs, a Google szokásos ársávja alapján mondunk véleményt (ha van)
     val span = if (w.history.isEmpty()) 0L else w.history.maxOf { it.time } - w.history.minOf { it.time }
     if (prices.size < 4 || prices.distinct().size < 2 || span in 1 until 12 * 3_600_000L) {
+        // A Google árelőzménye csak a legelső dátumra szól: rugalmas figyelésnél csak akkor vetjük össze,
+        // ha a legjobb ajánlat épp arra a napra esik
+        val firstDay = w.datePairs(today).first().first
+        if (w.isFlexible && best.departure?.take(10) != firstDay) return null
         return marketVerdict(w, now, daysLeft, currency)
     }
     val lower = prices.count { it < now }

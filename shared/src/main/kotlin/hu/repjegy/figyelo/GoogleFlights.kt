@@ -61,7 +61,7 @@ object GoogleFlights {
 
     /** Az adott keresés (pontos dátumokkal) legutóbb kapott árelőzménye; kiveszi a tárolóból. */
     fun takeInsight(w: Watch, currency: String): MarketInsight? =
-        insights.remove(searchUrl(w.copy(flexDays = 0), currency))
+        insights.remove(searchUrl(w.exact(), currency))
 
     /**
      * Az „árbetekintés” blokk megkeresése a válaszban:

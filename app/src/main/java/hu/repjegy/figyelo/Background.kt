@@ -69,6 +69,7 @@ class AndroidPrefs(context: Context) : Prefs {
 
 /** Az androidos megvalósítás a közös kód platform-igényeihez. */
 class AndroidPlatform private constructor(private val context: Context) : PlatformApi {
+    override val updatesViaStore: Boolean get() = BuildConfig.PLAY_STORE
     override val versionName: String get() = BuildConfig.VERSION_NAME
     override val buildNumber: Int get() = BuildConfig.VERSION_CODE
     override val installerSuffix = ".apk"

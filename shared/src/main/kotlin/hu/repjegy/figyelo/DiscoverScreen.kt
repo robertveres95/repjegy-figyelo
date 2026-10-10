@@ -55,6 +55,9 @@ internal fun ImportCodeDialog(initial: String, onDismiss: () -> Unit, onImported
     var error by remember(initial) { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val decoded = remember(text) { ShareCode.decode(text) }
+    // Ha ugyanezt a figyelést korábban már átvette (vagy épp a sajátja), azt frissítjük
+    val watches by Store.watches.collectAsState()
+    val existing = decoded?.let { ShareCode.existingFor(it.first, watches) }
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text("Figyelés átvétele") },
@@ -85,6 +88,12 @@ internal fun ImportCodeDialog(initial: String, onDismiss: () -> Unit, onImported
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
+                if (existing != null) Text(
+                    "Ez a figyelés már megvan nálad – a dátumait és beállításait a kapott kód szerint frissítjük " +
+                        "(az értesítés be- vagy kikapcsolása marad, ahogy nálad volt).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
@@ -92,20 +101,23 @@ internal fun ImportCodeDialog(initial: String, onDismiss: () -> Unit, onImported
             TextButton(
                 enabled = decoded != null && !busy,
                 onClick = click@{
-                    val (w, cur) = decoded ?: return@click
+                    val (w0, cur) = decoded ?: return@click
+                    val ex = existing
+                    // Frissítésnél a meglévő azonosító, a saját értesítés-beállítás és a saját címkék maradnak
+                    val w = if (ex != null) w0.copy(id = ex.id, notify = ex.notify, sharedFrom = ex.sharedFrom) else w0
                     busy = true
                     AppScope.scope.launch {
                         val r = runCatching { Store.importWatches(listOf(w), cur) }
                         busy = false
                         if (r.isSuccess) {
-                            onImported("Új figyelés: ${w.routeTitle}")
+                            onImported(if (ex != null) "Frissítve: ${w.routeTitle}" else "Új figyelés: ${w.routeTitle}")
                             if (Store.settings.value.isReady) PriceChecker.checkOne(w.id)
                         } else {
                             error = "Nem sikerült: ${r.exceptionOrNull()?.message}"
                         }
                     }
                 },
-            ) { Text("Hozzáadás") }
+            ) { Text(if (existing != null) "Frissítés" else "Hozzáadás") }
         },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text("Mégse") } },
     )

@@ -11,13 +11,16 @@ android {
     defaultConfig {
         applicationId = "hu.repjegy.figyelo"
         minSdk = 28
-        targetSdk = 35
+        targetSdk = 36
         // versionName: a version.properties-ből (pl. 1.1.0) – ezt látja a felhasználó.
         // versionCode: a GitHub Actions futásszáma, mindig nő, így a frissítés a régi fölé települ.
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
         versionName = rootProject.file("version.properties").readLines()
             .first { it.startsWith("VERSION_NAME=") }
             .substringAfter("=").trim()
+        // Google Play-változat (gradle -Prefi.play=true :app:bundleRelease): nincs saját frissítő
+        val play = (project.findProperty("refi.play") as String?)?.toBoolean() ?: false
+        buildConfigField("boolean", "PLAY_STORE", play.toString())
     }
 
     signingConfigs {

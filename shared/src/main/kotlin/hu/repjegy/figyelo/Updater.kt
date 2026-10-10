@@ -35,7 +35,7 @@ object Updater {
      * Lekéri a legfrissebb éles kiadást (a teszt-buildek „prerelease”-ként nem számítanak).
      * A kiadás címkéje: v1.1.0-build-25. Hálózati hiba esetén csendben null.
      */
-    fun check(): Release? = runCatching {
+    fun check(): Release? = if (Platform.current.updatesViaStore) null else runCatching {
         val res = Http.request(
             "https://api.github.com/repos/$REPO/releases/latest",
             headers = mapOf("Accept" to "application/vnd.github+json"),

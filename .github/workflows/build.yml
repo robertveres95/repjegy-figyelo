@@ -159,6 +159,34 @@ jobs:
           "$BT/apksigner" lineage --in /tmp/dry.apk --print-certs | grep -c "Signer" | xargs -I{} echo "lánc tagjai: {}"
           echo "::notice::Kulcscsere-próba rendben"
 
+      # Google Play-változat (saját frissítő nélkül) App Bundle-ként; nem kerül a nyilvános kiadásba,
+      # csak a futás „Artifacts” részébe (innen tölthető fel a Play Console-ba)
+      - name: Play-változat (AAB)
+        shell: bash
+        env:
+          REFI_KEYSTORE_PASS: ${{ secrets.REFI_KEYSTORE_PASS }}
+        run: |
+          set -euo pipefail
+          KS="$RUNNER_TEMP/refi-release.jks"
+          if [ ! -s "$KS" ] || [ -z "${REFI_KEYSTORE_PASS:-}" ]; then
+            echo "::notice::Nincs aláíró kulcs – a Play-változat most kimarad"
+            exit 0
+          fi
+          gradle -Prefi.play=true :app:bundleRelease --no-daemon -q
+          cp app/build/outputs/bundle/release/app-release.aab REFI-play.aab
+          jarsigner -keystore "$KS" -storepass:env REFI_KEYSTORE_PASS -keypass:env REFI_KEYSTORE_PASS \
+            -sigalg SHA256withRSA -digestalg SHA-256 REFI-play.aab refi > /dev/null
+          jarsigner -verify REFI-play.aab | tail -1
+          echo "::notice::Play-változat kész (REFI-play.aab)"
+
+      - name: Play-változat átadása
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: play-aab
+          path: REFI-play.aab
+          if-no-files-found: ignore
+          retention-days: 30
+
       - name: Chrome-bővítmény csomagolása
         shell: bash
         run: |

@@ -10,8 +10,8 @@ function refiBelowTargetCount(data) {
     if (!best || !Number.isFinite(best.price) || !Number.isFinite(w.targetPrice)) return false;
     const bags = (w.bags || 0) > 0 || !!w.checkedBag;
     if ((bags && best.bagsIncluded === false) || best.partial) return false;
-    const last = new Date(w.outboundDate + 'T00:00:00');
-    last.setDate(last.getDate() + (w.flexDays || 0) + 1);
+    const last = new Date((w.weeklyUntil || w.outboundDate) + 'T00:00:00');
+    last.setDate(last.getDate() + (w.weeklyUntil ? 0 : (w.flexDays || 0)) + 1);
     if (!(last > now)) return false; // lejárt vagy hibás dátum
     return best.price <= w.targetPrice;
   }).length;

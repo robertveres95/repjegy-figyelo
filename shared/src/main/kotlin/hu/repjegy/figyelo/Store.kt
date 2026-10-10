@@ -299,6 +299,8 @@ object Store {
                     list[i] = if (old.searchKey() == w.searchKey()) w.copy(
                         lastPrice = old.lastPrice, lowestPrice = old.lowestPrice, lastChecked = old.lastChecked,
                         offers = old.offers, sourceStatus = old.sourceStatus, history = old.history,
+                        market = old.market,
+                        lastNotifiedPrice = if (old.targetPrice == w.targetPrice && old.notify == w.notify) old.lastNotifiedPrice else null,
                     ) else w
                     updated++
                 } else {
