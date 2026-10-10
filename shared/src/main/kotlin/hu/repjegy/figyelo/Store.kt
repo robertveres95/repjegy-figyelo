@@ -189,7 +189,7 @@ object Store {
                 cleared.copy(notify = false, lastError = currencyHint())
             }
         })
-        saveSettings(_settings.value.copy(currency = to))
+        updateSettings { it.copy(currency = to) }
         // Az átváltott célárak és az új pénznem minél előbb a többi eszközre is kerüljenek
         Sync.scheduleSoon()
     }
@@ -254,6 +254,17 @@ object Store {
             }
             Sync.scheduleSoon()
         }
+    }
+
+    /**
+     * A legfrissebb beállításokból számol és ment, ugyanazon zár alatt: így egy közben (szinkronból,
+     * kulcsvarázslóból, pénznemváltásból) érkező módosítás nem vész el. Csak tényleges változáskor ír.
+     */
+    @Synchronized
+    fun updateSettings(transform: (Settings) -> Settings) {
+        val before = _settings.value
+        val after = transform(before)
+        if (after != before) saveSettings(after)
     }
 
     @Synchronized

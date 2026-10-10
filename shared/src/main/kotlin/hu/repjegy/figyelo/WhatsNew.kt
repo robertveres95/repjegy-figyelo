@@ -11,13 +11,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -193,11 +196,18 @@ internal fun WhatsNewOverlay(items: List<Pair<String, List<String>>>, onClose: (
                 Text(tr("ÚJDONSÁGOK", "WHAT’S NEW", "NEUIGKEITEN"), style = MaterialTheme.typography.headlineMedium.glow(), color = Neon.Green)
                 items.forEach { (version, lines) ->
                     Text("REFI $version", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    val lineStyle = MaterialTheme.typography.bodyLarge
+                    // Az első sor magassága (a betűmérettel együtt nő), ehhez igazítjuk a pöttyöt
+                    val firstLine = with(LocalDensity.current) {
+                        (if (lineStyle.lineHeight.isSp) lineStyle.lineHeight else lineStyle.fontSize * 1.5f).toDp()
+                    }
                     lines.forEach { line ->
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            // Kis kiemelőszínű pötty, az első sor közepéhez igazítva
-                            Box(Modifier.padding(top = 9.dp).size(6.dp).background(Neon.Green, CircleShape))
-                            Text(line, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                            // Kis kiemelőszínű pötty, az első sor közepéhez igazítva (bármilyen betűméretnél)
+                            Box(Modifier.height(firstLine), contentAlignment = Alignment.Center) {
+                                Box(Modifier.size(6.dp).background(Neon.Green, CircleShape))
+                            }
+                            Text(line, style = lineStyle, modifier = Modifier.weight(1f))
                         }
                     }
                 }

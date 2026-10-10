@@ -47,7 +47,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.size
@@ -55,7 +57,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -739,8 +744,14 @@ private fun WatchCard(
 
             // ---- Ár: egyetlen fő szám
             Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.Bottom) {
-                Column(Modifier.weight(1f)) {
+            // A bal oszlop (az ár) a saját szélességét kapja, a jobb oszlop a maradékon osztozik –
+            // így a fő szám nagy betűméretnél sem törik több sorba
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column {
                     Text(tr("Legolcsóbb most", "Cheapest now", "Jetzt am günstigsten"), style = MaterialTheme.typography.labelMedium, color = Neon.TextDim)
                     // Az ár „pörögve” változik az új értékre
                     // Üres állapotból vagy pénznemváltás után nem „pörög fel” nulláról / a régi számról
@@ -755,6 +766,8 @@ private fun WatchCard(
                         style = if (belowTarget) MaterialTheme.typography.headlineMedium.glow(radius = 24f)
                         else MaterialTheme.typography.headlineMedium,
                         color = if (belowTarget) Neon.Mint else Neon.Text,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     if (belowTarget) {
                         Row(
@@ -770,7 +783,8 @@ private fun WatchCard(
                         }
                     }
                 }
-                Column(horizontalAlignment = Alignment.End) {
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f, fill = false), horizontalAlignment = Alignment.End) {
                     Text(
                         tr("Célár: ${formatPrice(w.targetPrice, currency)}", "Target price: ${formatPrice(w.targetPrice, currency)}", "Zielpreis: ${formatPrice(w.targetPrice, currency)}"),
                         style = MaterialTheme.typography.bodyMedium,
@@ -927,17 +941,20 @@ private fun WatchCard(
             androidx.compose.material3.HorizontalDivider(Modifier.padding(top = 8.dp), color = Neon.Line.copy(alpha = 0.6f))
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 val url = best?.url
-                if (url != null) {
-                    androidx.compose.material3.FilledTonalButton(
-                        onClick = { onOpen(url) },
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(tr("Ajánlat megnyitása", "Open offer", "Angebot öffnen"), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // A gomb a maradék helyen osztozik (szükség esetén a felirata rövidül), így az
+                // ikongombok mindig megtartják a 48 dp-s érintési méretüket
+                Box(Modifier.weight(1f)) {
+                    if (url != null) {
+                        androidx.compose.material3.FilledTonalButton(
+                            onClick = { onOpen(url) },
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(tr("Ajánlat megnyitása", "Open offer", "Angebot öffnen"), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
-                Spacer(Modifier.weight(1f))
                 if (isChecking) {
                     Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Neon.Green)
@@ -1209,7 +1226,8 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
                     Modifier
                         .fillMaxWidth()
                         .drawBehind { drawLine(Neon.Line, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1f) }
-                        .navigationBarsPadding()
+                        // A mentés-sáv (és a hibaüzenet) a billentyűzet fölött marad
+                        .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -1229,7 +1247,6 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -1365,6 +1382,7 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
                     airlines.trim().takeIf { it.isNotEmpty() }?.let { tr("csak: $it", "only: $it", "nur: $it") },
                 )
                 CollapsibleSection(
+                    id = "edit.filters",
                     title = tr("Szűrők", "Filters", "Filter"),
                     summary = if (filterParts.isEmpty()) tr("Nincs szűrő", "No filters", "Keine Filter") else filterParts.joinToString(" · "),
                 ) {
@@ -1444,33 +1462,30 @@ internal fun SettingsScreen(onDone: () -> Unit) {
     // tárolt, legfrissebb állapotból olvasnak, és csak a saját mezőjüket írják: így a szinkron vagy a
     // kulcsvarázsló közbeni módosításait sem írjuk felül.
     val stored by Store.settings.collectAsState()
-    fun update(change: (Settings) -> Settings) {
-        val before = Store.settings.value
-        val after = change(before)
-        if (after != before) Store.saveSettings(after)
-    }
+    fun update(change: (Settings) -> Settings) = Store.updateSettings(change)
 
-    // A kulcsmezők gépelés közben rövid szünet után mentődnek (és a képernyő elhagyásakor is).
+    // A kulcsmezők nem gépelés közben mentődnek (a félig beírt kulcs se menjen ki szinkronba), hanem
+    // amikor a mező elveszti a fókuszt, a billentyűzet „Kész” gombjára, és a képernyő elhagyásakor.
     // Csak akkor írjuk, ha itt módosította: a máshonnan (szinkron, varázsló) érkező kulcsot nem írjuk vissza.
     var apiKey by remember { mutableStateOf(stored.apiKey) }
     var ignavKey by remember { mutableStateOf(stored.ignavKey) }
     var apiKeyEdited by remember { mutableStateOf(false) }
     var ignavKeyEdited by remember { mutableStateOf(false) }
     fun flushKeys() {
-        val cur = Store.settings.value
-        val next = cur.copy(
-            apiKey = if (apiKeyEdited) apiKey.trim() else cur.apiKey,
-            ignavKey = if (ignavKeyEdited) ignavKey.trim() else cur.ignavKey,
-        )
-        if (next != cur) Store.saveSettings(next)
+        if (!apiKeyEdited && !ignavKeyEdited) return
+        val serp = apiKeyEdited
+        val ignav = ignavKeyEdited
+        val newApiKey = apiKey.trim()
+        val newIgnavKey = ignavKey.trim()
+        Store.updateSettings { cur ->
+            cur.copy(
+                apiKey = if (serp) newApiKey else cur.apiKey,
+                ignavKey = if (ignav) newIgnavKey else cur.ignavKey,
+            )
+        }
         // Mentve: innentől a tárolt (pl. szinkronból frissülő) kulcsot követi a mező
         apiKeyEdited = false
         ignavKeyEdited = false
-    }
-    LaunchedEffect(apiKey, ignavKey) {
-        if (!apiKeyEdited && !ignavKeyEdited) return@LaunchedEffect
-        kotlinx.coroutines.delay(600)
-        flushKeys()
     }
     // Ha nem itt szerkeszti, a mező kövesse a tárolt kulcsot (pl. a másik eszközről szinkronizált)
     LaunchedEffect(stored.apiKey) { if (!apiKeyEdited) apiKey = stored.apiKey }
@@ -1574,8 +1589,11 @@ internal fun SettingsScreen(onDone: () -> Unit) {
                 }
                 val freeOn = listOf(stored.googleOn, stored.ryanairOn, stored.wizzOn).count { it }
                 CollapsibleSection(
+                    id = "settings.freeSources",
                     title = tr("Kulcs nélkül", "No key needed", "Ohne Schlüssel"),
                     summary = tr("$freeOn / 3 bekapcsolva", "$freeOn of 3 on", "$freeOn von 3 aktiv"),
+                    // Ha nincs használható forrás, a kapcsolók rögtön látszanak (nem kell keresgélni)
+                    initiallyOpen = !stored.isReady,
                 ) {
                     Text(
                         tr(
@@ -1599,8 +1617,10 @@ internal fun SettingsScreen(onDone: () -> Unit) {
 
                 val keyedOn = listOf(view.useSerpApi, view.useIgnav).count { it }
                 CollapsibleSection(
+                    id = "settings.keyedSources",
                     title = tr("Még több ár – ingyenes kulccsal", "More prices – with a free key", "Mehr Preise – mit kostenlosem Schlüssel"),
                     summary = tr("$keyedOn / 2 bekapcsolva", "$keyedOn of 2 on", "$keyedOn von 2 aktiv"),
+                    initiallyOpen = !stored.isReady,
                 ) {
                     Text(
                         tr(
@@ -1620,14 +1640,14 @@ internal fun SettingsScreen(onDone: () -> Unit) {
                             Text(if (apiKey.isBlank()) tr("Kulcs szerzése lépésről lépésre", "Get a key step by step", "Schlüssel Schritt für Schritt holen") else tr("Új kulcs beállítása (varázsló)", "Set up a new key (wizard)", "Neuen Schlüssel einrichten (Assistent)"))
                         }
                     }
-                    if (stored.serpOn) SecretField(tr("SerpApi API-kulcs", "SerpApi API key", "SerpApi-API-Schlüssel"), apiKey) { apiKey = it; apiKeyEdited = true }
+                    if (stored.serpOn) SecretField(tr("SerpApi API-kulcs", "SerpApi API key", "SerpApi-API-Schlüssel"), apiKey, onFocusLost = { flushKeys() }) { apiKey = it; apiKeyEdited = true }
                     SwitchRow(tr("Ignav (saját adatforrás · 1000 ingyenes)", "Ignav (own data source · 1000 free)", "Ignav (eigene Datenquelle · 1000 kostenlos)"), stored.ignavOn) { on -> update { it.copy(ignavOn = on) } }
                     if (stored.ignavOn || ignavKey.isBlank()) {
                         OutlinedButton(onClick = { keyGuide = KeyProvider.IGNAV }) {
                             Text(if (ignavKey.isBlank()) tr("Kulcs szerzése lépésről lépésre", "Get a key step by step", "Schlüssel Schritt für Schritt holen") else tr("Új kulcs beállítása (varázsló)", "Set up a new key (wizard)", "Neuen Schlüssel einrichten (Assistent)"))
                         }
                     }
-                    if (stored.ignavOn) SecretField(tr("Ignav API-kulcs", "Ignav API key", "Ignav-API-Schlüssel"), ignavKey) { ignavKey = it; ignavKeyEdited = true }
+                    if (stored.ignavOn) SecretField(tr("Ignav API-kulcs", "Ignav API key", "Ignav-API-Schlüssel"), ignavKey, onFocusLost = { flushKeys() }) { ignavKey = it; ignavKeyEdited = true }
                     if (stored.serpOn || stored.ignavOn) {
                         Text(
                             tr("A kulcsok a Google-fiókod rejtett REFI-területén keresztül a többi eszközödre is átkerülnek.", "The keys are copied to your other devices through a hidden REFI area in your Google account.", "Die Schlüssel werden über einen versteckten REFI-Bereich in deinem Google-Konto auf deine anderen Geräte übertragen."),
@@ -1774,14 +1794,19 @@ private fun SettingsCard(content: @Composable androidx.compose.foundation.layout
     )
 }
 
-/** Lenyitható alcsoport (alapból csukva): fejléc egysoros összefoglalóval és nyíllal. */
+/**
+ * Lenyitható alcsoport (alapból csukva, ha [initiallyOpen] nem kéri másképp): fejléc egysoros
+ * összefoglalóval és nyíllal. Az [id] stabil (nem fordított) kulcs: nyelvváltáskor sem csukódik be.
+ */
 @Composable
 private fun CollapsibleSection(
+    id: String,
     title: String,
     summary: String,
+    initiallyOpen: Boolean = false,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) {
-    var open by androidx.compose.runtime.saveable.rememberSaveable(title) { mutableStateOf(false) }
+    var open by androidx.compose.runtime.saveable.rememberSaveable(id) { mutableStateOf(initiallyOpen) }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
             Modifier
@@ -1811,19 +1836,33 @@ private fun CollapsibleSection(
     }
 }
 
+/** Titkos (kulcs) mező. Az [onFocusLost] a fókusz elvesztésekor és a billentyűzet „Kész” gombjára fut. */
 @Composable
-private fun SecretField(label: String, value: String, onChange: (String) -> Unit) {
+private fun SecretField(label: String, value: String, onFocusLost: () -> Unit = {}, onChange: (String) -> Unit) {
     var show by remember { mutableStateOf(false) }
+    var focused by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
     OutlinedTextField(
         value = value,
         onValueChange = { onChange(it.trim()) },
         label = { Text(label) },
         singleLine = true,
         visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = {
+            onFocusLost()
+            focusManager.clearFocus()
+        }),
         trailingIcon = {
             TextButton(onClick = { show = !show }) { Text(if (show) tr("Elrejt", "Hide", "Verbergen") else tr("Mutat", "Show", "Anzeigen")) }
         },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { state ->
+                // (az első, kezdeti „nincs fókuszban” jelzés nem fókuszvesztés)
+                if (focused && !state.isFocused) onFocusLost()
+                focused = state.isFocused
+            },
     )
 }
 

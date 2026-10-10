@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -87,16 +88,27 @@ internal fun PriceChart(w: Watch, currency: String, modifier: Modifier = Modifie
     val draw = remember(data.all.size) { Animatable(0f) }
     LaunchedEffect(data.all.size) { draw.animateTo(1f, tween(1200, easing = FastOutSlowInEasing)) }
 
+    val small = TextStyle(fontSize = 11.sp, color = labelColor)
+    val strong = TextStyle(fontSize = 11.sp, color = textColor, fontWeight = FontWeight.SemiBold)
+    val targetStyle = TextStyle(fontSize = 11.sp, color = targetColor, fontWeight = FontWeight.SemiBold)
+    // A feliratok valódi (betűmérettől függő) magassága: ebből jön a felső/alsó sáv és a grafikon
+    // magassága, így 130–200%-os betűméretnél sem lóg ki és nem csúszik egymásra semmi
+    val density = LocalDensity.current
+    val smallH = measurer.measure("0", small).size.height
+    val strongH = measurer.measure("0", strong).size.height
+    val chartHeight = 130.dp + with(density) { (smallH * 3).toDp() }
+
     Column(modifier) {
-        Canvas(Modifier.fillMaxWidth().height(170.dp)) {
+        Canvas(Modifier.fillMaxWidth().height(chartHeight)) {
             if (size.width < 40f || size.height < 40f) return@Canvas // első elrendezés / animáció közben
-            val small = TextStyle(fontSize = 11.sp, color = labelColor)
-            val strong = TextStyle(fontSize = 11.sp, color = textColor, fontWeight = FontWeight.SemiBold)
-            val targetStyle = TextStyle(fontSize = 11.sp, color = targetColor, fontWeight = FontWeight.SemiBold)
             val chipBg = chipColor.copy(alpha = 0.88f)
-            val bottomBand = 20.dp.toPx()          // dátumok helye alul
-            val topPad = 26.dp.toPx()              // a legmagasabb ár felirata fölött
-            val minLabelPad = 26.dp.toPx()         // a legalacsonyabb ár felirata alatt (ne lógjon a dátumokra)
+            val chipPadH = 5.dp.toPx()
+            val chipPadV = 2.dp.toPx()
+            val gap = 5.dp.toPx()
+            val chipH = strongH + chipPadV * 2      // egy árfelirat-lapka magassága
+            val bottomBand = smallH + 6.dp.toPx()    // dátumok helye alul (4 dp térköz + a szöveg + 2 dp)
+            val topPad = gap + chipH + 2.dp.toPx()   // a legmagasabb ár felirata fölött
+            val minLabelPad = gap + chipH + 2.dp.toPx() // a legalacsonyabb ár felirata alatt (ne lógjon a dátumokra)
             val plotBottom = size.height - bottomBand // a feliratok eddig érhetnek le (alatta a dátumok)
             val chartH = plotBottom - topPad - minLabelPad
             val pts = data.all
@@ -147,9 +159,6 @@ internal fun PriceChart(w: Watch, currency: String, modifier: Modifier = Modifie
             // Feliratok: kis, lekerekített háttérlapkán, hogy a vonalak ne fussanak át a szövegen.
             // A már elhelyezett lapkákat megjegyezzük, hogy ne kerüljenek egymásra.
             val placed = mutableListOf<Rect>()
-            val chipPadH = 5.dp.toPx()
-            val chipPadV = 2.dp.toPx()
-            val gap = 5.dp.toPx()
 
             // A legmagasabb és a legalacsonyabb pont, az árukkal
             val maxPt = pts.maxBy { it.price }
