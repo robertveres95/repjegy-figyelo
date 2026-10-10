@@ -115,6 +115,17 @@ class ScreenshotTest {
             HomeScreen(onAdd = {}, onEdit = {}, onSettings = {})
             ImportCodeDialog(initial = code, onDismiss = {}, onImported = {})
         }
+        // Angol felület (a nyelvválasztás után)
+        Lang.set(Lang.EN_CODE)
+        try {
+            shot("11-angol-fooldal") { HomeScreen(onAdd = {}, onEdit = {}, onSettings = {}) }
+            shot("12-angol-szerkesztes", heightDp = 2300) { EditScreen(id = "s1", onDone = {}) }
+            shot("13-angol-beallitasok", heightDp = 2100) { SettingsScreen(onDone = {}) }
+            shot("14-angol-felfedezes", heightDp = 1400) { DiscoverScreen(onBack = {}, onPick = {}, initialResults = results) }
+            File(out, "megosztott-uzenet-angol.txt").writeText(ShareCode.message(london, "HUF"))
+        } finally {
+            Lang.set(Lang.HU_CODE)
+        }
         File(out, "megosztott-uzenet.txt").writeText(code)
         File(out, "hibak.txt").writeText(failures.joinToString("\n").ifEmpty { "nincs" })
         if (failures.isNotEmpty()) error("Képernyőkép-hibák:\n" + failures.joinToString("\n"))
