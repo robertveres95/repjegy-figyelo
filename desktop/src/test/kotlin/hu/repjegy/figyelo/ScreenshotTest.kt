@@ -123,6 +123,10 @@ class ScreenshotTest {
             shot("13-angol-beallitasok", heightDp = 2100) { SettingsScreen(onDone = {}) }
             shot("14-angol-felfedezes", heightDp = 1400) { DiscoverScreen(onBack = {}, onPick = {}, initialResults = results) }
             File(out, "megosztott-uzenet-angol.txt").writeText(ShareCode.message(london, "HUF"))
+            Lang.set(Lang.DE_CODE)
+            shot("15-nemet-fooldal") { HomeScreen(onAdd = {}, onEdit = {}, onSettings = {}) }
+            shot("16-nemet-felfedezes", heightDp = 1400) { DiscoverScreen(onBack = {}, onPick = {}, initialResults = results) }
+            shot("17-nemet-ujdonsagok") { WhatsNewOverlay(WhatsNew.notes.take(1)) {} }
         } finally {
             Lang.set(Lang.HU_CODE)
         }

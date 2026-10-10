@@ -145,7 +145,7 @@ object Store {
     ): Pair<List<Watch>, Map<String, Long>> {
         // Közben pénznemet váltott: a felhőből jött (a régi pénznemre átváltott) árakat most nem keverjük be
         if (expectedCurrency != null && settings.value.currency != expectedCurrency) {
-            throw java.io.IOException(tr("pénznemváltás közben – a következő szinkronizálás rendezi", "currency is being changed – the next sync will sort it out"))
+            throw java.io.IOException(tr("pénznemváltás közben – a következő szinkronizálás rendezi", "currency is being changed – the next sync will sort it out", "die Währung wird gerade geändert – die nächste Synchronisierung bringt das in Ordnung"))
         }
         val merged = Sync.merge(_watches.value, tombstones(), remote, remoteTomb, dropLocalOnlyBefore)
         if (merged.first != _watches.value) persist(merged.first)

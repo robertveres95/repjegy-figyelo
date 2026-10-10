@@ -38,7 +38,7 @@ private fun trimTime(raw: String?): String? =
  */
 private fun lowCostNote(w: Watch): String? {
     val parts = mutableListOf<String>()
-    if (w.seatedPassengers > 1) parts += trs("becsült: ${w.seatedPassengers} × egy fő ára", "estimated: ${w.seatedPassengers} × the price for one")
+    if (w.seatedPassengers > 1) parts += trs("becsült: ${w.seatedPassengers} × egy fő ára", "estimated: ${w.seatedPassengers} × the price for one", "geschätzt: ${w.seatedPassengers} × Preis für eine Person")
     return parts.takeIf { it.isNotEmpty() }?.joinToString(", ")
 }
 
@@ -52,7 +52,7 @@ object Ryanair {
     const val NAME = "Ryanair"
 
     fun search(w: Watch, currency: String, maxPairs: Int = MAX_PAIRS): List<Offer> {
-        if (w.travelClass != 1) throw SkipSourceException(trs("csak turista osztály", "economy class only"))
+        if (w.travelClass != 1) throw SkipSourceException(trs("csak turista osztály", "economy class only", "nur Economy Class"))
         return searchPairs(w, maxPairs) { o, d -> searchPair(w, o, d, currency) }
     }
 
@@ -80,13 +80,13 @@ object Ryanair {
             "https://services-api.ryanair.com/farfnd/v4/$endpoint?$query",
             headers = mapOf("Accept" to "application/json"),
         )
-        if (res.code == 429 || res.code == 403) throw FatalSourceException(trs("A Ryanair ideiglenesen blokkolta a lekérdezést", "Ryanair has temporarily blocked the search"))
+        if (res.code == 429 || res.code == 403) throw FatalSourceException(trs("A Ryanair ideiglenesen blokkolta a lekérdezést", "Ryanair has temporarily blocked the search", "Ryanair hat die Suche vorübergehend blockiert"))
         if (res.code == 404) return emptyList()
         if (res.code !in 200..299) throw IOException("HTTP ${res.code}")
 
         val root = JSONObject(res.body)
         // Hiányzó „fares” mező formátumváltozást jelez – ne „nincs járat” legyen belőle
-        val fares = root.optJSONArray("fares") ?: throw IOException(trs("Váratlan Ryanair-válasz (változhatott a formátum)", "Unexpected Ryanair response (the format may have changed)"))
+        val fares = root.optJSONArray("fares") ?: throw IOException(trs("Váratlan Ryanair-válasz (változhatott a formátum)", "Unexpected Ryanair response (the format may have changed)", "Unerwartete Ryanair-Antwort (das Format hat sich evtl. geändert)"))
         val offers = mutableListOf<Offer>()
         for (i in 0 until fares.length()) {
             val fare = fares.optJSONObject(i) ?: continue
@@ -146,7 +146,7 @@ object WizzAir {
     private var sessionAt = 0L
 
     fun search(w: Watch, currency: String, maxPairs: Int = MAX_PAIRS): List<Offer> {
-        if (w.travelClass != 1) throw SkipSourceException(trs("csak turista osztály", "economy class only"))
+        if (w.travelClass != 1) throw SkipSourceException(trs("csak turista osztály", "economy class only", "nur Economy Class"))
         return searchPairs(w, maxPairs) { o, d -> searchPair(w, o, d, currency, retry = true) }
     }
 
@@ -205,7 +205,7 @@ object WizzAir {
 
         val base = base(forceNew = !retry)
         val res = Http.request("$base/search/timetableV2", method = "POST", headers = apiHeaders(), body = body.toString())
-        if (res.code == 429) throw FatalSourceException(trs("a Wizz Air bot-védelme blokkolta", "blocked by Wizz Air's bot protection"))
+        if (res.code == 429) throw FatalSourceException(trs("a Wizz Air bot-védelme blokkolta", "blocked by Wizz Air's bot protection", "vom Bot-Schutz von Wizz Air blockiert"))
         if (res.code == 400 || res.code == 401 || res.code == 403) {
             // Nincs ilyen útvonal: ezt nem érdemes új munkamenettel újrapróbálni
             if (res.code == 400) lastRejection = "$origin→$destination ${w.outboundDate}: ${res.body.take(400)}"
@@ -217,20 +217,20 @@ object WizzAir {
                 // Minden más elutasítás (pl. utasszám, dátum, megváltozott kérés) hiba, nem „nincs járat”.
                 if (codes.isNotEmpty() && codes.all { it == "InvalidMarket" }) return emptyList()
                 throw IOException(
-                    trs("a Wizz Air elutasította a kérést", "Wizz Air rejected the request") +
-                        " (${codes.joinToString().ifEmpty { trs("ismeretlen ok", "unknown reason") }.take(80)})",
+                    trs("a Wizz Air elutasította a kérést", "Wizz Air rejected the request", "Wizz Air hat die Anfrage abgelehnt") +
+                        " (${codes.joinToString().ifEmpty { trs("ismeretlen ok", "unknown reason", "unbekannter Grund") }.take(80)})",
                 )
             }
             if (retry) return searchPair(w, origin, destination, currency, retry = false)
             // 401/403 = letiltás (a többi párt sem érdemes kérdezni); egy furcsa 400 csak ennél a párnál hiba
-            if (res.code == 400) throw IOException(trs("a Wizz Air elutasította a kérést (HTTP 400)", "Wizz Air rejected the request (HTTP 400)"))
-            throw FatalSourceException(trs("a Wizz Air elutasította a kérést (HTTP ${res.code})", "Wizz Air rejected the request (HTTP ${res.code})"))
+            if (res.code == 400) throw IOException(trs("a Wizz Air elutasította a kérést (HTTP 400)", "Wizz Air rejected the request (HTTP 400)", "Wizz Air hat die Anfrage abgelehnt (HTTP 400)"))
+            throw FatalSourceException(trs("a Wizz Air elutasította a kérést (HTTP ${res.code})", "Wizz Air rejected the request (HTTP ${res.code})", "Wizz Air hat die Anfrage abgelehnt (HTTP ${res.code})"))
         }
         if (res.code !in 200..299) throw IOException("HTTP ${res.code}")
 
         val json = JSONObject(res.body)
         if (!json.has("outboundFlights") && !json.has("returnFlights")) {
-            throw IOException(trs("Váratlan Wizz Air-válasz (változhatott a formátum)", "Unexpected Wizz Air response (the format may have changed)"))
+            throw IOException(trs("Váratlan Wizz Air-válasz (változhatott a formátum)", "Unexpected Wizz Air response (the format may have changed)", "Unerwartete Wizz-Air-Antwort (das Format hat sich evtl. geändert)"))
         }
         val outbound = cheapest(json.optJSONArray("outboundFlights"), w.outboundDate, w.depFrom, w.depTo) ?: return emptyList()
         val inbound = w.returnDate?.let { cheapest(json.optJSONArray("returnFlights"), it, null, null) ?: return emptyList() }
@@ -238,7 +238,7 @@ object WizzAir {
         // Ismeretlen pénznem (pl. ALL, MKD) vagy elérhetetlen árfolyam: ez a pár hibás, a többi megmarad
         val perPerson = Rates.convert(outbound.amount, outbound.currency, currency) +
             (inbound?.let { Rates.convert(it.amount, it.currency, currency) } ?: 0.0)
-        if (!perPerson.isFinite() || perPerson <= 0) throw IOException(trs("érvénytelen Wizz-ár", "invalid Wizz price"))
+        if (!perPerson.isFinite() || perPerson <= 0) throw IOException(trs("érvénytelen Wizz-ár", "invalid Wizz price", "ungültiger Wizz-Preis"))
         return listOf(
             Fees.apply(Offer(
                 price = ceil(perPerson * w.seatedPassengers).toInt(),
@@ -367,7 +367,7 @@ object WizzAir {
             }
         }
         // Időablaknál ismeretlen indulási idő: ez nem „nincs járat”, hanem hiányzó adat
-        if (best == null && unknownTime) throw IOException(trs("a Wizz Air nem adta meg az indulás idejét", "Wizz Air didn't give the departure time"))
+        if (best == null && unknownTime) throw IOException(trs("a Wizz Air nem adta meg az indulás idejét", "Wizz Air didn't give the departure time", "Wizz Air hat die Abflugzeit nicht angegeben"))
         return best
     }
 }

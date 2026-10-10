@@ -38,6 +38,7 @@ interface PlatformApi {
         get() = tr(
             "Ilyenkor a riasztás hang és rezgés nélkül érkezik; reggel ott vár az értesítések között.",
             "During these hours alerts arrive without sound or vibration; they'll be waiting in your notifications in the morning.",
+            "In dieser Zeit kommen Benachrichtigungen ohne Ton und Vibration; am Morgen warten sie bei deinen Benachrichtigungen.",
         )
 
     fun openUrl(url: String)

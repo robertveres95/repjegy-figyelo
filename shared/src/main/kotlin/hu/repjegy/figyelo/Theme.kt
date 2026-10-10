@@ -149,10 +149,10 @@ const val THEME_EYE = "eye"
 
 val THEMES: List<Pair<String, String>>
     get() = listOf(
-        THEME_AUTO to tr("Automatikus (rendszer szerint)", "Automatic (follow system)"),
-        THEME_DAY to tr("Nappali", "Day"),
-        THEME_NIGHT to tr("Éjszakai (kék)", "Night (blue)"),
-        THEME_EYE to tr("Szemkímélő", "Eye comfort"),
+        THEME_AUTO to tr("Automatikus (rendszer szerint)", "Automatic (follow system)", "Automatisch (wie System)"),
+        THEME_DAY to tr("Nappali", "Day", "Tag"),
+        THEME_NIGHT to tr("Éjszakai (kék)", "Night (blue)", "Nacht (blau)"),
+        THEME_EYE to tr("Szemkímélő", "Eye comfort", "Augenschonend"),
     )
 
 fun paletteFor(mode: String, systemDark: Boolean): AppPalette = when (mode) {
@@ -404,7 +404,7 @@ fun BellToggle(on: Boolean, onToggle: () -> Unit) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
                 Icons.Filled.Notifications,
-                contentDescription = if (on) tr("Értesítés bekapcsolva", "Notifications on") else tr("Értesítés kikapcsolva", "Notifications off"),
+                contentDescription = if (on) tr("Értesítés bekapcsolva", "Notifications on", "Benachrichtigungen an") else tr("Értesítés kikapcsolva", "Notifications off", "Benachrichtigungen aus"),
                 tint = tint,
                 modifier = Modifier.size(18.dp).rotate(shake.value),
             )
@@ -423,7 +423,7 @@ fun BellToggle(on: Boolean, onToggle: () -> Unit) {
         }
         Spacer(Modifier.width(6.dp))
         Text(
-            if (on) tr("BE", "ON") else tr("KI", "OFF"),
+            if (on) tr("BE", "ON", "AN") else tr("KI", "OFF", "AUS"),
             color = tint,
             style = MaterialTheme.typography.labelMedium.copy(fontFamily = AppFont, fontWeight = FontWeight.Bold),
             fontSize = 12.sp,

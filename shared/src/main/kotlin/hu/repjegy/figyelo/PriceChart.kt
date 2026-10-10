@@ -34,7 +34,14 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-private val chartDay get() = DateTimeFormatter.ofPattern(if (Lang.en) "d MMM" else "MMM d.", Lang.locale)
+private val chartDay get() = DateTimeFormatter.ofPattern(
+    when (Lang.code) {
+        Lang.HU_CODE -> "MMM d."
+        Lang.DE_CODE -> "d. MMM"
+        else -> "d MMM"
+    },
+    Lang.locale,
+)
 private const val DAY_MS = 24 * 3_600_000L
 
 /** Mennyi Google-előzményt mutatunk a saját mérések előtt. */
@@ -104,7 +111,7 @@ internal fun PriceChart(w: Watch, currency: String, modifier: Modifier = Modifie
             val ty = y(data.target)
             drawLine(targetColor, Offset(0f, ty), Offset(size.width, ty), 1.5.dp.toPx(),
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 10f)))
-            label(measurer, tr("célár ${formatPrice(data.target, currency)}", "target ${formatPrice(data.target, currency)}"), TextStyle(fontSize = 11.sp, color = targetColor),
+            label(measurer, tr("célár ${formatPrice(data.target, currency)}", "target ${formatPrice(data.target, currency)}", "Zielpreis ${formatPrice(data.target, currency)}"), TextStyle(fontSize = 11.sp, color = targetColor),
                 Offset(4.dp.toPx(), ty), above = ty > topPad + chartH / 2)
 
             // A Google-előzmény és a saját mérések határa
@@ -167,8 +174,8 @@ internal fun PriceChart(w: Watch, currency: String, modifier: Modifier = Modifie
         }
         // Jelmagyarázat
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (data.market.isNotEmpty()) LegendItem(marketColor, tr("Google árelőzmény", "Google price history"))
-            LegendItem(ownColor, tr("REFI mérései", "REFI checks"))
+            if (data.market.isNotEmpty()) LegendItem(marketColor, tr("Google árelőzmény", "Google price history", "Google-Preisverlauf"))
+            LegendItem(ownColor, tr("REFI mérései", "REFI checks", "REFI-Prüfungen"))
         }
         w.market?.takeIf { !w.wantsBags }?.let { m ->
             if (m.typicalLow != null && m.typicalHigh != null) {
@@ -176,6 +183,7 @@ internal fun PriceChart(w: Watch, currency: String, modifier: Modifier = Modifie
                     tr(
                         "A Google szerint ezen az úton a szokásos ár: ${formatPrice(m.typicalLow, currency)} – ${formatPrice(m.typicalHigh, currency)}",
                         "Google says the usual price for this trip is ${formatPrice(m.typicalLow, currency)} – ${formatPrice(m.typicalHigh, currency)}",
+                        "Laut Google liegt der übliche Preis für diese Reise bei ${formatPrice(m.typicalLow, currency)} – ${formatPrice(m.typicalHigh, currency)}",
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

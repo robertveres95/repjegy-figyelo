@@ -1,8 +1,11 @@
 'use strict';
-// Nyelv: magyar böngészőben magyar, máshol angol (a popup, a demó és a háttér is ezt használja)
-const REFI_HU = typeof navigator !== 'undefined' && (navigator.language || '').toLowerCase().startsWith('hu');
-/** Szöveg a böngésző nyelvén. */
-function t(hu, en) { return REFI_HU ? hu : en; }
+// Nyelv: magyar böngészőben magyar, német böngészőben német, máshol angol (a popup, a demó és a háttér is ezt használja)
+const REFI_LANG = (() => {
+  const l = (typeof navigator !== 'undefined' && navigator.language || '').toLowerCase();
+  return l.startsWith('hu') ? 'hu' : l.startsWith('de') ? 'de' : 'en';
+})();
+/** Szöveg a böngésző nyelvén (német hiányában angolul). */
+function t(hu, en, de) { return REFI_LANG === 'hu' ? hu : REFI_LANG === 'de' ? (de ?? en) : en; }
 
 // Jelvény a bővítmény ikonján: hány figyelés ára van most a célár alatt (a REFI app szabálya
 // szerint: poggyásszal csak a poggyászdíjat is tartalmazó, nem hiányos ár számít).
@@ -45,8 +48,9 @@ async function refiSetBadge(data) {
     await chrome.action.setBadgeText({ text: n > 0 ? String(n) : '' });
     await chrome.action.setTitle({
       title: n > 0
-        ? t(`REFI – ${n} figyelés célár alatt!`, n === 1 ? 'REFI – 1 watch below target price!' : `REFI – ${n} watches below target price!`)
-        : t('REFI – figyelt repjegyek', 'REFI – watched flights'),
+        ? t(`REFI – ${n} figyelés célár alatt!`, n === 1 ? 'REFI – 1 watch below target price!' : `REFI – ${n} watches below target price!`,
+          n === 1 ? 'REFI – 1 Beobachtung unter dem Zielpreis!' : `REFI – ${n} Beobachtungen unter dem Zielpreis!`)
+        : t('REFI – figyelt repjegyek', 'REFI – watched flights', 'REFI – beobachtete Flüge'),
     });
   } catch { /* a jelvény nem létfontosságú */ }
 }

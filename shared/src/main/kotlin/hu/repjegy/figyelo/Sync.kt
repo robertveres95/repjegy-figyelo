@@ -60,7 +60,7 @@ object Sync {
         try {
             val token = runCatching { Platform.current.googleAccessToken(interactive = true) }.getOrNull()
             if (token == null) {
-                state.update { it.copy(error = tr("A bejelentkezés nem sikerült vagy megszakadt.", "Sign-in failed or was cancelled.")) }
+                state.update { it.copy(error = tr("A bejelentkezés nem sikerült vagy megszakadt.", "Sign-in failed or was cancelled.", "Die Anmeldung ist fehlgeschlagen oder wurde abgebrochen.")) }
                 return false
             }
             val email = runCatching { accountEmail(token) }.getOrNull()
@@ -115,7 +115,7 @@ object Sync {
                 // Egy újabb módosítás miatt újraindul – ez nem hiba
                 throw e
             } catch (e: Exception) {
-                state.update { it.copy(error = tr("Szinkronizálási hiba: ${e.message?.take(120)}", "Sync error: ${e.message?.take(120)}")) }
+                state.update { it.copy(error = tr("Szinkronizálási hiba: ${e.message?.take(120)}", "Sync error: ${e.message?.take(120)}", "Synchronisierungsfehler: ${e.message?.take(120)}")) }
                 false
             } finally {
                 state.update { it.copy(running = false) }
@@ -124,7 +124,7 @@ object Sync {
     }
 
     /** A felhőben lévő fájl közben megváltozott (egy másik eszköz épp feltöltött): újrakezdjük. */
-    private class ConflictException : IOException(tr("a másik eszköz épp szinkronizált – újrapróbálom", "another device was just syncing – trying again"))
+    private class ConflictException : IOException(tr("a másik eszköz épp szinkronizált – újrapróbálom", "another device was just syncing – trying again", "ein anderes Gerät hat gerade synchronisiert – neuer Versuch"))
 
     private suspend fun syncOnce() {
         // Ha két eszköz egyszerre tölt fel, a későbbi „ütközést” kap: újra letölti, összefésüli, feltölti
@@ -141,7 +141,7 @@ object Sync {
 
     private suspend fun syncAttempt(useEtag: Boolean) {
         val token = Platform.current.googleAccessToken(interactive = false)
-            ?: throw IOException(tr("Jelentkezz be újra a Google-fiókkal (Beállítások)", "Sign in again with your Google account (Settings)"))
+            ?: throw IOException(tr("Jelentkezz be újra a Google-fiókkal (Beállítások)", "Sign in again with your Google account (Settings)", "Melde dich erneut mit deinem Google-Konto an (Einstellungen)"))
         val auth = mapOf("Authorization" to "Bearer $token")
 
         // 1. Meglévő fájl keresése a rejtett mappában
@@ -172,6 +172,7 @@ object Sync {
                     tr(
                         "a felhőben lévő adat nem olvasható – frissítsd a REFI-t a legújabb verzióra",
                         "the data in the cloud can't be read – update REFI to the latest version",
+                        "die Daten in der Cloud können nicht gelesen werden – aktualisiere REFI auf die neueste Version",
                     ),
                 )
         }
@@ -183,6 +184,7 @@ object Sync {
                     tr(
                         "az árfolyam most nem érhető el (a két eszköz pénzneme eltér) – később újrapróbálja",
                         "exchange rates aren't available right now (the two devices use different currencies) – will try again later",
+                        "die Wechselkurse sind gerade nicht verfügbar (die beiden Geräte nutzen verschiedene Währungen) – neuer Versuch später",
                     ),
                 )
             }
@@ -199,6 +201,7 @@ object Sync {
                 tr(
                     "${remote.skipped} figyelés a felhőben nem olvasható – frissítsd a REFI-t a legújabb verzióra",
                     "${remote.skipped} ${if (remote.skipped == 1) "watch" else "watches"} in the cloud can't be read – update REFI to the latest version",
+                    "${remote.skipped} ${if (remote.skipped == 1) "Beobachtung" else "Beobachtungen"} in der Cloud ${if (remote.skipped == 1) "kann" else "können"} nicht gelesen werden – aktualisiere REFI auf die neueste Version",
                 ),
             )
         }
@@ -241,7 +244,7 @@ object Sync {
         }
         if (res.code == 412) throw ConflictException()
         check401(res.code, res.body)
-        if (res.code !in 200..299) throw IOException(tr("Drive feltöltés HTTP ${res.code}", "Drive upload HTTP ${res.code}"))
+        if (res.code !in 200..299) throw IOException(tr("Drive feltöltés HTTP ${res.code}", "Drive upload HTTP ${res.code}", "Drive-Upload HTTP ${res.code}"))
     }
 
     private fun check401(code: Int, body: String = "") {
@@ -249,9 +252,9 @@ object Sync {
         val authProblem = code == 401 || (code == 403 && (body.contains("insufficientPermissions") || body.contains("authError")))
         if (authProblem) {
             runCatching { Platform.current.googleInvalidateToken() }
-            throw IOException(tr("A Google-hozzáférés lejárt – jelentkezz be újra (Beállítások)", "Google access has expired – sign in again (Settings)"))
+            throw IOException(tr("A Google-hozzáférés lejárt – jelentkezz be újra (Beállítások)", "Google access has expired – sign in again (Settings)", "Der Google-Zugriff ist abgelaufen – melde dich erneut an (Einstellungen)"))
         }
-        if (code == 403 || code == 429) throw IOException(tr("a Google ideiglenesen korlátozta a kéréseket – később újrapróbálja", "Google is temporarily limiting requests – will try again later"))
+        if (code == 403 || code == 429) throw IOException(tr("a Google ideiglenesen korlátozta a kéréseket – később újrapróbálja", "Google is temporarily limiting requests – will try again later", "Google begrenzt die Anfragen vorübergehend – neuer Versuch später"))
     }
 
     private fun accountEmail(token: String): String? {

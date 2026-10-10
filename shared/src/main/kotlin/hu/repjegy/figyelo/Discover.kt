@@ -35,9 +35,9 @@ object Discover {
 
     /** Út típusa: csak oda, hosszú hétvége (2–4 éj), egy hét (5–9 éj). */
     val TRIP_TYPES: List<Pair<Int, String>> get() = listOf(
-        0 to trs("Csak oda", "One way"),
-        1 to trs("Hosszú hétvége (2–4 éjszaka)", "Long weekend (2–4 nights)"),
-        2 to trs("Egy hét (5–9 éjszaka)", "A week (5–9 nights)"),
+        0 to trs("Csak oda", "One way", "Nur Hinflug"),
+        1 to trs("Hosszú hétvége (2–4 éjszaka)", "Long weekend (2–4 nights)", "Langes Wochenende (2–4 Nächte)"),
+        2 to trs("Egy hét (5–9 éjszaka)", "A week (5–9 nights)", "Eine Woche (5–9 Nächte)"),
     )
 
     fun nightsFor(tripType: Int): IntRange? = when (tripType) {
@@ -47,11 +47,11 @@ object Discover {
     }
 
     private val monthFormat: DateTimeFormatter
-        get() = DateTimeFormatter.ofPattern(if (Lang.en) "LLLL yyyy" else "yyyy. LLLL", Lang.locale)
+        get() = DateTimeFormatter.ofPattern(if (Lang.hu) "yyyy. LLLL" else "LLLL yyyy", Lang.locale)
 
     /** Időszakok: a következő 30 nap, majd a következő 12 hónap (egy évre előre). */
     fun periods(today: LocalDate = LocalDate.now()): List<Pair<Int, String>> =
-        listOf(0 to trs("A következő 30 nap", "The next 30 days")) + (0..11).mapNotNull { i ->
+        listOf(0 to trs("A következő 30 nap", "The next 30 days", "Die nächsten 30 Tage")) + (0..11).mapNotNull { i ->
             // A hónap utolsó napján a folyó hónapból már nem maradt keresendő nap
             val (start, end) = periodRange(i + 1, today)
             if (start.isAfter(end)) return@mapNotNull null
@@ -100,7 +100,7 @@ object Discover {
         val nights = nightsFor(tripType)
         // Több repteres városnál (pl. London) mindegyiket megkérdezzük: a Ryanair-bázis gyakran a lista végén van
         val origins = from.split(',').map { it.trim() }.filter { it.length == 3 }.take(6)
-        if (origins.isEmpty()) throw IOException(trs("Válassz indulási repteret", "Choose a departure airport"))
+        if (origins.isEmpty()) throw IOException(trs("Válassz indulási repteret", "Choose a departure airport", "Wähle einen Abflughafen"))
         val all = mutableListOf<Result>()
         var lastError: Exception? = null
         for (origin in origins) {
@@ -179,14 +179,14 @@ object Discover {
             "https://services-api.ryanair.com/farfnd/v4/$endpoint?$query",
             headers = mapOf("Accept" to "application/json"),
         )
-        if (res.code == 429 || res.code == 403) throw IOException(trs("A Ryanair ideiglenesen blokkolta a lekérdezést", "Ryanair has temporarily blocked the search"))
+        if (res.code == 429 || res.code == 403) throw IOException(trs("A Ryanair ideiglenesen blokkolta a lekérdezést", "Ryanair has temporarily blocked the search", "Ryanair hat die Suche vorübergehend blockiert"))
         if (res.code !in 200..299) throw IOException("HTTP ${res.code}")
         return parse(res.body, origin, currency)
     }
 
     /** A Ryanair-válasz feldolgozása (külön, hogy tesztelhető legyen). */
     internal fun parse(body: String, origin: String, currency: String): List<Result> {
-        val fares = JSONObject(body).optJSONArray("fares") ?: throw IOException(trs("Váratlan Ryanair-válasz", "Unexpected Ryanair response"))
+        val fares = JSONObject(body).optJSONArray("fares") ?: throw IOException(trs("Váratlan Ryanair-válasz", "Unexpected Ryanair response", "Unerwartete Ryanair-Antwort"))
         val out = mutableListOf<Result>()
         for (i in 0 until fares.length()) {
             val fare = fares.optJSONObject(i) ?: continue
@@ -243,7 +243,14 @@ object Discover {
     }
 
     private val dayFormat: DateTimeFormatter
-        get() = DateTimeFormatter.ofPattern(if (Lang.en) "d MMM, EEE" else "MMM d., EEE", Lang.locale)
+        get() = DateTimeFormatter.ofPattern(
+            when (Lang.code) {
+                Lang.HU_CODE -> "MMM d., EEE"
+                Lang.DE_CODE -> "EEE, d. MMM"
+                else -> "d MMM, EEE"
+            },
+            Lang.locale,
+        )
 
     fun describeDates(r: Result): String {
         val o = r.departure?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
@@ -251,6 +258,6 @@ object Discover {
         val first = o?.let { "${it.format(dayFormat)} %02d:%02d".format(it.hour, it.minute) } ?: "?"
         if (ret == null) return first
         val n = ChronoUnit.DAYS.between(o?.toLocalDate() ?: ret.toLocalDate(), ret.toLocalDate())
-        return "$first → ${ret.format(dayFormat)} (" + trs("$n éj", if (n == 1L) "1 night" else "$n nights") + ")"
+        return "$first → ${ret.format(dayFormat)} (" + trs("$n éj", if (n == 1L) "1 night" else "$n nights", if (n == 1L) "1 Nacht" else "$n Nächte") + ")"
     }
 }

@@ -131,7 +131,7 @@ private sealed interface Screen {
     data object Explore : Screen
 }
 
-private val dateFormat get() = DateTimeFormatter.ofPattern(if (Lang.en) "d MMM yyyy, EEE" else "yyyy. MMM d., EEE", Lang.locale)
+private val dateFormat get() = DateTimeFormatter.ofPattern(tr("yyyy. MMM d., EEE", "d MMM yyyy, EEE", "EEE, d. MMM yyyy"), Lang.locale)
 private val typedDateFormat = DateTimeFormatter.ofPattern("yyyy.MM.dd")
 
 /** A legkésőbbi megadható utazási nap (a légitársaságok kb. egy évre előre árulnak). */
@@ -157,8 +157,8 @@ internal fun parseTypedDate(raw: String): LocalDate? {
 }
 /** A Windows-indítás kapcsolásai sorban fussanak (gyors ki-be kapcsolásnál se cserélődjenek fel). */
 private val autostartLock = kotlinx.coroutines.sync.Mutex()
-private val shortDate get() = DateTimeFormatter.ofPattern(if (Lang.en) "d MMM" else "MMM d.", Lang.locale)
-private val timeFormat get() = DateTimeFormatter.ofPattern(if (Lang.en) "d MMM HH:mm" else "MMM d. HH:mm", Lang.locale)
+private val shortDate get() = DateTimeFormatter.ofPattern(tr("MMM d.", "d MMM", "d. MMM"), Lang.locale)
+private val timeFormat get() = DateTimeFormatter.ofPattern(tr("MMM d. HH:mm", "d MMM HH:mm", "d. MMM HH:mm"), Lang.locale)
 
 @Composable
 fun AppRoot() {
@@ -266,7 +266,7 @@ private fun UpdateOverlay(release: Updater.Release) {
     ) {
         NeonCard(pulse = true, modifier = Modifier.fillMaxWidth().enterAnimation()) {
             Text(
-                tr("ÚJ VERZIÓ", "NEW VERSION"),
+                tr("ÚJ VERZIÓ", "NEW VERSION", "NEUE VERSION"),
                 style = MaterialTheme.typography.headlineMedium.glow(),
                 color = Neon.Green,
                 textAlign = TextAlign.Center,
@@ -279,6 +279,8 @@ private fun UpdateOverlay(release: Updater.Release) {
                         "A használathoz frissítened kell.",
                     "REFI ${release.version} is out.\n" +
                         "Please update to keep using the app.",
+                    "REFI ${release.version} ist da.\n" +
+                        "Bitte aktualisiere, um die App weiter zu nutzen.",
                 ),
                 style = MaterialTheme.typography.bodyLarge,
             )
@@ -290,7 +292,7 @@ private fun UpdateOverlay(release: Updater.Release) {
             )
             Spacer(Modifier.height(12.dp))
             Text(
-                tr("😎Nyugi a figyeléseid megmaradnak😎", "😎Relax, your watches stay safe😎"),
+                tr("😎Nyugi a figyeléseid megmaradnak😎", "😎Relax, your watches stay safe😎", "😎Keine Sorge, deine Beobachtungen bleiben erhalten😎"),
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
@@ -319,8 +321,8 @@ private fun UpdateOverlay(release: Updater.Release) {
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    progress?.let { p -> if (p >= 1f) tr("Telepítés indul…", "Starting install…") else tr("Letöltés… ${(p * 100).toInt()}%", "Downloading… ${(p * 100).toInt()}%") }
-                        ?: tr("Letöltés és frissítés", "Download and update"),
+                    progress?.let { p -> if (p >= 1f) tr("Telepítés indul…", "Starting install…", "Installation startet…") else tr("Letöltés… ${(p * 100).toInt()}%", "Downloading… ${(p * 100).toInt()}%", "Herunterladen… ${(p * 100).toInt()}%") }
+                        ?: tr("Letöltés és frissítés", "Download and update", "Herunterladen und aktualisieren"),
                     fontWeight = FontWeight.Bold,
                 )
             }
@@ -346,7 +348,7 @@ internal fun NeonTopBar(
         navigationIcon = {
             if (onBack != null) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("Vissza", "Back"), tint = Neon.Green)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("Vissza", "Back", "Zurück"), tint = Neon.Green)
                 }
             }
         },
@@ -426,51 +428,51 @@ internal fun HomeScreen(
                     ) {
                         Icon(
                             Icons.Filled.Refresh,
-                            contentDescription = tr("Összes ellenőrzése", "Check all"),
+                            contentDescription = tr("Összes ellenőrzése", "Check all", "Alle prüfen"),
                             modifier = if (checking.isNotEmpty()) Modifier.rotate(angle) else Modifier,
                         )
                     }
                     IconButton(onClick = onExplore) {
-                        Icon(Icons.Filled.Search, contentDescription = tr("Felfedezés: hova repülhetek olcsón?", "Discover: where can I fly cheaply?"))
+                        Icon(Icons.Filled.Search, contentDescription = tr("Felfedezés: hova repülhetek olcsón?", "Discover: where can I fly cheaply?", "Entdecken: Wohin kann ich günstig fliegen?"))
                     }
                     IconButton(onClick = onSettings) {
-                        Icon(Icons.Filled.Settings, contentDescription = tr("Beállítások", "Settings"))
+                        Icon(Icons.Filled.Settings, contentDescription = tr("Beállítások", "Settings", "Einstellungen"))
                     }
                     Box {
                         IconButton(onClick = { menuOpen = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = tr("Továbbiak", "More"))
+                            Icon(Icons.Filled.MoreVert, contentDescription = tr("Továbbiak", "More", "Mehr"))
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             DropdownMenuItem(
-                                text = { Text(tr("Felfedezés – hova repülhetek olcsón?", "Discover – where can I fly cheaply?")) },
+                                text = { Text(tr("Felfedezés – hova repülhetek olcsón?", "Discover – where can I fly cheaply?", "Entdecken – wohin kann ich günstig fliegen?")) },
                                 onClick = { menuOpen = false; onExplore() },
                             )
                             DropdownMenuItem(
-                                text = { Text(tr("Kód beillesztése", "Paste code")) },
+                                text = { Text(tr("Kód beillesztése", "Paste code", "Code einfügen")) },
                                 onClick = {
                                     menuOpen = false
                                     codeDialog = Platform.current.readClipboard()?.takeIf { it.contains("REFI1:") } ?: ""
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text(tr("Mentés fájlba", "Save to file")) },
+                                text = { Text(tr("Mentés fájlba", "Save to file", "In Datei speichern")) },
                                 onClick = {
                                     menuOpen = false
                                     val content = Backup.export(Store.watches.value, Store.settings.value)
                                     Platform.current.exportFile(Backup.fileName(), content) { ok ->
-                                        toast = if (ok) tr("Mentve: ${Store.watches.value.size} figyelés.", "Saved: ${Store.watches.value.size} ${if (Store.watches.value.size == 1) "watch" else "watches"}.") else tr("A mentés nem sikerült.", "Saving failed.")
+                                        toast = if (ok) tr("Mentve: ${Store.watches.value.size} figyelés.", "Saved: ${Store.watches.value.size} ${if (Store.watches.value.size == 1) "watch" else "watches"}.", "Gespeichert: ${Store.watches.value.size} ${if (Store.watches.value.size == 1) "Beobachtung" else "Beobachtungen"}.") else tr("A mentés nem sikerült.", "Saving failed.", "Speichern fehlgeschlagen.")
                                     }
                                 },
                             )
                             DropdownMenuItem(
-                                text = { Text(tr("Visszaállítás fájlból", "Restore from file")) },
+                                text = { Text(tr("Visszaállítás fájlból", "Restore from file", "Aus Datei wiederherstellen")) },
                                 onClick = {
                                     menuOpen = false
                                     Platform.current.importFile { text ->
                                         if (text == null) return@importFile
                                         val parsed = Backup.parse(text)
                                         if (parsed == null) {
-                                            toast = tr("Ez nem REFI-mentésfájl.", "This is not a REFI backup file.")
+                                            toast = tr("Ez nem REFI-mentésfájl.", "This is not a REFI backup file.", "Das ist keine REFI-Sicherungsdatei.")
                                             return@importFile
                                         }
                                         AppScope.scope.launch {
@@ -481,8 +483,8 @@ internal fun HomeScreen(
                                                 Store.saveSettings(restored)
                                                 if (restored.intervalHours != before.intervalHours) Platform.current.reschedule()
                                             }
-                                            toast = tr("Visszaállítva: $added új, $updated frissített figyelés", "Restored: $added new, $updated updated watches") +
-                                                (if (parsed.skipped > 0) tr(" (${parsed.skipped} hibás kihagyva).", " (${parsed.skipped} invalid skipped).") else ".")
+                                            toast = tr("Visszaállítva: $added új, $updated frissített figyelés", "Restored: $added new, $updated updated watches", "Wiederhergestellt: $added neue, $updated aktualisierte Beobachtungen") +
+                                                (if (parsed.skipped > 0) tr(" (${parsed.skipped} hibás kihagyva).", " (${parsed.skipped} invalid skipped).", " (${parsed.skipped} ungültige übersprungen).") else ".")
                                             if (Store.settings.value.isReady) PriceChecker.checkAll()
                                         }
                                     }
@@ -507,7 +509,7 @@ internal fun HomeScreen(
                 contentColor = Neon.Green,
                 elevation = androidx.compose.material3.FloatingActionButtonDefaults.elevation(2.dp, 2.dp, 2.dp, 2.dp),
                 icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text(tr("ÚJ FIGYELÉS", "NEW WATCH"), fontWeight = FontWeight.Bold) },
+                text = { Text(tr("ÚJ FIGYELÉS", "NEW WATCH", "NEUE BEOBACHTUNG"), fontWeight = FontWeight.Bold) },
                 modifier = Modifier.border(0.8.dp, Neon.Green.copy(alpha = borderAlpha), fabShape),
             )
         },
@@ -534,7 +536,7 @@ internal fun HomeScreen(
             if (watches.isEmpty()) {
                 item {
                     Text(
-                        tr("Még nincs figyelt út. Az „Új figyelés” gombbal adhatsz hozzá egyet.", "No watches yet. Tap “New watch” to add one."),
+                        tr("Még nincs figyelt út. Az „Új figyelés” gombbal adhatsz hozzá egyet.", "No watches yet. Tap “New watch” to add one.", "Noch keine Beobachtungen. Tippe auf „Neue Beobachtung“, um eine hinzuzufügen."),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 24.dp),
@@ -556,10 +558,10 @@ internal fun HomeScreen(
                     onOpen = { url -> Platform.current.openUrl(url) },
                     onShare = {
                         val copied = Platform.current.shareText(ShareCode.message(w, settings.currency))
-                        if (copied) toast = tr("A figyelés kódja a vágólapra került – illeszd be egy üzenetbe.", "The watch code was copied – paste it into a message.")
+                        if (copied) toast = tr("A figyelés kódja a vágólapra került – illeszd be egy üzenetbe.", "The watch code was copied – paste it into a message.", "Der Code der Beobachtung wurde kopiert – füge ihn in eine Nachricht ein.")
                     },
                     onCalendar = { evs ->
-                        if (!Platform.current.addToCalendar(evs)) toast = tr("Nem sikerült megnyitni a naptárat.", "Couldn't open the calendar.")
+                        if (!Platform.current.addToCalendar(evs)) toast = tr("Nem sikerült megnyitni a naptárat.", "Couldn't open the calendar.", "Der Kalender konnte nicht geöffnet werden.")
                     },
                 )
             }
@@ -571,17 +573,19 @@ internal fun HomeScreen(
 private fun SetupCard(onSettings: () -> Unit) {
     NeonCard(color = Neon.Amber, pulse = true, modifier = Modifier.fillMaxWidth().enterAnimation()) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(tr("Nincs bekapcsolt árforrás", "No price source turned on"), style = MaterialTheme.typography.titleMedium, color = Neon.Amber)
+            Text(tr("Nincs bekapcsolt árforrás", "No price source turned on", "Keine Preisquelle aktiviert"), style = MaterialTheme.typography.titleMedium, color = Neon.Amber)
             Text(
                 tr(
                     "Kapcsolj be legalább egy árforrást a Beállításokban (a Google Flights, a Ryanair " +
                         "és a Wizz Air kulcs nélkül működik).",
                     "Turn on at least one price source in Settings (Google Flights, Ryanair " +
                         "and Wizz Air work without a key).",
+                    "Aktiviere in den Einstellungen mindestens eine Preisquelle (Google Flights, Ryanair " +
+                        "und Wizz Air funktionieren ohne Schlüssel).",
                 ),
                 style = MaterialTheme.typography.bodyMedium,
             )
-            Button(onClick = onSettings) { Text(tr("Beállítások", "Settings")) }
+            Button(onClick = onSettings) { Text(tr("Beállítások", "Settings", "Einstellungen")) }
         }
     }
 }
@@ -590,17 +594,19 @@ private fun SetupCard(onSettings: () -> Unit) {
 private fun BlockedNotificationsCard() {
     NeonCard(color = Neon.Amber, modifier = Modifier.fillMaxWidth().enterAnimation()) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(tr("Az értesítések le vannak tiltva", "Notifications are turned off"), style = MaterialTheme.typography.titleMedium, color = Neon.Amber)
+            Text(tr("Az értesítések le vannak tiltva", "Notifications are turned off", "Benachrichtigungen sind deaktiviert"), style = MaterialTheme.typography.titleMedium, color = Neon.Amber)
             Text(
                 tr(
                     "Így árriasztás sem érkezik, akkor sem, ha a csengő be van kapcsolva. " +
                         "Engedélyezd az értesítéseket a REFI-nek.",
                     "So no price alerts will arrive, even with the bell turned on. " +
                         "Please allow notifications for REFI.",
+                    "So kommen keine Preisalarme an, auch wenn die Glocke an ist. " +
+                        "Bitte erlaube Benachrichtigungen für REFI.",
                 ),
                 style = MaterialTheme.typography.bodyMedium,
             )
-            Button(onClick = { Platform.current.openNotificationSettings() }) { Text(tr("Értesítések engedélyezése", "Allow notifications")) }
+            Button(onClick = { Platform.current.openNotificationSettings() }) { Text(tr("Értesítések engedélyezése", "Allow notifications", "Benachrichtigungen erlauben")) }
         }
     }
 }
@@ -628,10 +634,10 @@ private fun CostLines(w: Watch, best: Offer, currency: String, onCalendar: (List
     groupCostLine(w, best, currency, transferTotal)?.let {
         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
     }
-    val events = remember(best, w.from, w.to, Lang.en) { RefiCalendar.eventsFor(w, best) }
+    val events = remember(best, w.from, w.to, Lang.code) { RefiCalendar.eventsFor(w, best) }
     if (events.isNotEmpty()) {
         TextButton(onClick = { onCalendar(events) }, contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)) {
-            Text(if (events.size > 1) tr("📅 Oda- és visszaút a naptárba", "📅 Add both flights to calendar") else tr("📅 Naptárba", "📅 Add to calendar"), style = MaterialTheme.typography.labelLarge)
+            Text(if (events.size > 1) tr("📅 Oda- és visszaút a naptárba", "📅 Add both flights to calendar", "📅 Hin- und Rückflug in den Kalender") else tr("📅 Naptárba", "📅 Add to calendar", "📅 In den Kalender"), style = MaterialTheme.typography.labelLarge)
         }
     }
 }
@@ -670,7 +676,7 @@ private fun WatchCard(
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(onClick = onShare) {
-                    Icon(Icons.Filled.Share, contentDescription = tr("Figyelés megosztása", "Share watch"), tint = Neon.TextDim)
+                    Icon(Icons.Filled.Share, contentDescription = tr("Figyelés megosztása", "Share watch", "Beobachtung teilen"), tint = Neon.TextDim)
                 }
                 BellToggle(on = w.notify, onToggle = onToggleNotify)
             }
@@ -684,7 +690,7 @@ private fun WatchCard(
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.Bottom) {
                 Column(Modifier.weight(1f)) {
-                    Text(tr("Legolcsóbb most", "Cheapest now"), style = MaterialTheme.typography.labelMedium)
+                    Text(tr("Legolcsóbb most", "Cheapest now", "Jetzt am günstigsten"), style = MaterialTheme.typography.labelMedium)
                     // Az ár „pörögve” változik az új értékre
                     // Üres állapotból vagy pénznemváltás után nem „pörög fel” nulláról / a régi számról
                     val priceAnim = remember(currency) { androidx.compose.animation.core.Animatable((best?.price ?: 0).toFloat()) }
@@ -700,17 +706,17 @@ private fun WatchCard(
                         color = if (belowTarget) good else Neon.Text,
                     )
                     if (belowTarget) {
-                        Text(tr("▼ CÉLÁR ALATT", "▼ BELOW TARGET PRICE"), style = MaterialTheme.typography.labelSmall, color = Neon.Mint)
+                        Text(tr("▼ CÉLÁR ALATT", "▼ BELOW TARGET PRICE", "▼ UNTER ZIELPREIS"), style = MaterialTheme.typography.labelSmall, color = Neon.Mint)
                     }
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        tr("Célár: ${formatPrice(w.targetPrice, currency)}", "Target price: ${formatPrice(w.targetPrice, currency)}"),
+                        tr("Célár: ${formatPrice(w.targetPrice, currency)}", "Target price: ${formatPrice(w.targetPrice, currency)}", "Zielpreis: ${formatPrice(w.targetPrice, currency)}"),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     w.lowestPrice?.let {
                         Text(
-                            tr("Eddigi min.: ${formatPrice(it, currency)}", "Lowest so far: ${formatPrice(it, currency)}"),
+                            tr("Eddigi min.: ${formatPrice(it, currency)}", "Lowest so far: ${formatPrice(it, currency)}", "Bisher am niedrigsten: ${formatPrice(it, currency)}"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -755,14 +761,14 @@ private fun WatchCard(
 
             Spacer(Modifier.height(6.dp))
             when {
-                w.isExpired() -> StatusText(tr("Az indulás dátuma elmúlt, a figyelés szünetel.", "The departure date has passed, this watch is paused."), true)
+                w.isExpired() -> StatusText(tr("Az indulás dátuma elmúlt, a figyelés szünetel.", "The departure date has passed, this watch is paused.", "Das Abflugdatum ist vorbei, diese Beobachtung pausiert."), true)
                 w.lastError != null -> StatusText(w.errorText ?: w.lastError, true)
                 w.lastChecked != null -> StatusText(
-                    tr("Utoljára ellenőrizve: ", "Last checked: ") +
+                    tr("Utoljára ellenőrizve: ", "Last checked: ", "Zuletzt geprüft: ") +
                         Instant.ofEpochMilli(w.lastChecked).atZone(ZoneId.systemDefault()).format(timeFormat),
                     false,
                 )
-                else -> StatusText(tr("Még nem volt ellenőrzés.", "Not checked yet."), false)
+                else -> StatusText(tr("Még nem volt ellenőrzés.", "Not checked yet.", "Noch nicht geprüft."), false)
             }
             if (w.sourceStatus.isNotEmpty()) {
                 Text(
@@ -783,7 +789,7 @@ private fun WatchCard(
             ) {
               Column {
                 Spacer(Modifier.height(8.dp))
-                Text(tr("ÖSSZES AJÁNLAT", "ALL OFFERS"), style = MaterialTheme.typography.titleMedium, color = Neon.Green)
+                Text(tr("ÖSSZES AJÁNLAT", "ALL OFFERS", "ALLE ANGEBOTE"), style = MaterialTheme.typography.titleMedium, color = Neon.Green)
                 w.offers.forEachIndexed { index, offer ->
                     Column(
                         Modifier
@@ -799,7 +805,7 @@ private fun WatchCard(
                                 modifier = Modifier.weight(1f),
                             )
                             offer.url?.let { url ->
-                                TextButton(onClick = { onOpen(url) }) { Text(tr("Megnyitás", "Open")) }
+                                TextButton(onClick = { onOpen(url) }) { Text(tr("Megnyitás", "Open", "Öffnen")) }
                             }
                         }
                         OfferDetails(offer, highlight = false)
@@ -817,19 +823,19 @@ private fun WatchCard(
                         strokeWidth = 2.dp,
                         color = Neon.Green,
                     )
-                    Text(tr("KERESÉS…", "SEARCHING…"), style = MaterialTheme.typography.labelSmall, color = Neon.Green, modifier = center)
+                    Text(tr("KERESÉS…", "SEARCHING…", "SUCHE…"), style = MaterialTheme.typography.labelSmall, color = Neon.Green, modifier = center)
                 } else {
                     TextButton(onClick = onCheck, enabled = canCheck && !w.isExpired(), modifier = center) {
-                        Text(tr("Ellenőrzés", "Check"), maxLines = 1)
+                        Text(tr("Ellenőrzés", "Check", "Prüfen"), maxLines = 1)
                     }
                 }
                 best?.url?.let { url ->
-                    TextButton(onClick = { onOpen(url) }, modifier = center) { Text(tr("Megnyitás", "Open"), maxLines = 1) }
+                    TextButton(onClick = { onOpen(url) }, modifier = center) { Text(tr("Megnyitás", "Open", "Öffnen"), maxLines = 1) }
                 }
-                TextButton(onClick = onEdit, modifier = center) { Text(tr("Szerkesztés", "Edit"), maxLines = 1) }
+                TextButton(onClick = onEdit, modifier = center) { Text(tr("Szerkesztés", "Edit", "Bearbeiten"), maxLines = 1) }
                 if (w.offers.size > 1) {
                     TextButton(onClick = { showAll = !showAll }, modifier = center) {
-                        Text(if (showAll) tr("Kevesebb", "Less") else tr("Mind a ${w.offers.size} ajánlat", "All ${w.offers.size} offers"), maxLines = 1)
+                        Text(if (showAll) tr("Kevesebb", "Less", "Weniger") else tr("Mind a ${w.offers.size} ajánlat", "All ${w.offers.size} offers", "Alle ${w.offers.size} Angebote"), maxLines = 1)
                     }
                 }
             }
@@ -843,16 +849,16 @@ private fun OfferDetails(offer: Offer, highlight: Boolean) {
     Column(Modifier.padding(top = 6.dp)) {
         val out = offer.outboundParts()
         val ret = offer.returnParts()
-        if (out != null) LegBlock(tr("INDULÁS", "DEPARTURE"), out, highlight) else {
-            Text(tr("Indulási idő: a forrás nem adta meg", "Departure time: not given by the source"), style = MaterialTheme.typography.bodyLarge)
+        if (out != null) LegBlock(tr("INDULÁS", "DEPARTURE", "ABFLUG"), out, highlight) else {
+            Text(tr("Indulási idő: a forrás nem adta meg", "Departure time: not given by the source", "Abflugzeit: von der Quelle nicht angegeben"), style = MaterialTheme.typography.bodyLarge)
         }
         if (ret != null) {
             Spacer(Modifier.height(6.dp))
-            LegBlock(tr("VISSZA", "RETURN"), ret, highlight)
+            LegBlock(tr("VISSZA", "RETURN", "RÜCKFLUG"), ret, highlight)
         }
         Spacer(Modifier.height(4.dp))
         Text(
-            listOfNotNull(offer.airline, tr("forrás: ${offer.source}", "source: ${offer.source}")).joinToString(" · "),
+            listOfNotNull(offer.airline, tr("forrás: ${offer.source}", "source: ${offer.source}", "Quelle: ${offer.source}")).joinToString(" · "),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 2,
@@ -894,32 +900,32 @@ private fun dateLine(w: Watch): String {
     val ret = w.returnDate?.let { r -> runCatching { LocalDate.parse(r).format(shortDate) }.getOrDefault(r) }
     val until = w.weeklyUntil?.let { u -> runCatching { LocalDate.parse(u).format(shortDate) }.getOrDefault(u) }
     val flex = when {
-        until != null -> tr(", minden héten $until-ig", ", every week until $until")
-        w.flexDays > 0 -> tr(" (±${w.flexDays} nap)", if (w.flexDays == 1) " (±1 day)" else " (±${w.flexDays} days)")
+        until != null -> tr(", minden héten $until-ig", ", every week until $until", ", jede Woche bis $until")
+        w.flexDays > 0 -> tr(" (±${w.flexDays} nap)", if (w.flexDays == 1) " (±1 day)" else " (±${w.flexDays} days)", if (w.flexDays == 1) " (±1 Tag)" else " (±${w.flexDays} Tage)")
         else -> ""
     }
-    return if (ret != null) tr("$out – $ret$flex · oda-vissza", "$out – $ret$flex · return") else tr("$out$flex · csak oda", "$out$flex · one way")
+    return if (ret != null) tr("$out – $ret$flex · oda-vissza", "$out – $ret$flex · return", "$out – $ret$flex · Hin- und Rückflug") else tr("$out$flex · csak oda", "$out$flex · one way", "$out$flex · nur Hinflug")
 }
 
 private fun detailLine(w: Watch): String {
     val parts = mutableListOf<String>()
-    parts += tr("${w.adults} felnőtt", if (w.adults == 1) "1 adult" else "${w.adults} adults")
-    if (w.children > 0) parts += tr("${w.children} gyerek", if (w.children == 1) "1 child" else "${w.children} children")
+    parts += tr("${w.adults} felnőtt", if (w.adults == 1) "1 adult" else "${w.adults} adults", if (w.adults == 1) "1 Erwachsener" else "${w.adults} Erwachsene")
+    if (w.children > 0) parts += tr("${w.children} gyerek", if (w.children == 1) "1 child" else "${w.children} children", if (w.children == 1) "1 Kind" else "${w.children} Kinder")
     val infants = w.infantsInSeat + w.infantsOnLap
-    if (infants > 0) parts += tr("$infants csecsemő", if (infants == 1) "1 infant" else "$infants infants")
+    if (infants > 0) parts += tr("$infants csecsemő", if (infants == 1) "1 infant" else "$infants infants", if (infants == 1) "1 Kleinkind" else "$infants Kleinkinder")
     val pax = parts.joinToString(", ")
     val cls = TRAVEL_CLASSES.firstOrNull { it.first == w.travelClass }?.second ?: ""
     val extra = mutableListOf(pax, cls)
-    if (w.bags > 0) extra += tr("${w.bags} kézipoggyász", if (w.bags == 1) "1 cabin bag" else "${w.bags} cabin bags")
-    if (w.checkedBag) extra += tr("feladott poggyász", "checked bag")
+    if (w.bags > 0) extra += tr("${w.bags} kézipoggyász", if (w.bags == 1) "1 cabin bag" else "${w.bags} cabin bags", if (w.bags == 1) "1 Handgepäck" else "${w.bags} Handgepäckstücke")
+    if (w.checkedBag) extra += tr("feladott poggyász", "checked bag", "Aufgabegepäck")
     if (w.stops != 0) extra += STOP_OPTIONS.firstOrNull { it.first == w.stops }?.second ?: ""
     if (w.depFrom != null || w.depTo != null) {
-        extra += tr("indulás ", "departs ") + listOfNotNull(
-            w.depFrom?.let { tr("%02d:00-tól", "from %02d:00").format(it) },
-            w.depTo?.let { tr("%02d:00-ig", "until %02d:00").format(it) },
+        extra += tr("indulás ", "departs ", "Abflug ") + listOfNotNull(
+            w.depFrom?.let { tr("%02d:00-tól", "from %02d:00", "ab %02d:00").format(it) },
+            w.depTo?.let { tr("%02d:00-ig", "until %02d:00", "bis %02d:00").format(it) },
         ).joinToString(" ")
     }
-    if (w.airlineTokens.isNotEmpty()) extra += tr("csak: ${w.airlines.trim()}", "only: ${w.airlines.trim()}")
+    if (w.airlineTokens.isNotEmpty()) extra += tr("csak: ${w.airlines.trim()}", "only: ${w.airlines.trim()}", "nur: ${w.airlines.trim()}")
     return extra.joinToString(" · ")
 }
 
@@ -992,31 +998,31 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
         val from = fromPlace
         val to = toPlace
         error = when {
-            !outValid || (roundTrip && !retValid) -> tr("Javítsd a pirossal jelölt dátumot.", "Please fix the date marked in red.")
-            from == null -> tr("Válaszd ki az indulási repülőteret a listából.", "Pick the departure airport from the list.")
-            to == null -> tr("Válaszd ki az érkezési repülőteret a listából.", "Pick the arrival airport from the list.")
+            !outValid || (roundTrip && !retValid) -> tr("Javítsd a pirossal jelölt dátumot.", "Please fix the date marked in red.", "Bitte korrigiere das rot markierte Datum.")
+            from == null -> tr("Válaszd ki az indulási repülőteret a listából.", "Pick the departure airport from the list.", "Wähle den Abflughafen aus der Liste.")
+            to == null -> tr("Válaszd ki az érkezési repülőteret a listából.", "Pick the arrival airport from the list.", "Wähle den Zielflughafen aus der Liste.")
             from.codes.split(',').any { it in to.codes.split(',') } ->
-                tr("Az indulási és érkezési hely nem lehet ugyanaz.", "Departure and arrival can't be the same place.")
+                tr("Az indulási és érkezési hely nem lehet ugyanaz.", "Departure and arrival can't be the same place.", "Abflug- und Zielort dürfen nicht gleich sein.")
             // Rugalmas dátumnál elég, ha a tartomány még nem múlt el
-            weekly && !untilValid -> tr("Javítsd a pirossal jelölt dátumot.", "Please fix the date marked in red.")
-            weekly && weeklyUntil.isBefore(outDate) -> tr("A „minden héten” utolsó napja nem lehet az első indulás előtt.", "The last day of “every week” can't be before the first departure.")
+            weekly && !untilValid -> tr("Javítsd a pirossal jelölt dátumot.", "Please fix the date marked in red.", "Bitte korrigiere das rot markierte Datum.")
+            weekly && weeklyUntil.isBefore(outDate) -> tr("A „minden héten” utolsó napja nem lehet az első indulás előtt.", "The last day of “every week” can't be before the first departure.", "Der letzte Tag von „jede Woche“ darf nicht vor dem ersten Abflug liegen.")
             weekly && weeklyUntil.isAfter(outDate.plusWeeks((MAX_WEEKS - 1).toLong())) ->
-                tr("„Minden héten” legfeljebb $MAX_WEEKS hétre állítható.", "“Every week” can be set for at most $MAX_WEEKS weeks.")
-            weekly && lastWeekly(outDate, weeklyUntil).isBefore(today) -> tr("Az indulás dátuma nem lehet a múltban.", "The departure date can't be in the past.")
-            !weekly && outDate.plusDays(flexDays.toLong()).isBefore(today) -> tr("Az indulás dátuma nem lehet a múltban.", "The departure date can't be in the past.")
+                tr("„Minden héten” legfeljebb $MAX_WEEKS hétre állítható.", "“Every week” can be set for at most $MAX_WEEKS weeks.", "„Jede Woche“ ist für höchstens $MAX_WEEKS Wochen möglich.")
+            weekly && lastWeekly(outDate, weeklyUntil).isBefore(today) -> tr("Az indulás dátuma nem lehet a múltban.", "The departure date can't be in the past.", "Das Abflugdatum darf nicht in der Vergangenheit liegen.")
+            !weekly && outDate.plusDays(flexDays.toLong()).isBefore(today) -> tr("Az indulás dátuma nem lehet a múltban.", "The departure date can't be in the past.", "Das Abflugdatum darf nicht in der Vergangenheit liegen.")
             outDate.isAfter(maxTravelDate(today)) || (roundTrip && retDate.isAfter(maxTravelDate(today))) ->
-                tr("Legfeljebb ${maxTravelDate(today).format(typedDateFormat)}-ig lehet dátumot megadni.", "Dates can be set up to ${maxTravelDate(today).format(typedDateFormat)} at most.")
-            roundTrip && retDate.isBefore(outDate) -> tr("A visszaút nem lehet az indulás előtt.", "The return can't be before the departure.")
-            adults + children + infantsInSeat + infantsOnLap > 9 -> tr("Legfeljebb 9 utas adható meg.", "At most 9 passengers are allowed.")
-            targetValue == null -> tr("Adj meg egy célárat.", "Please enter a target price.")
-            targetValue <= 0 -> tr("A célár legyen nagyobb 0-nál.", "The target price must be more than 0.")
-            depFrom != null && depTo != null && depTo!! <= depFrom!! -> tr("Az indulási időablak vége legyen későbbi, mint az eleje.", "The end of the departure time window must be later than its start.")
+                tr("Legfeljebb ${maxTravelDate(today).format(typedDateFormat)}-ig lehet dátumot megadni.", "Dates can be set up to ${maxTravelDate(today).format(typedDateFormat)} at most.", "Daten sind höchstens bis ${maxTravelDate(today).format(typedDateFormat)} möglich.")
+            roundTrip && retDate.isBefore(outDate) -> tr("A visszaút nem lehet az indulás előtt.", "The return can't be before the departure.", "Der Rückflug darf nicht vor dem Abflug liegen.")
+            adults + children + infantsInSeat + infantsOnLap > 9 -> tr("Legfeljebb 9 utas adható meg.", "At most 9 passengers are allowed.", "Höchstens 9 Reisende sind möglich.")
+            targetValue == null -> tr("Adj meg egy célárat.", "Please enter a target price.", "Bitte gib einen Zielpreis ein.")
+            targetValue <= 0 -> tr("A célár legyen nagyobb 0-nál.", "The target price must be more than 0.", "Der Zielpreis muss größer als 0 sein.")
+            depFrom != null && depTo != null && depTo!! <= depFrom!! -> tr("Az indulási időablak vége legyen későbbi, mint az eleje.", "The end of the departure time window must be later than its start.", "Das Ende des Abflug-Zeitfensters muss nach dem Anfang liegen.")
             else -> null
         }
         if (error != null || targetValue == null || from == null || to == null) return
         val stillThere = existing != null && Store.watches.value.any { it.id == existing.id }
         if (existing != null && !stillThere && !recreate) {
-            error = tr("Ezt a figyelést közben törölték (pl. a másik eszközödön). Ha mégis kell, nyomd meg újra a Mentést.", "This watch was deleted in the meantime (e.g. on your other device). If you still need it, tap Save again.")
+            error = tr("Ezt a figyelést közben törölték (pl. a másik eszközödön). Ha mégis kell, nyomd meg újra a Mentést.", "This watch was deleted in the meantime (e.g. on your other device). If you still need it, tap Save again.", "Diese Beobachtung wurde inzwischen gelöscht (z. B. auf deinem anderen Gerät). Wenn du sie noch brauchst, tippe erneut auf Speichern.")
             recreate = true
             return
         }
@@ -1081,7 +1087,7 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
     Scaffold(
         containerColor = Neon.Black,
         topBar = {
-            NeonTopBar(if (existing == null) tr("ÚJ FIGYELÉS", "NEW WATCH") else tr("SZERKESZTÉS", "EDIT"), onBack = onDone)
+            NeonTopBar(if (existing == null) tr("ÚJ FIGYELÉS", "NEW WATCH", "NEUE BEOBACHTUNG") else tr("SZERKESZTÉS", "EDIT", "BEARBEITEN"), onBack = onDone)
         },
     ) { padding ->
         Column(
@@ -1097,14 +1103,14 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
             // Sikeres kulcsbeállítás után új tipp jön (a kulcsos tipp már nem aktuális)
             androidx.compose.runtime.key(tipRound) { TipBubble(onOpenGuide = { guide = it }) }
             guide?.let { p -> KeyGuideDialog(p, onClose = { guide = null }, onSaved = { tipRound++ }) }
-            SectionTitle(tr("Útvonal", "Route"))
-            AirportField(tr("Honnan", "From"), fromPlace) { fromPlace = it }
-            AirportField(tr("Hova", "To"), toPlace) { toPlace = it }
-            SwitchRow(tr("Oda-vissza út", "Return trip"), roundTrip) { roundTrip = it }
+            SectionTitle(tr("Útvonal", "Route", "Strecke"))
+            AirportField(tr("Honnan", "From", "Von"), fromPlace) { fromPlace = it }
+            AirportField(tr("Hova", "To", "Nach"), toPlace) { toPlace = it }
+            SwitchRow(tr("Oda-vissza út", "Return trip", "Hin- und Rückflug"), roundTrip) { roundTrip = it }
 
-            SectionTitle(tr("Dátum", "Date"))
+            SectionTitle(tr("Dátum", "Date", "Datum"))
             DateField(
-                if (weekly) tr("Első indulás", "First departure") else tr("Indulás", "Departure"), outDate,
+                if (weekly) tr("Első indulás", "First departure", "Erster Abflug") else tr("Indulás", "Departure", "Abflug"), outDate,
                 minDate = if (weekly) minOf(outDate, today) else today.minusDays(flexDays.toLong()),
                 onValidChange = { outValid = it },
             ) {
@@ -1134,9 +1140,9 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
                 }, onClose = { showCal = false })
             }
             if (roundTrip) {
-                DateField(tr("Visszaút", "Return"), retDate, minDate = outDate, onValidChange = { retValid = it }) { retDate = it }
+                DateField(tr("Visszaút", "Return", "Rückflug"), retDate, minDate = outDate, onValidChange = { retValid = it }) { retDate = it }
             }
-            ChoiceField(tr("Rugalmasság", "Flexibility"), FLEX_OPTIONS + (WEEKLY_CHOICE to tr("Minden héten (pl. bármelyik hétvége)", "Every week (e.g. any weekend)")), if (weekly) WEEKLY_CHOICE else flexDays) {
+            ChoiceField(tr("Rugalmasság", "Flexibility", "Flexibilität"), FLEX_OPTIONS + (WEEKLY_CHOICE to tr("Minden héten (pl. bármelyik hétvége)", "Every week (e.g. any weekend)", "Jede Woche (z. B. jedes Wochenende)")), if (weekly) WEEKLY_CHOICE else flexDays) {
                 weekly = it == WEEKLY_CHOICE
                 flexDays = if (weekly) 0 else it
                 if (weekly && (weeklyUntil.isBefore(outDate) || weeklyUntil.isAfter(outDate.plusWeeks((MAX_WEEKS - 1).toLong())))) {
@@ -1145,7 +1151,7 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
             }
             if (weekly) {
                 DateField(
-                    tr("Utolsó indulás legkésőbb", "Last departure at the latest"), weeklyUntil, minDate = outDate,
+                    tr("Utolsó indulás legkésőbb", "Last departure at the latest", "Letzter Abflug spätestens"), weeklyUntil, minDate = outDate,
                     maxDate = minOf(outDate.plusWeeks((MAX_WEEKS - 1).toLong()), maxTravelDate(today)),
                     onValidChange = { untilValid = it },
                 ) { weeklyUntil = it }
@@ -1156,6 +1162,8 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
                             "Pl. péntek–vasárnapot megadva: bármelyik hétvége. (Csak a REFI 1.4-től működik – a többi eszközödön is frissíts.)",
                         "Searches the same days every week ($weeks weeks) and shows the cheapest. " +
                             "E.g. Friday–Sunday means any weekend. (Needs REFI 1.4 or later – update your other devices too.)",
+                        "Sucht jede Woche an denselben Tagen (${if (weeks == 1) "1 Woche" else "$weeks Wochen"}) und zeigt das günstigste Angebot. " +
+                            "Z. B. Freitag–Sonntag heißt: jedes Wochenende. (Ab REFI 1.4 – aktualisiere auch deine anderen Geräte.)",
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1163,22 +1171,22 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
             }
             if (!weekly && flexDays > 0) {
                 Text(
-                    tr("A megadott naptól ±$flexDays napon belül keresi a legolcsóbbat (az út hossza marad).", "Looks for the cheapest within ±$flexDays ${if (flexDays == 1) "day" else "days"} of the chosen date (trip length stays the same)."),
+                    tr("A megadott naptól ±$flexDays napon belül keresi a legolcsóbbat (az út hossza marad).", "Looks for the cheapest within ±$flexDays ${if (flexDays == 1) "day" else "days"} of the chosen date (trip length stays the same).", "Sucht das günstigste Angebot innerhalb von ±$flexDays ${if (flexDays == 1) "Tag" else "Tagen"} um das gewählte Datum (die Reisedauer bleibt gleich)."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
-            SectionTitle(tr("Utasok és osztály", "Passengers and class"))
-            ChoiceField(tr("Osztály", "Class"), TRAVEL_CLASSES, travelClass) { travelClass = it }
-            Stepper(tr("Felnőtt", "Adults"), tr("12 év felett", "over 12"), adults, 1..9) { adults = it }
-            Stepper(tr("Gyerek", "Children"), tr("2–11 év", "ages 2–11"), children, 0..8) { children = it }
-            Stepper(tr("Csecsemő saját ülésen", "Infants in own seat"), tr("2 év alatt", "under 2"), infantsInSeat, 0..4) { infantsInSeat = it }
-            Stepper(tr("Csecsemő ölben", "Infants on lap"), tr("2 év alatt, felnőttenként 1", "under 2, 1 per adult"), infantsOnLap, 0..adults) { infantsOnLap = it }
+            SectionTitle(tr("Utasok és osztály", "Passengers and class", "Reisende und Klasse"))
+            ChoiceField(tr("Osztály", "Class", "Klasse"), TRAVEL_CLASSES, travelClass) { travelClass = it }
+            Stepper(tr("Felnőtt", "Adults", "Erwachsene"), tr("12 év felett", "over 12", "über 12"), adults, 1..9) { adults = it }
+            Stepper(tr("Gyerek", "Children", "Kinder"), tr("2–11 év", "ages 2–11", "2–11 Jahre"), children, 0..8) { children = it }
+            Stepper(tr("Csecsemő saját ülésen", "Infants in own seat", "Kleinkinder mit eigenem Sitz"), tr("2 év alatt", "under 2", "unter 2"), infantsInSeat, 0..4) { infantsInSeat = it }
+            Stepper(tr("Csecsemő ölben", "Infants on lap", "Kleinkinder auf dem Schoß"), tr("2 év alatt, felnőttenként 1", "under 2, 1 per adult", "unter 2, 1 pro Erwachsenem"), infantsOnLap, 0..adults) { infantsOnLap = it }
 
-            SectionTitle(tr("Poggyász és átszállás", "Bags and stops"))
-            Stepper(tr("Kézipoggyász", "Cabin bags"), tr("összesen, minden utasra", "in total, for all passengers"), bags, 0..maxBags) { bags = it }
-            SwitchRow(tr("Feladott poggyász (utasonként 1)", "Checked bag (1 per passenger)"), checkedBag) { checkedBag = it }
+            SectionTitle(tr("Poggyász és átszállás", "Bags and stops", "Gepäck und Umstiege"))
+            Stepper(tr("Kézipoggyász", "Cabin bags", "Handgepäck"), tr("összesen, minden utasra", "in total, for all passengers", "insgesamt, für alle Reisenden"), bags, 0..maxBags) { bags = it }
+            SwitchRow(tr("Feladott poggyász (utasonként 1)", "Checked bag (1 per passenger)", "Aufgabegepäck (1 pro Person)"), checkedBag) { checkedBag = it }
             Text(
                 tr(
                     "A fapadosoknál (Ryanair, Wizz Air, easyJet…) a poggyász díját becsült összeggel " +
@@ -1187,28 +1195,31 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
                     "For low-cost airlines (Ryanair, Wizz Air, easyJet…) I add an estimated bag fee " +
                         "to the price. For traditional airlines I assume the bags are included " +
                         "in the fare (not always true for the cheapest “light” fares).",
+                    "Bei Billigfliegern (Ryanair, Wizz Air, easyJet…) rechne ich eine geschätzte Gepäckgebühr " +
+                        "zum Preis dazu. Bei klassischen Airlines gehe ich davon aus, dass das Gepäck im " +
+                        "Ticketpreis enthalten ist (bei den günstigsten „Light“-Tarifen nicht immer).",
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            ChoiceField(tr("Átszállás", "Stops"), STOP_OPTIONS, stops) { stops = it }
+            ChoiceField(tr("Átszállás", "Stops", "Umstiege"), STOP_OPTIONS, stops) { stops = it }
 
-            SectionTitle(tr("Szűrők", "Filters"))
+            SectionTitle(tr("Szűrők", "Filters", "Filter"))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Box(Modifier.weight(1f)) { ChoiceField(tr("Indulás legkorábban", "Depart earliest"), HOUR_FROM_OPTIONS, depFrom) { depFrom = it } }
-                Box(Modifier.weight(1f)) { ChoiceField(tr("Indulás legkésőbb", "Depart latest"), HOUR_TO_OPTIONS, depTo) { depTo = it } }
+                Box(Modifier.weight(1f)) { ChoiceField(tr("Indulás legkorábban", "Depart earliest", "Abflug frühestens"), HOUR_FROM_OPTIONS, depFrom) { depFrom = it } }
+                Box(Modifier.weight(1f)) { ChoiceField(tr("Indulás legkésőbb", "Depart latest", "Abflug spätestens"), HOUR_TO_OPTIONS, depTo) { depTo = it } }
             }
             OutlinedTextField(
                 value = airlines,
                 onValueChange = { airlines = it.take(80) },
-                label = { Text(tr("Csak ezek a légitársaságok", "Only these airlines")) },
-                placeholder = { Text(tr("pl. Wizz, Ryanair – üresen: bármelyik", "e.g. Wizz, Ryanair – empty: any")) },
-                supportingText = { Text(tr("Vesszővel elválasztva; elég a név része is", "Separated by commas; part of the name is enough")) },
+                label = { Text(tr("Csak ezek a légitársaságok", "Only these airlines", "Nur diese Airlines")) },
+                placeholder = { Text(tr("pl. Wizz, Ryanair – üresen: bármelyik", "e.g. Wizz, Ryanair – empty: any", "z. B. Wizz, Ryanair – leer: alle")) },
+                supportingText = { Text(tr("Vesszővel elválasztva; elég a név része is", "Separated by commas; part of the name is enough", "Durch Kommas getrennt; ein Teil des Namens reicht")) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            SectionTitle(tr("Riasztás", "Alert"))
+            SectionTitle(tr("Riasztás", "Alert", "Alarm"))
             OutlinedTextField(
                 value = target,
                 onValueChange = { v ->
@@ -1216,32 +1227,32 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
                     val whole = v.trim().replace(Regex("[.,]\\d{1,2}$"), "")
                     target = whole.filter(Char::isDigit).take(9)
                 },
-                label = { Text(tr("Célár (${currencySymbol(currency)})", "Target price (${currencySymbol(currency)})")) },
-                supportingText = { Text(tr("Szólunk, ha a teljes ár (minden utassal) erre az összegre vagy ez alá csökken", "We'll let you know when the total price (all passengers) drops to this amount or below")) },
+                label = { Text(tr("Célár (${currencySymbol(currency)})", "Target price (${currencySymbol(currency)})", "Zielpreis (${currencySymbol(currency)})")) },
+                supportingText = { Text(tr("Szólunk, ha a teljes ár (minden utassal) erre az összegre vagy ez alá csökken", "We'll let you know when the total price (all passengers) drops to this amount or below", "Wir melden uns, wenn der Gesamtpreis (alle Reisenden) auf diesen Betrag oder darunter fällt")) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth(),
             )
-            SwitchRow(tr("Értesítés küldése", "Send notification"), notify) { notify = it }
+            SwitchRow(tr("Értesítés küldése", "Send notification", "Benachrichtigung senden"), notify) { notify = it }
 
             error?.let {
                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
             }
-            Button(onClick = { save() }, enabled = !saved, modifier = Modifier.fillMaxWidth()) { Text(tr("Mentés", "Save")) }
+            Button(onClick = { save() }, enabled = !saved, modifier = Modifier.fillMaxWidth()) { Text(tr("Mentés", "Save", "Speichern")) }
             if (confirmDelete && existing != null) {
                 androidx.compose.material3.AlertDialog(
                     onDismissRequest = { confirmDelete = false },
-                    title = { Text(tr("Törlöd a figyelést?", "Delete this watch?")) },
-                    text = { Text(tr("${existing.routeTitle} – az árelőzményekkel együtt, minden eszközödről.", "${existing.routeTitle} – together with its price history, from all your devices.")) },
+                    title = { Text(tr("Törlöd a figyelést?", "Delete this watch?", "Diese Beobachtung löschen?")) },
+                    text = { Text(tr("${existing.routeTitle} – az árelőzményekkel együtt, minden eszközödről.", "${existing.routeTitle} – together with its price history, from all your devices.", "${existing.routeTitle} – samt Preisverlauf, von all deinen Geräten.")) },
                     confirmButton = {
                         TextButton(onClick = {
                             confirmDelete = false
                             saved = true
                             Store.delete(existing.id)
                             onDone()
-                        }) { Text(tr("Törlés", "Delete"), color = MaterialTheme.colorScheme.error) }
+                        }) { Text(tr("Törlés", "Delete", "Löschen"), color = MaterialTheme.colorScheme.error) }
                     },
-                    dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(tr("Mégse", "Cancel")) } },
+                    dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(tr("Mégse", "Cancel", "Abbrechen")) } },
                 )
             }
             if (existing != null) {
@@ -1250,7 +1261,7 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
                     enabled = !saved,
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text(tr("Figyelés törlése", "Delete watch")) }
+                ) { Text(tr("Figyelés törlése", "Delete watch", "Beobachtung löschen")) }
             }
             Spacer(Modifier.height(24.dp))
         }
@@ -1315,12 +1326,12 @@ internal fun SettingsScreen(onDone: () -> Unit) {
     if (confirmLeave) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { confirmLeave = false },
-            title = { Text(tr("Mented a változásokat?", "Save your changes?")) },
-            text = { Text(tr("Módosítottál a beállításokon, de még nem mentetted el őket.", "You changed some settings but haven't saved them yet.")) },
+            title = { Text(tr("Mented a változásokat?", "Save your changes?", "Änderungen speichern?")) },
+            text = { Text(tr("Módosítottál a beállításokon, de még nem mentetted el őket.", "You changed some settings but haven't saved them yet.", "Du hast Einstellungen geändert, aber noch nicht gespeichert.")) },
             confirmButton = {
-                TextButton(onClick = { confirmLeave = false; if (draft.isReady) { saveAll(); onDone() } }) { Text(tr("Mentés", "Save")) }
+                TextButton(onClick = { confirmLeave = false; if (draft.isReady) { saveAll(); onDone() } }) { Text(tr("Mentés", "Save", "Speichern")) }
             },
-            dismissButton = { TextButton(onClick = { confirmLeave = false; onDone() }) { Text(tr("Elvetés", "Discard")) } },
+            dismissButton = { TextButton(onClick = { confirmLeave = false; onDone() }) { Text(tr("Elvetés", "Discard", "Verwerfen")) } },
         )
     }
 
@@ -1337,7 +1348,7 @@ internal fun SettingsScreen(onDone: () -> Unit) {
     Scaffold(
         containerColor = Neon.Black,
         topBar = {
-            NeonTopBar(tr("BEÁLLÍTÁSOK", "SETTINGS"), onBack = { leave() })
+            NeonTopBar(tr("BEÁLLÍTÁSOK", "SETTINGS", "EINSTELLUNGEN"), onBack = { leave() })
         },
     ) { padding ->
         Column(
@@ -1349,20 +1360,20 @@ internal fun SettingsScreen(onDone: () -> Unit) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            SectionTitle(tr("Megjelenés", "Appearance"))
+            SectionTitle(tr("Megjelenés", "Appearance", "Darstellung"))
             // A nyelv azonnal vált (mentés nélkül is)
-            ChoiceField("Nyelv / Language", Lang.OPTIONS, Lang.setting) { Lang.set(it) }
-            ChoiceField(tr("Téma", "Theme"), THEMES, themeMode) { mode ->
+            ChoiceField("Nyelv / Language / Sprache", Lang.OPTIONS, Lang.setting) { Lang.set(it) }
+            ChoiceField(tr("Téma", "Theme", "Design"), THEMES, themeMode) { mode ->
                 themeMode = mode
                 // Azonnal látszik, mentés nélkül is
                 Store.saveSettings(Store.settings.value.copy(themeMode = mode))
             }
-            ChoiceField(tr("Betűméret", "Text size"), TEXT_SCALES, textScale) { scale ->
+            ChoiceField(tr("Betűméret", "Text size", "Textgröße"), TEXT_SCALES, textScale) { scale ->
                 textScale = scale
                 Store.saveSettings(Store.settings.value.copy(textScale = scale))
             }
 
-            SectionTitle(tr("Árforrások – kulcs nélkül", "Price sources – no key needed"))
+            SectionTitle(tr("Árforrások – kulcs nélkül", "Price sources – no key needed", "Preisquellen – ohne Schlüssel"))
             Text(
                 tr(
                     "Minden bekapcsolt forrást egyszerre kérdez le, és az összes ajánlatot ár szerint " +
@@ -1371,21 +1382,26 @@ internal fun SettingsScreen(onDone: () -> Unit) {
                     "All sources that are on are checked at once, and every offer competes on price. " +
                         "These are unofficial services: if one changes, it may show an error for a while, " +
                         "but the other sources keep working.",
+                    "Alle aktivierten Quellen werden gleichzeitig abgefragt, und alle Angebote treten preislich gegeneinander an. " +
+                        "Das sind keine offiziellen Schnittstellen: Ändert sich eine, zeigt sie eine Weile einen Fehler, " +
+                        "die anderen Quellen funktionieren aber weiter.",
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            SwitchRow(tr("Google Flights (légitársaságok és irodák)", "Google Flights (airlines and agencies)"), googleOn) { googleOn = it }
-            SwitchRow(tr("Ryanair (közvetlenül)", "Ryanair (direct)"), ryanairOn) { ryanairOn = it }
-            SwitchRow(tr("Wizz Air (közvetlenül)", "Wizz Air (direct)"), wizzOn) { wizzOn = it }
+            SwitchRow(tr("Google Flights (légitársaságok és irodák)", "Google Flights (airlines and agencies)", "Google Flights (Airlines und Reisebüros)"), googleOn) { googleOn = it }
+            SwitchRow(tr("Ryanair (közvetlenül)", "Ryanair (direct)", "Ryanair (direkt)"), ryanairOn) { ryanairOn = it }
+            SwitchRow(tr("Wizz Air (közvetlenül)", "Wizz Air (direct)", "Wizz Air (direkt)"), wizzOn) { wizzOn = it }
 
-            SectionTitle(tr("Még több ár – ingyenes kulccsal", "More prices – with a free key"))
+            SectionTitle(tr("Még több ár – ingyenes kulccsal", "More prices – with a free key", "Mehr Preise – mit kostenlosem Schlüssel"))
             Text(
                 tr(
                     "Két további kereső, ingyenes kulccsal. Nem kell hozzá szakértőnek lenni: a varázsló lépésről " +
                         "lépésre végigvezet (regisztráció, kulcs kimásolása, kipróbálás).",
                     "Two more search engines, with a free key. No expertise needed: the wizard guides you " +
                         "step by step (sign up, copy the key, test it).",
+                    "Zwei weitere Suchmaschinen mit kostenlosem Schlüssel. Du musst kein Profi sein: Der Assistent führt dich " +
+                        "Schritt für Schritt (registrieren, Schlüssel kopieren, testen).",
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1399,40 +1415,40 @@ internal fun SettingsScreen(onDone: () -> Unit) {
                     }
                 })
             }
-            SwitchRow(tr("SerpApi (megbízhatóbb Google-árak · havi 250 ingyenes)", "SerpApi (more reliable Google prices · 250 free per month)"), serpOn) { serpOn = it }
+            SwitchRow(tr("SerpApi (megbízhatóbb Google-árak · havi 250 ingyenes)", "SerpApi (more reliable Google prices · 250 free per month)", "SerpApi (zuverlässigere Google-Preise · 250 kostenlos pro Monat)"), serpOn) { serpOn = it }
             if (serpOn || apiKey.isBlank()) {
                 OutlinedButton(onClick = { keyGuide = KeyProvider.SERPAPI }) {
-                    Text(if (apiKey.isBlank()) tr("Kulcs szerzése lépésről lépésre", "Get a key step by step") else tr("Új kulcs beállítása (varázsló)", "Set up a new key (wizard)"))
+                    Text(if (apiKey.isBlank()) tr("Kulcs szerzése lépésről lépésre", "Get a key step by step", "Schlüssel Schritt für Schritt holen") else tr("Új kulcs beállítása (varázsló)", "Set up a new key (wizard)", "Neuen Schlüssel einrichten (Assistent)"))
                 }
             }
-            if (serpOn) SecretField(tr("SerpApi API-kulcs", "SerpApi API key"), apiKey) { apiKey = it }
-            SwitchRow(tr("Ignav (saját adatforrás · 1000 ingyenes)", "Ignav (own data source · 1000 free)"), ignavOn) { ignavOn = it }
+            if (serpOn) SecretField(tr("SerpApi API-kulcs", "SerpApi API key", "SerpApi-API-Schlüssel"), apiKey) { apiKey = it }
+            SwitchRow(tr("Ignav (saját adatforrás · 1000 ingyenes)", "Ignav (own data source · 1000 free)", "Ignav (eigene Datenquelle · 1000 kostenlos)"), ignavOn) { ignavOn = it }
             if (ignavOn || ignavKey.isBlank()) {
                 OutlinedButton(onClick = { keyGuide = KeyProvider.IGNAV }) {
-                    Text(if (ignavKey.isBlank()) tr("Kulcs szerzése lépésről lépésre", "Get a key step by step") else tr("Új kulcs beállítása (varázsló)", "Set up a new key (wizard)"))
+                    Text(if (ignavKey.isBlank()) tr("Kulcs szerzése lépésről lépésre", "Get a key step by step", "Schlüssel Schritt für Schritt holen") else tr("Új kulcs beállítása (varázsló)", "Set up a new key (wizard)", "Neuen Schlüssel einrichten (Assistent)"))
                 }
             }
-            if (ignavOn) SecretField(tr("Ignav API-kulcs", "Ignav API key"), ignavKey) { ignavKey = it }
+            if (ignavOn) SecretField(tr("Ignav API-kulcs", "Ignav API key", "Ignav-API-Schlüssel"), ignavKey) { ignavKey = it }
             if (serpOn || ignavOn) {
                 Text(
-                    tr("A kulcsok a Google-fiókod rejtett REFI-területén keresztül a többi eszközödre is átkerülnek.", "The keys are copied to your other devices through a hidden REFI area in your Google account."),
+                    tr("A kulcsok a Google-fiókod rejtett REFI-területén keresztül a többi eszközödre is átkerülnek.", "The keys are copied to your other devices through a hidden REFI area in your Google account.", "Die Schlüssel werden über einen versteckten REFI-Bereich in deinem Google-Konto auf deine anderen Geräte übertragen."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             if (!draft.isReady) {
                 Text(
-                    tr("Legalább egy forrást kapcsolj be.", "Turn on at least one source."),
+                    tr("Legalább egy forrást kapcsolj be.", "Turn on at least one source.", "Aktiviere mindestens eine Quelle."),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error,
                 )
             }
 
-            SectionTitle(tr("Pénznem", "Currency"))
-            ChoiceField(tr("Árak pénzneme", "Price currency"), CURRENCIES, currency) { currency = it }
+            SectionTitle(tr("Pénznem", "Currency", "Währung"))
+            ChoiceField(tr("Árak pénzneme", "Price currency", "Währung der Preise"), CURRENCIES, currency) { currency = it }
             if (currency != initial.currency) {
                 Text(
-                    tr("Pénznemváltáskor az eddigi árelőzmények törlődnek.", "Changing the currency clears the price history so far."),
+                    tr("Pénznemváltáskor az eddigi árelőzmények törlődnek.", "Changing the currency clears the price history so far.", "Beim Wechsel der Währung wird der bisherige Preisverlauf gelöscht."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1440,7 +1456,7 @@ internal fun SettingsScreen(onDone: () -> Unit) {
 
             if (Platform.current.autostartSupported) {
                 var auto by remember { mutableStateOf(Platform.current.autostart) }
-                SwitchRow(tr("Indítás a Windows-zal (a tálcán, a háttérben figyel)", "Start with Windows (watches in the background, from the tray)"), auto) {
+                SwitchRow(tr("Indítás a Windows-zal (a tálcán, a háttérben figyel)", "Start with Windows (watches in the background, from the tray)", "Mit Windows starten (beobachtet im Hintergrund, aus dem Infobereich)"), auto) {
                     auto = it
                     // (a rendszerleíró-adatbázis írása lassú lehet: ne akassza meg az ablakot)
                     AppScope.scope.launch { autostartLock.withLock { Platform.current.autostart = auto } }
@@ -1449,25 +1465,25 @@ internal fun SettingsScreen(onDone: () -> Unit) {
 
             run {
                 var tipsOn by remember { mutableStateOf(!Tips.allOff) }
-                SwitchRow(tr("Tippek a figyelés szerkesztésekor", "Tips while editing a watch"), tipsOn) {
+                SwitchRow(tr("Tippek a figyelés szerkesztésekor", "Tips while editing a watch", "Tipps beim Bearbeiten einer Beobachtung"), tipsOn) {
                     tipsOn = it
                     Tips.allOff = !it
                     if (it) Tips.showAgain()
                 }
             }
 
-            SectionTitle(tr("Ellenőrzés gyakorisága", "Check frequency"))
-            ChoiceField(tr("Automatikus ellenőrzés", "Automatic check"), INTERVALS, interval) { interval = it }
+            SectionTitle(tr("Ellenőrzés gyakorisága", "Check frequency", "Prüfhäufigkeit"))
+            ChoiceField(tr("Automatikus ellenőrzés", "Automatic check", "Automatische Prüfung"), INTERVALS, interval) { interval = it }
             if (draft.useSerpApi) {
                 Text(
-                    tr("SerpApi: kb. $serpPerMonth keresés/hó (ingyenes keret: 250).", "SerpApi: about $serpPerMonth searches/month (free limit: 250)."),
+                    tr("SerpApi: kb. $serpPerMonth keresés/hó (ingyenes keret: 250).", "SerpApi: about $serpPerMonth searches/month (free limit: 250).", "SerpApi: ca. $serpPerMonth Suchen/Monat (kostenloses Kontingent: 250)."),
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (serpPerMonth > 250) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             if (draft.useIgnav) {
                 Text(
-                    tr("Ignav: kb. $ignavPerMonth kérés/hó (1000 ingyenes, utána fizetős).", "Ignav: about $ignavPerMonth requests/month (1000 free, paid after that)."),
+                    tr("Ignav: kb. $ignavPerMonth kérés/hó (1000 ingyenes, utána fizetős).", "Ignav: about $ignavPerMonth requests/month (1000 free, paid after that).", "Ignav: ca. $ignavPerMonth Anfragen/Monat (1000 kostenlos, danach kostenpflichtig)."),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1478,24 +1494,26 @@ internal fun SettingsScreen(onDone: () -> Unit) {
                         "letilthatnak. A 6 óránkénti ellenőrzés biztonságos. ",
                     "Sources without a key have no limit, but checking too often can get you temporarily " +
                         "blocked. Checking every 6 hours is safe. ",
+                    "Quellen ohne Schlüssel haben kein Limit, aber bei zu häufigen Abfragen kannst du vorübergehend " +
+                        "gesperrt werden. Eine Prüfung alle 6 Stunden ist sicher. ",
                 ) + Platform.current.backgroundHint,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            SectionTitle(tr("Szinkronizálás", "Sync"))
+            SectionTitle(tr("Szinkronizálás", "Sync", "Synchronisierung"))
             SyncSection()
 
-            SectionTitle(tr("Csendes órák", "Quiet hours"))
-            SwitchRow(tr("Éjszaka ne szóljon és ne rezegjen", "No sound or vibration at night"), quietOn) { quietOn = it }
+            SectionTitle(tr("Csendes órák", "Quiet hours", "Ruhezeiten"))
+            SwitchRow(tr("Éjszaka ne szóljon és ne rezegjen", "No sound or vibration at night", "Nachts kein Ton und keine Vibration"), quietOn) { quietOn = it }
             if (quietOn) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Box(Modifier.weight(1f)) { ChoiceField(tr("Ettől", "From"), QUIET_HOURS, quietFrom) { quietFrom = it } }
-                    Box(Modifier.weight(1f)) { ChoiceField(tr("Eddig", "Until"), QUIET_HOURS, quietTo) { quietTo = it } }
+                    Box(Modifier.weight(1f)) { ChoiceField(tr("Ettől", "From", "Von"), QUIET_HOURS, quietFrom) { quietFrom = it } }
+                    Box(Modifier.weight(1f)) { ChoiceField(tr("Eddig", "Until", "Bis"), QUIET_HOURS, quietTo) { quietTo = it } }
                 }
                 if (quietFrom == quietTo) {
                     Text(
-                        tr("A kezdő és a záró óra azonos: így a csendes órák nem működnek.", "Start and end hours are the same, so quiet hours won't work."),
+                        tr("A kezdő és a záró óra azonos: így a csendes órák nem működnek.", "Start and end hours are the same, so quiet hours won't work.", "Start- und Endzeit sind gleich, daher funktionieren die Ruhezeiten nicht."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
@@ -1507,23 +1525,23 @@ internal fun SettingsScreen(onDone: () -> Unit) {
                 )
             }
 
-            SectionTitle(tr("Verzió", "Version"))
+            SectionTitle(tr("Verzió", "Version", "Version"))
             Text(
-                tr("Telepítve: ${Updater.currentVersion}.", "Installed: ${Updater.currentVersion}."),
+                tr("Telepítve: ${Updater.currentVersion}.", "Installed: ${Updater.currentVersion}.", "Installiert: ${Updater.currentVersion}."),
                 style = MaterialTheme.typography.bodyMedium,
             )
             var updateMsg by remember { mutableStateOf<String?>(null) }
             if (Platform.current.updatesViaStore) Text(
-                tr("A frissítéseket a Google Play telepíti.", "Updates are installed by Google Play."),
+                tr("A frissítéseket a Google Play telepíti.", "Updates are installed by Google Play.", "Updates werden über Google Play installiert."),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             ) else OutlinedButton(onClick = {
-                updateMsg = tr("Keresés…", "Searching…")
+                updateMsg = tr("Keresés…", "Searching…", "Suche…")
                 AppScope.scope.launch {
                     val found = Updater.check()
-                    updateMsg = if (found == null) tr("Ez a legfrissebb verzió (vagy nem érhető el a GitHub).", "This is the latest version (or GitHub can't be reached).") else null
+                    updateMsg = if (found == null) tr("Ez a legfrissebb verzió (vagy nem érhető el a GitHub).", "This is the latest version (or GitHub can't be reached).", "Das ist die neueste Version (oder GitHub ist nicht erreichbar).") else null
                 }
-            }) { Text(tr("Frissítés keresése", "Check for updates")) }
+            }) { Text(tr("Frissítés keresése", "Check for updates", "Nach Updates suchen")) }
             updateMsg?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Neon.TextDim) }
 
             Button(
@@ -1533,7 +1551,7 @@ internal fun SettingsScreen(onDone: () -> Unit) {
                 },
                 enabled = draft.isReady,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text(tr("Mentés", "Save")) }
+            ) { Text(tr("Mentés", "Save", "Speichern")) }
         }
     }
 }
@@ -1548,7 +1566,7 @@ private fun SecretField(label: String, value: String, onChange: (String) -> Unit
         singleLine = true,
         visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
         trailingIcon = {
-            TextButton(onClick = { show = !show }) { Text(if (show) tr("Elrejt", "Hide") else tr("Mutat", "Show")) }
+            TextButton(onClick = { show = !show }) { Text(if (show) tr("Elrejt", "Hide", "Verbergen") else tr("Mutat", "Show", "Anzeigen")) }
         },
         modifier = Modifier.fillMaxWidth(),
     )
@@ -1576,13 +1594,13 @@ internal fun AirportField(label: String, selected: Place?, onSelect: (Place?) ->
                 if (selected != null) onSelect(null)
             },
             label = { Text(label) },
-            placeholder = { Text(tr("Város, repülőtér vagy kód", "City, airport or code")) },
+            placeholder = { Text(tr("Város, repülőtér vagy kód", "City, airport or code", "Stadt, Flughafen oder Code")) },
             supportingText = {
                 Text(
                     when {
                         selected != null -> selected.subtitle
-                        text.isNotBlank() && results.isEmpty() -> tr("Nincs találat", "No results")
-                        else -> tr("Kezdj el gépelni, pl. Budapest, London, Bécs", "Start typing, e.g. Budapest, London, Vienna")
+                        text.isNotBlank() && results.isEmpty() -> tr("Nincs találat", "No results", "Keine Treffer")
+                        else -> tr("Kezdj el gépelni, pl. Budapest, London, Bécs", "Start typing, e.g. Budapest, London, Vienna", "Tippe los, z. B. Budapest, London, Wien")
                     },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1595,7 +1613,7 @@ internal fun AirportField(label: String, selected: Place?, onSelect: (Place?) ->
                         text = ""
                         onSelect(null)
                         expanded = false
-                    }) { Icon(Icons.Filled.Clear, contentDescription = tr("Törlés", "Clear")) }
+                    }) { Icon(Icons.Filled.Clear, contentDescription = tr("Törlés", "Clear", "Leeren")) }
                 }
             },
             modifier = Modifier
@@ -1665,7 +1683,7 @@ private fun Stepper(label: String, hint: String?, value: Int, range: IntRange, o
         FilledTonalIconButton(
             onClick = { onChange(value - 1) },
             enabled = value > range.first,
-            modifier = Modifier.semantics { contentDescription = tr("$label: kevesebb", "$label: fewer") },
+            modifier = Modifier.semantics { contentDescription = tr("$label: kevesebb", "$label: fewer", "$label: weniger") },
         ) {
             Text("−", style = MaterialTheme.typography.titleLarge, modifier = Modifier.clearAndSetSemantics { })
         }
@@ -1676,7 +1694,7 @@ private fun Stepper(label: String, hint: String?, value: Int, range: IntRange, o
             modifier = Modifier.width(36.dp),
         )
         FilledTonalIconButton(onClick = { onChange(value + 1) }, enabled = value < range.last) {
-            Icon(Icons.Filled.Add, contentDescription = tr("$label: több", "$label: more"))
+            Icon(Icons.Filled.Add, contentDescription = tr("$label: több", "$label: more", "$label: mehr"))
         }
     }
 }
@@ -1739,15 +1757,15 @@ private fun DateField(
             text = v.filter { it.isDigit() || it in ".-/ " }.take(12)
             val parsed = parseTypedDate(text)
             error = when {
-                parsed == null -> tr("Formátum: 2026.10.16", "Format: 2026.10.16 (year.month.day)")
-                parsed.isBefore(minDate) -> tr("Legkorábban: ${minDate.format(typedDateFormat)}", "Earliest: ${minDate.format(typedDateFormat)}")
-                parsed.isAfter(maxDate) -> tr("Legkésőbb: ${maxDate.format(typedDateFormat)}", "Latest: ${maxDate.format(typedDateFormat)}")
+                parsed == null -> tr("Formátum: 2026.10.16", "Format: 2026.10.16 (year.month.day)", "Format: 2026.10.16 (Jahr.Monat.Tag)")
+                parsed.isBefore(minDate) -> tr("Legkorábban: ${minDate.format(typedDateFormat)}", "Earliest: ${minDate.format(typedDateFormat)}", "Frühestens: ${minDate.format(typedDateFormat)}")
+                parsed.isAfter(maxDate) -> tr("Legkésőbb: ${maxDate.format(typedDateFormat)}", "Latest: ${maxDate.format(typedDateFormat)}", "Spätestens: ${maxDate.format(typedDateFormat)}")
                 else -> null
             }
             if (parsed != null && !parsed.isBefore(minDate) && !parsed.isAfter(maxDate)) onPick(parsed)
         },
         label = { Text(label) },
-        placeholder = { Text(tr("éééé.hh.nn", "yyyy.mm.dd")) },
+        placeholder = { Text(tr("éééé.hh.nn", "yyyy.mm.dd", "jjjj.mm.tt")) },
         supportingText = {
             Text(error ?: date.format(DateTimeFormatter.ofPattern("EEEE", Lang.locale)))
         },
@@ -1756,7 +1774,7 @@ private fun DateField(
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         trailingIcon = {
             IconButton(onClick = { open = true }) {
-                Icon(Icons.Filled.DateRange, contentDescription = tr("Naptár megnyitása", "Open calendar"), tint = Neon.Green)
+                Icon(Icons.Filled.DateRange, contentDescription = tr("Naptár megnyitása", "Open calendar", "Kalender öffnen"), tint = Neon.Green)
             }
         },
         modifier = Modifier.fillMaxWidth(),
@@ -1785,7 +1803,7 @@ private fun DateField(
                     open = false
                 }) { Text("OK") }
             },
-            dismissButton = { TextButton(onClick = { open = false }) { Text(tr("Mégse", "Cancel")) } },
+            dismissButton = { TextButton(onClick = { open = false }) { Text(tr("Mégse", "Cancel", "Abbrechen")) } },
         ) {
             DatePicker(state = state)
         }

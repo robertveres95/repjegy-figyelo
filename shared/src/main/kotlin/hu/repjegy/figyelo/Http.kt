@@ -29,7 +29,7 @@ class PartialSourceException(
     val fatal: Boolean = false,
 ) :
     IOException(
-        trs("részleges válasz: $failed/$total kérés hibázott", "partial answer: $failed/$total requests failed") +
+        trs("részleges válasz: $failed/$total kérés hibázott", "partial answer: $failed/$total requests failed", "teilweise Antwort: $failed/$total Anfragen fehlgeschlagen") +
             (cause?.message?.let { " ($it)" } ?: "").take(120),
         cause,
     )
@@ -121,7 +121,7 @@ object Http {
             val n = input.read(buf)
             if (n < 0) break
             out.write(buf, 0, n)
-            if (out.size() > limit) throw IOException(trs("Túl nagy válasz", "Response too large"))
+            if (out.size() > limit) throw IOException(trs("Túl nagy válasz", "Response too large", "Antwort zu groß"))
         }
         return out.toString(Charsets.UTF_8.name())
     }

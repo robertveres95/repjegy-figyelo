@@ -214,12 +214,14 @@ object QuietQueue {
     fun flushIfAwake() {
         if (items.isEmpty() || Store.settings.value.isQuiet()) return
         val text = items.takeLast(5).joinToString("\n") +
-            if (items.size > 5) tr("\n… és még ${items.size - 5}", "\n… and ${items.size - 5} more") else ""
+            if (items.size > 5) tr("\n… és még ${items.size - 5}", "\n… and ${items.size - 5} more", "\n… und ${items.size - 5} weitere") else ""
         TrayNotifier.send(
             tr(
                 "Éjszaka ${items.size} ár esett a célár alá",
                 if (items.size == 1) "1 price dropped below your target overnight"
                 else "${items.size} prices dropped below your target overnight",
+                if (items.size == 1) "Über Nacht ist 1 Preis unter deinen Zielpreis gefallen"
+                else "Über Nacht sind ${items.size} Preise unter deinen Zielpreis gefallen",
             ),
             text,
         )
@@ -251,7 +253,8 @@ object BackgroundLoop {
                     val active = Store.watches.value.filter { !it.isExpired() }
                     val anyAnswer = active.isEmpty() || active.any { w ->
                         // A részleges válasz (talált ajánlatot, de nem minden kérése sikerült) is válasz
-                        (w.lastChecked ?: 0L) >= now && w.sourceStatus.any { it.ok || it.text.contains("részleges") || it.text.contains("partial", ignoreCase = true) }
+                        (w.lastChecked ?: 0L) >= now && w.sourceStatus.any { it.ok || it.text.contains("részleges") || it.text.contains("partial", ignoreCase = true) ||
+                            it.text.contains("teilweise", ignoreCase = true) || it.text.contains("teilantwort", ignoreCase = true) }
                     }
                     if (anyAnswer) Store.prefs.edit { putLong("lastAutoCheck", now) }
                 }
@@ -311,13 +314,15 @@ object DesktopPlatform : PlatformApi {
     override val versionName: String get() = versionProps.getProperty("version", "1.0.0")
     override val buildNumber: Int get() = versionProps.getProperty("build", "1").toIntOrNull() ?: 1
     override val installerSuffix = ".msi"
-    override val deviceWord: String get() = tr("számítógépen", "on your computer")
+    override val deviceWord: String get() = tr("számítógépen", "on your computer", "auf deinem Computer")
     override val updateSteps: String get() = if (canSelfUpdate) {
         tr(
             "1. Kattints a gombra: a REFI letölti az új verziót, és elindítja a telepítést.\n" +
                 "2. A telepítés magától lefut (egy kis folyamatjelző látszik). Utána nyisd meg újra a REFI-t.",
             "1. Click the button: REFI downloads the new version and starts the installation.\n" +
                 "2. The installation runs by itself (you'll see a small progress bar). Then open REFI again.",
+            "1. Klick auf den Button: REFI lädt die neue Version herunter und startet die Installation.\n" +
+                "2. Die Installation läuft von selbst (du siehst einen kleinen Fortschrittsbalken). Öffne REFI danach wieder.",
         )
     } else {
         tr(
@@ -327,6 +332,9 @@ object DesktopPlatform : PlatformApi {
             "1. Click the button and your browser downloads the new version.\n" +
                 "2. Open the downloaded file and install it (if Windows shows a warning, click " +
                 "\"More info\", then \"Run anyway\").",
+            "1. Klick auf den Button, dein Browser lädt die neue Version herunter.\n" +
+                "2. Öffne die heruntergeladene Datei und installiere sie (wenn Windows eine Warnung zeigt, klick auf " +
+                "„Weitere Informationen“ und dann auf „Trotzdem ausführen“).",
         )
     }
 
@@ -388,6 +396,7 @@ object DesktopPlatform : PlatformApi {
         get() = tr(
             "Ablak bezárásakor a REFI a tálcán fut tovább és onnan ellenőriz; kikapcsolt gépen nem figyel.",
             "When you close the window, REFI keeps running in the system tray and checks from there; it can't watch while the computer is off.",
+            "Wenn du das Fenster schließt, läuft REFI im Infobereich der Taskleiste weiter und prüft von dort; bei ausgeschaltetem Computer kann es nicht beobachten.",
         )
 
     override val appFont: FontFamily by lazy {
@@ -433,8 +442,8 @@ object DesktopPlatform : PlatformApi {
     override fun notifyPriceDrop(w: Watch, currency: String) {
         val best = w.bestOffer ?: return
         val text = buildString {
-            append(tr("Célár alatt (${formatPrice(w.targetPrice, currency)}).", "Below your target price (${formatPrice(w.targetPrice, currency)})."))
-            best.outboundText()?.let { append(tr(" Indulás: $it", " Departure: $it")) }
+            append(tr("Célár alatt (${formatPrice(w.targetPrice, currency)}).", "Below your target price (${formatPrice(w.targetPrice, currency)}).", "Unter deinem Zielpreis (${formatPrice(w.targetPrice, currency)})."))
+            best.outboundText()?.let { append(tr(" Indulás: $it", " Departure: $it", " Abflug: $it")) }
             best.airline?.let { append(" · $it") }
         }
         val title = "${w.routeTitle}: ${formatPrice(best.price, currency)}"
@@ -458,6 +467,7 @@ object DesktopPlatform : PlatformApi {
         get() = tr(
             "Ilyenkor nem ugrik fel értesítés; a csendes idő végén egy összefoglalót kapsz a közben esett árakról.",
             "No pop-ups during this time; when quiet hours end, you get a summary of the prices that dropped.",
+            "In dieser Zeit erscheinen keine Pop-ups; am Ende der Ruhezeit bekommst du eine Zusammenfassung der gefallenen Preise.",
         )
 
     override fun shareText(text: String): Boolean = runCatching {
@@ -473,7 +483,7 @@ object DesktopPlatform : PlatformApi {
     override fun exportFile(suggestedName: String, content: String, onDone: (Boolean) -> Unit) {
         SwingUtilities.invokeLater {
             val ok = runCatching {
-                val dialog = java.awt.FileDialog(null as java.awt.Frame?, tr("REFI-mentés helye", "Save REFI backup"), java.awt.FileDialog.SAVE)
+                val dialog = java.awt.FileDialog(null as java.awt.Frame?, tr("REFI-mentés helye", "Save REFI backup", "REFI-Sicherung speichern"), java.awt.FileDialog.SAVE)
                 dialog.file = suggestedName
                 dialog.isVisible = true
                 val name = dialog.file ?: return@runCatching false
@@ -489,7 +499,7 @@ object DesktopPlatform : PlatformApi {
     override fun importFile(onResult: (String?) -> Unit) {
         SwingUtilities.invokeLater {
             val text = runCatching {
-                val dialog = java.awt.FileDialog(null as java.awt.Frame?, tr("REFI-mentés megnyitása", "Open REFI backup"), java.awt.FileDialog.LOAD)
+                val dialog = java.awt.FileDialog(null as java.awt.Frame?, tr("REFI-mentés megnyitása", "Open REFI backup", "REFI-Sicherung öffnen"), java.awt.FileDialog.LOAD)
                 dialog.setFilenameFilter { _, n -> n.endsWith(".json", ignoreCase = true) }
                 dialog.isVisible = true
                 val name = dialog.file ?: return@runCatching null
@@ -503,10 +513,11 @@ object DesktopPlatform : PlatformApi {
 
     override fun notifyUpdate(release: Updater.Release) {
         TrayNotifier.send(
-            tr("Új verzió érhető el", "New version available"),
+            tr("Új verzió érhető el", "New version available", "Neue Version verfügbar"),
             tr(
                 "Megjelent a REFI ${release.version}. Nyisd meg az appot a frissítéshez.",
                 "REFI ${release.version} is out. Open the app to update.",
+                "REFI ${release.version} ist da. Öffne die App zum Aktualisieren.",
             ),
         )
     }
@@ -660,13 +671,13 @@ fun main(args: Array<String>) {
         Tray(
             state = trayState,
             icon = icon,
-            tooltip = tr("REFI – repjegy figyelő", "REFI – flight price tracker"),
+            tooltip = tr("REFI – repjegy figyelő", "REFI – flight price tracker", "REFI – Flugpreis-Tracker"),
             onAction = { show() },
             menu = {
-                Item(tr("Megnyitás", "Open"), onClick = { show() })
-                Item(tr("Összes ellenőrzése most", "Check all now"), onClick = { AppScope.scope.launch { PriceChecker.checkAll() } })
+                Item(tr("Megnyitás", "Open", "Öffnen"), onClick = { show() })
+                Item(tr("Összes ellenőrzése most", "Check all now", "Jetzt alle prüfen"), onClick = { AppScope.scope.launch { PriceChecker.checkAll() } })
                 Separator()
-                Item(tr("Kilépés", "Quit"), onClick = ::exitApplication)
+                Item(tr("Kilépés", "Quit", "Beenden"), onClick = ::exitApplication)
             },
         )
 
@@ -677,10 +688,11 @@ fun main(args: Array<String>) {
                     hintShown = true
                     DesktopPrefs.edit { putBoolean("trayHintShown", true) }
                     TrayNotifier.send(
-                        tr("A REFI a tálcán fut tovább", "REFI keeps running in the system tray"),
+                        tr("A REFI a tálcán fut tovább", "REFI keeps running in the system tray", "REFI läuft im Infobereich weiter"),
                         tr(
                             "Innen figyeli az árakat. Kilépni a tálcaikonra jobb gombbal kattintva lehet.",
                             "It watches prices from there. To quit, right-click the tray icon.",
+                            "Von dort beobachtet es die Preise. Zum Beenden klick mit der rechten Maustaste auf das Symbol im Infobereich.",
                         ),
                     )
                 }

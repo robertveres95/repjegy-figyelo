@@ -94,11 +94,11 @@ fun ToastWindow(onOpenApp: () -> Unit) {
                 Text(t.text, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.weight(1f))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(onClick = { onOpenApp(); ToastCenter.current.value = null }) { Text(tr("Megnyitás", "Open")) }
-                    t.url?.let { u -> OutlinedButton(onClick = { DesktopPlatform.openUrl(u) }) { Text(tr("Foglalás", "Book")) } }
+                    Button(onClick = { onOpenApp(); ToastCenter.current.value = null }) { Text(tr("Megnyitás", "Open", "Öffnen")) }
+                    t.url?.let { u -> OutlinedButton(onClick = { DesktopPlatform.openUrl(u) }) { Text(tr("Foglalás", "Book", "Buchen")) } }
                     t.share?.let { s ->
                         OutlinedButton(onClick = { copied = DesktopPlatform.shareText(s) }) {
-                            Text(if (copied) tr("Másolva ✓", "Copied ✓") else tr("Megosztás", "Share"))
+                            Text(if (copied) tr("Másolva ✓", "Copied ✓", "Kopiert ✓") else tr("Megosztás", "Share", "Teilen"))
                         }
                     }
                 }

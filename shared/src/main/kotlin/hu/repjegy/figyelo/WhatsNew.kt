@@ -23,20 +23,27 @@ import androidx.compose.ui.unit.dp
  * Kiadáskor ide kerül az új verzió pár pontja (a legújabb legyen elöl).
  */
 object WhatsNew {
-    /** A felület nyelvén (a magyar a mérvadó; angolul a [englishNotes] táblából, ha van fordítás). */
+    /**
+     * A felület nyelvén (a magyar a mérvadó; angolul az [englishNotes], németül a [germanNotes]
+     * táblából, ha van fordítás – németül ennek hiányában angolul, végül magyarul).
+     */
     val notes: List<Pair<String, List<String>>>
-        get() = if (Lang.en) hungarian.map { (v, lines) -> v to (englishNotes[v] ?: lines) } else hungarian
+        get() = when (Lang.code) {
+            Lang.HU_CODE -> hungarian
+            Lang.DE_CODE -> hungarian.map { (v, lines) -> v to (germanNotes[v] ?: englishNotes[v] ?: lines) }
+            else -> hungarian.map { (v, lines) -> v to (englishNotes[v] ?: lines) }
+        }
 
     private val hungarian: List<Pair<String, List<String>>> = listOf(
         "1.4.0" to listOf(
-            "A REFI már angolul is beszél (Beállítások → Nyelv).",
+            "A REFI már angolul és németül is beszél (Beállítások → Nyelv) – a városnevek is a választott nyelven.",
             "„Minden héten” rugalmasság: pl. péntek–vasárnapot megadva bármelyik hétvégét figyeli, és a legolcsóbbat mutatja.",
-            "„Bárhová, olcsón” riasztás a Felfedezésben: szólunk, ha bármelyik úti célra a megadott ár alá megy a jegy.",
+            "Havi árnaptár a szerkesztőben: egy pillantással látod, melyik napon a legolcsóbb indulni.",
+            "„Bárhová, olcsón” riasztás a Felfedezésben (a Wizz Air ajánlataival is): szólunk, ha bármelyik úti célra a megadott ár alá megy a jegy. A riasztások minden eszközödre átkerülnek.",
             "„Vegyem most vagy várjak?” már az első ellenőrzés után, és árelőrejelzés az eddigi árak alapján.",
-            "A kártyán: mennyit nyersz a figyeléssel, a távoli repterek transzferköltsége és a fejenkénti teljes költség.",
-            "Egy koppintással a naptárba teheted a járatot.",
+            "A kártyán: mennyit nyersz a figyeléssel, a távoli repterek transzferköltsége, a fejenkénti teljes költség, és egy koppintással a naptárba teheted a járatot.",
             "Közös figyelés: az újra elküldött figyelés frissül, nem lesz belőle kettő; az üzenetben az aktuális ár és a foglalási link is benne van.",
-            "Windowson az értesítés gombokkal jön: Megnyitás, Foglalás, Megosztás. A Chrome-bővítmény ikonján szám mutatja a célár alatti figyeléseket.",
+            "Az értesítéseken gombok: Foglalás, Megosztás, Megnyitás (telefonon és Windowson is). A Chrome-bővítmény ikonján szám mutatja a célár alatti figyeléseket.",
         ),
         "1.3.3" to listOf(
             "Windowson a frissítés egy kattintás: a REFI maga tölti le és telepíti az új verziót.",
@@ -65,14 +72,14 @@ object WhatsNew {
     /** Az újdonságok angolul, verziónként. */
     private val englishNotes: Map<String, List<String>> = mapOf(
         english("1.4.0", listOf(
-            "REFI now speaks English too (Settings → Language).",
+            "REFI now speaks English and German too (Settings → Language) – city names follow the chosen language as well.",
             "“Every week” flexibility: e.g. set Friday–Sunday and REFI watches every weekend and shows you the cheapest.",
-            "“Anywhere, cheap” alert in Discover: we tell you when a trip to any destination drops below your price.",
+            "Monthly price calendar in the editor: see at a glance which day is cheapest to fly.",
+            "“Anywhere, cheap” alerts in Discover (now with Wizz Air deals too): we tell you when a trip to any destination drops below your price. Alerts sync to all your devices.",
             "“Buy now or wait?” right after the first check, plus a price forecast based on the prices so far.",
-            "On the card: how much you save by watching, the transfer cost at remote airports and the total cost per person.",
-            "Add the flight to your calendar with one tap.",
+            "On the card: how much you save by watching, the transfer cost at remote airports, the total cost per person, and add the flight to your calendar with one tap.",
             "Shared watches: a watch sent again is updated instead of duplicated; the message includes the current price and the booking link.",
-            "On Windows, notifications come with buttons: Open, Book, Share. The Chrome extension icon shows how many watches are below target.",
+            "Notifications now have buttons: Book, Share, Open (on your phone and on Windows). The Chrome extension icon shows how many watches are below target.",
         )),
         english("1.3.3", listOf(
             "On Windows, updating is one click: REFI downloads and installs the new version itself.",
@@ -93,6 +100,42 @@ object WhatsNew {
             "If signing in fails (e.g. no internet), you can still continue.",
             "Tips and tricks when creating a watch – and a wizard that guides you through setting up the free keys. The keys also move to your other devices automatically.",
             "Lots of small fixes behind the scenes.",
+        )),
+    )
+
+    private fun german(version: String, lines: List<String>) = version to lines
+
+    /** Az újdonságok németül, verziónként. */
+    private val germanNotes: Map<String, List<String>> = mapOf(
+        german("1.4.0", listOf(
+            "REFI spricht jetzt auch Englisch und Deutsch (Einstellungen → Sprache) – auch die Städtenamen in der gewählten Sprache.",
+            "„Jede Woche“-Flexibilität: z. B. Freitag–Sonntag wählen, und REFI beobachtet jedes Wochenende und zeigt das günstigste.",
+            "Monatlicher Preiskalender im Editor: Auf einen Blick siehst du, an welchem Tag der Flug am günstigsten ist.",
+            "„Überall günstig“-Alarm unter Entdecken (jetzt auch mit Wizz-Air-Angeboten): Wir melden uns, wenn ein Flug zu irgendeinem Ziel unter deinen Preis fällt. Die Alarme werden auf alle deine Geräte übertragen.",
+            "„Jetzt buchen oder warten?“ schon nach der ersten Prüfung, dazu eine Preisprognose aus den bisherigen Preisen.",
+            "Auf der Karte: wie viel du durchs Beobachten sparst, die Transferkosten an abgelegenen Flughäfen, die Gesamtkosten pro Person – und mit einem Tippen kommt der Flug in deinen Kalender.",
+            "Geteilte Beobachtungen: Eine erneut gesendete Beobachtung wird aktualisiert statt verdoppelt; die Nachricht enthält den aktuellen Preis und den Buchungslink.",
+            "Benachrichtigungen mit Knöpfen: Buchen, Teilen, Öffnen (auf dem Handy und unter Windows). Das Symbol der Chrome-Erweiterung zeigt, wie viele Beobachtungen unter dem Zielpreis liegen.",
+        )),
+        german("1.3.3", listOf(
+            "Unter Windows ist das Update ein Klick: REFI lädt die neue Version selbst herunter und installiert sie.",
+            "Du kannst einstellen, ob REFI mit Windows startet.",
+            "Noch zuverlässigere Synchronisierung, wenn du mehrere Geräte nutzt – auch Schlüssel und Währung.",
+            "Beim Abmelden bleiben deine anderen Geräte angemeldet; auf dem Handy kannst du bei der nächsten Anmeldung auch ein Konto wählen.",
+            "Wenn du die Einstellungen verlässt, fragen wir nach, falls du deine Änderungen nicht gespeichert hast.",
+            "Du kannst die Tipps einzeln oder alle auf einmal ausschalten (und in den Einstellungen wieder einschalten).",
+            "Genauere Wizz-Air- und Ignav-Suche, eine besser lesbare Oberfläche und viele kleine Korrekturen.",
+        )),
+        german("1.3.2", listOf(
+            "Ein neues, augenschonenderes blaues Farbschema.",
+            "Detailliertere Preiskurve: mit Datum, höchstem und niedrigstem Preis, und bei Reisen ohne Gepäck auch mit Googles Preisverlauf der letzten 2 Wochen.",
+            "Entdecken: Du kannst jetzt bis zu ein Jahr im Voraus nach günstigen Zielen suchen.",
+            "Zuverlässigere Synchronisierung zwischen Handy und Computer – eine gelöschte Beobachtung kommt nicht zurück.",
+            "Weniger unnötige Benachrichtigungen: Über denselben Preis sagen wir dir nicht zweimal Bescheid.",
+            "Die App fragt nach, bevor sie eine Beobachtung löscht und bevor du dich abmeldest.",
+            "Wenn die Anmeldung fehlschlägt (z. B. kein Internet), kannst du trotzdem weitermachen.",
+            "Tipps und Tricks beim Anlegen einer Beobachtung – und ein Assistent, der dich durch die Einrichtung der kostenlosen Schlüssel führt. Die Schlüssel landen auch automatisch auf deinen anderen Geräten.",
+            "Viele kleine Fehlerbehebungen im Hintergrund.",
         )),
     )
 
@@ -144,7 +187,7 @@ internal fun WhatsNewOverlay(items: List<Pair<String, List<String>>>, onClose: (
     ) {
         NeonCard(modifier = Modifier.fillMaxWidth().enterAnimation()) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(tr("ÚJDONSÁGOK", "WHAT’S NEW"), style = MaterialTheme.typography.headlineMedium.glow(), color = Neon.Green)
+                Text(tr("ÚJDONSÁGOK", "WHAT’S NEW", "NEUIGKEITEN"), style = MaterialTheme.typography.headlineMedium.glow(), color = Neon.Green)
                 items.forEach { (version, lines) ->
                     Text("REFI $version", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     lines.forEach { line ->
@@ -155,7 +198,7 @@ internal fun WhatsNewOverlay(items: List<Pair<String, List<String>>>, onClose: (
                     }
                 }
                 Button(onClick = onClose, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
-                    Text(tr("Rendben", "OK"), fontWeight = FontWeight.Bold)
+                    Text(tr("Rendben", "OK", "OK"), fontWeight = FontWeight.Bold)
                 }
             }
         }

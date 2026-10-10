@@ -254,7 +254,7 @@ object DealAlerts {
         val now = System.currentTimeMillis()
         r.onFailure { e ->
             if (e is kotlinx.coroutines.CancellationException) throw e
-            update(a.id) { it.copy(lastChecked = now, lastError = e.message?.take(160) ?: trs("hiba", "error")) }
+            update(a.id) { it.copy(lastChecked = now, lastError = e.message?.take(160) ?: trs("hiba", "error", "Fehler")) }
         }
         r.onSuccess { results ->
             val sameCur = a.currency == currency
@@ -267,10 +267,11 @@ object DealAlerts {
                 val title = trs(
                     "Olcsó út innen: ${a.fromName} – ${formatPrice(top.first().pricePerPerson, currency)}/fő",
                     "Cheap trip from ${a.fromName} – ${formatPrice(top.first().pricePerPerson, currency)}/person",
+                    "Günstige Reise ab ${a.fromName} – ${formatPrice(top.first().pricePerPerson, currency)}/Person",
                 )
                 val text = top.joinToString("\n") {
-                    "${it.shownCity}: ${formatPrice(it.pricePerPerson, currency)}${trs("/fő", "/person")} · ${Discover.describeDates(it)}"
-                } + if (news.size > 3) trs("\n…és még ${news.size - 3} úti cél", "\n…and ${news.size - 3} more destinations") else ""
+                    "${it.shownCity}: ${formatPrice(it.pricePerPerson, currency)}${trs("/fő", "/person", "/Person")} · ${Discover.describeDates(it)}"
+                } + if (news.size > 3) trs("\n…és még ${news.size - 3} úti cél", "\n…and ${news.size - 3} more destinations", "\n…und ${news.size - 3} weitere Reiseziele") else ""
                 Platform.current.notifyMessage("deal-${a.id}", title, text, null)
             }
             update(a.id) {
@@ -286,8 +287,9 @@ object DealAlerts {
 
     /** Az időszak felirata a riasztáshoz. */
     fun periodLabel(a: DealAlert): String {
-        val m = a.month?.let { runCatching { YearMonth.parse(it) }.getOrNull() } ?: return trs("a következő 30 napban", "in the next 30 days")
+        val m = a.month?.let { runCatching { YearMonth.parse(it) }.getOrNull() } ?: return trs("a következő 30 napban", "in the next 30 days", "in den nächsten 30 Tagen")
         if (Lang.en) return "in " + m.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy", Lang.locale))
+        if (Lang.de) return "im " + m.format(java.time.format.DateTimeFormatter.ofPattern("LLLL yyyy", Lang.locale))
         // „szeptemberben”, „októberben”, „novemberben”, „decemberben” – a többi hónap „-ban”
         return m.format(java.time.format.DateTimeFormatter.ofPattern("yyyy. LLLL", HU)) + if (m.monthValue >= 9) "ben" else "ban"
     }

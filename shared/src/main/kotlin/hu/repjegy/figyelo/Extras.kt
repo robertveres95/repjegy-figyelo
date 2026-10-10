@@ -23,7 +23,14 @@ object ShareCode {
     // „Minden héten” figyelés kódja: a régi (1.3-as) appok ezt nem ismerik fel, így nem veszik át
     // tévesen egyszerű, egy dátumos figyelésként
     private const val PREFIX2 = "REFI2:"
-    private val shortDate: DateTimeFormatter get() = DateTimeFormatter.ofPattern(if (Lang.en) "d MMM" else "MMM d.", Lang.locale)
+    private val shortDate: DateTimeFormatter get() = DateTimeFormatter.ofPattern(
+        when (Lang.code) {
+            Lang.HU_CODE -> "MMM d."
+            Lang.DE_CODE -> "d. MMM"
+            else -> "d MMM"
+        },
+        Lang.locale,
+    )
 
     fun encode(w: Watch, currency: String): String {
         val json = JSONObject()
@@ -41,21 +48,22 @@ object ShareCode {
         val out = runCatching { LocalDate.parse(w.outboundDate).format(shortDate) }.getOrDefault(w.outboundDate)
         val ret = w.returnDate?.let { r -> runCatching { LocalDate.parse(r).format(shortDate) }.getOrDefault(r) }
         val until = w.weeklyUntil?.let { u -> runCatching { LocalDate.parse(u).format(shortDate) }.getOrDefault(u) }
-        val dates = (if (ret != null) "$out – $ret" else out) + (until?.let { tr(", minden héten $it-ig", ", every week until $it") } ?: "")
+        val dates = (if (ret != null) "$out – $ret" else out) + (until?.let { tr(", minden héten $it-ig", ", every week until $it", ", jede Woche bis $it") } ?: "")
         // Ha van friss ár, az is benne van (a családnak így elég az üzenetet elolvasni)
         val best = w.bestOffer?.takeIf { w.comparable(it) }
         val deal = best?.let { b ->
             val day = b.departure?.take(10)?.let { d -> runCatching { LocalDate.parse(d).format(shortDate) }.getOrNull() }
-            tr("Most: ", "Now: ") + formatPrice(b.price, currency) + listOfNotNull(b.airline, day).joinToString(", ").let { if (it.isBlank()) "" else " ($it)" } +
-                (if (w.alertable(b)) tr(" – a célár alatt! 🎉", " – below the target price! 🎉") else "") + "\n" +
-                (b.url?.takeIf { it.startsWith("https://") }?.let { tr("Foglalás: $it\n", "Book: $it\n") } ?: "")
+            tr("Most: ", "Now: ", "Jetzt: ") + formatPrice(b.price, currency) + listOfNotNull(b.airline, day).joinToString(", ").let { if (it.isBlank()) "" else " ($it)" } +
+                (if (w.alertable(b)) tr(" – a célár alatt! 🎉", " – below the target price! 🎉", " – unter dem Zielpreis! 🎉") else "") + "\n" +
+                (b.url?.takeIf { it.startsWith("https://") }?.let { tr("Foglalás: $it\n", "Book: $it\n", "Buchen: $it\n") } ?: "")
         } ?: ""
-        return tr("✈ REFI figyelés: ${w.routeTitle}, $dates\n", "✈ REFI watch: ${w.routeTitle}, $dates\n") +
+        return tr("✈ REFI figyelés: ${w.routeTitle}, $dates\n", "✈ REFI watch: ${w.routeTitle}, $dates\n", "✈ REFI-Beobachtung: ${w.routeTitle}, $dates\n") +
             deal +
-            tr("Célár: ${formatPrice(w.targetPrice, currency)}\n", "Target price: ${formatPrice(w.targetPrice, currency)}\n") +
+            tr("Célár: ${formatPrice(w.targetPrice, currency)}\n", "Target price: ${formatPrice(w.targetPrice, currency)}\n", "Zielpreis: ${formatPrice(w.targetPrice, currency)}\n") +
             tr(
                 "Átvétel: REFI → ⋮ menü → Kód beillesztése (vagy oszd meg ezt az üzenetet a REFI-vel).\n",
                 "To add it: REFI → ⋮ menu → Paste code (or share this message with REFI).\n",
+                "Zum Übernehmen: REFI → ⋮ Menü → Code einfügen (oder teile diese Nachricht mit REFI).\n",
             ) +
             encode(w, currency)
     }
@@ -253,17 +261,18 @@ fun verdictFor(w: Watch, today: LocalDate = LocalDate.now(), currency: String? =
     val soon = daysLeft <= 14
     return when {
         now <= min -> Verdict(
-            tr("Ez az eddigi legalacsonyabb ár – jó alkalom a foglalásra.", "This is the lowest price so far – a good time to book."),
+            tr("Ez az eddigi legalacsonyabb ár – jó alkalom a foglalásra.", "This is the lowest price so far – a good time to book.", "Das ist der bisher niedrigste Preis – ein guter Zeitpunkt zum Buchen."),
             Verdict.Tone.GOOD,
         )
         share <= 0.25 -> Verdict(
-            tr("Jó ár: az eddig mért árak legolcsóbb negyedében van.", "Good price: it's in the cheapest quarter of the prices seen so far."),
+            tr("Jó ár: az eddig mért árak legolcsóbb negyedében van.", "Good price: it's in the cheapest quarter of the prices seen so far.", "Guter Preis: Er liegt im günstigsten Viertel der bisherigen Preise."),
             Verdict.Tone.GOOD,
         )
         share >= 0.75 && !soon -> Verdict(
             tr(
                 "Drágább, mint az eddigi árak többsége – ha nem sürgős, érdemes még várni.",
                 "Pricier than most prices so far – if it's not urgent, it's worth waiting.",
+                "Teurer als die meisten bisherigen Preise – wenn es nicht eilt, lohnt sich das Warten.",
             ),
             Verdict.Tone.WAIT,
         )
@@ -271,14 +280,15 @@ fun verdictFor(w: Watch, today: LocalDate = LocalDate.now(), currency: String? =
             tr(
                 "Drágább az eddigieknél, de két héten belül az árak ritkán esnek – ne várj sokat.",
                 "Pricier than before, but prices rarely drop within two weeks of departure – don't wait long.",
+                "Teurer als bisher, aber in den zwei Wochen vor dem Abflug fallen die Preise selten – warte nicht zu lange.",
             ),
             Verdict.Tone.NEUTRAL,
         )
         soon -> Verdict(
-            tr("Átlagos ár; két héten belül az árak inkább emelkednek.", "Average price; within two weeks of departure prices tend to rise."),
+            tr("Átlagos ár; két héten belül az árak inkább emelkednek.", "Average price; within two weeks of departure prices tend to rise.", "Durchschnittlicher Preis; in den zwei Wochen vor dem Abflug steigen die Preise eher."),
             Verdict.Tone.NEUTRAL,
         )
-        else -> Verdict(tr("Átlagos ár az eddigiekhez képest.", "Average price compared with the prices so far."), Verdict.Tone.NEUTRAL)
+        else -> Verdict(tr("Átlagos ár az eddigiekhez képest.", "Average price compared with the prices so far.", "Durchschnittlicher Preis im Vergleich zu den bisherigen Preisen."), Verdict.Tone.NEUTRAL)
     }
 }
 
@@ -293,19 +303,19 @@ internal fun marketVerdict(w: Watch, now: Int, daysLeft: Long, currency: String?
     val high = m.typicalHigh ?: return null
     if (low <= 0 || high < low) return null
     val band = currency?.let {
-        tr(" (általában ${formatPrice(low, it)} – ${formatPrice(high, it)})", " (usually ${formatPrice(low, it)} – ${formatPrice(high, it)})")
+        tr(" (általában ${formatPrice(low, it)} – ${formatPrice(high, it)})", " (usually ${formatPrice(low, it)} – ${formatPrice(high, it)})", " (meist ${formatPrice(low, it)} – ${formatPrice(high, it)})")
     } ?: ""
     return when {
-        now < low -> Verdict(tr("Olcsóbb a szokásosnál$band – jó alkalom a foglalásra.", "Cheaper than usual$band – a good time to book."), Verdict.Tone.GOOD)
+        now < low -> Verdict(tr("Olcsóbb a szokásosnál$band – jó alkalom a foglalásra.", "Cheaper than usual$band – a good time to book.", "Günstiger als üblich$band – ein guter Zeitpunkt zum Buchen."), Verdict.Tone.GOOD)
         now > high && daysLeft > 14 -> Verdict(
-            tr("Drágább a szokásosnál$band – ha nem sürgős, érdemes várni.", "Pricier than usual$band – if it's not urgent, it's worth waiting."),
+            tr("Drágább a szokásosnál$band – ha nem sürgős, érdemes várni.", "Pricier than usual$band – if it's not urgent, it's worth waiting.", "Teurer als üblich$band – wenn es nicht eilt, lohnt sich das Warten."),
             Verdict.Tone.WAIT,
         )
         now > high -> Verdict(
-            tr("Drágább a szokásosnál$band, de két héten belül az árak ritkán esnek.", "Pricier than usual$band, but prices rarely drop within two weeks of departure."),
+            tr("Drágább a szokásosnál$band, de két héten belül az árak ritkán esnek.", "Pricier than usual$band, but prices rarely drop within two weeks of departure.", "Teurer als üblich$band, aber in den zwei Wochen vor dem Abflug fallen die Preise selten."),
             Verdict.Tone.NEUTRAL,
         )
-        else -> Verdict(tr("Szokásos ár ezen az úton$band.", "Usual price for this route$band."), Verdict.Tone.NEUTRAL)
+        else -> Verdict(tr("Szokásos ár ezen az úton$band.", "Usual price for this route$band.", "Üblicher Preis für diese Strecke$band."), Verdict.Tone.NEUTRAL)
     }
 }
 
@@ -320,9 +330,10 @@ fun savingsLine(w: Watch, currency: String, nowMs: Long = System.currentTimeMill
     val diff = first.price - best.price
     if (diff <= 0 || diff * 20 < first.price) return null
     val days = ((nowMs - first.time) / 86_400_000L).coerceAtLeast(0)
-    val ago = if (days < 1) tr("Ma", "Today") else tr("$days napja", if (days == 1L) "1 day ago" else "$days days ago")
+    val ago = if (days < 1) tr("Ma", "Today", "Heute") else tr("$days napja", if (days == 1L) "1 day ago" else "$days days ago", if (days == 1L) "Vor 1 Tag" else "Vor $days Tagen")
     return tr(
         "▼ $ago még ${formatPrice(first.price, currency)} volt – ennyit nyersz most: ${formatPrice(diff, currency)}",
         "▼ $ago it was still ${formatPrice(first.price, currency)} – you save ${formatPrice(diff, currency)} now",
+        "▼ $ago lag der Preis noch bei ${formatPrice(first.price, currency)} – du sparst jetzt ${formatPrice(diff, currency)}",
     )
 }

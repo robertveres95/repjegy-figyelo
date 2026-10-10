@@ -28,6 +28,7 @@ fun forecastFor(w: Watch, today: LocalDate = LocalDate.now(), nowMs: Long = Syst
             tr(
                 "Előrejelzés: $daysLeft nap van az indulásig – ilyenkor az árak inkább emelkednek, nagy esés ritka.",
                 "Forecast: $daysLeft ${if (daysLeft == 1L) "day" else "days"} until departure – prices tend to rise now, big drops are rare.",
+                "Prognose: noch $daysLeft ${if (daysLeft == 1L) "Tag" else "Tage"} bis zum Abflug – jetzt steigen die Preise eher, große Preisstürze sind selten.",
             ),
             Verdict.Tone.NEUTRAL,
         )
@@ -42,6 +43,7 @@ fun forecastFor(w: Watch, today: LocalDate = LocalDate.now(), nowMs: Long = Syst
             tr(
                 "Előrejelzés: csökkenő trend (naponta átlagosan kb. ${pctText(slopePct)}) – ha nem sürgős, érdemes még figyelni.",
                 "Forecast: falling trend (about ${pctText(slopePct)} a day on average) – if it's not urgent, keep watching.",
+                "Prognose: fallender Trend (im Schnitt etwa ${pctText(slopePct)} pro Tag) – wenn es nicht eilt, beobachte weiter.",
             ),
             Verdict.Tone.WAIT,
         )
@@ -49,6 +51,7 @@ fun forecastFor(w: Watch, today: LocalDate = LocalDate.now(), nowMs: Long = Syst
             tr(
                 "Előrejelzés: emelkedő trend (naponta átlagosan kb. +${pctText(slopePct)}) – ha jó az ár, ne várj sokáig.",
                 "Forecast: rising trend (about +${pctText(slopePct)} a day on average) – if the price is good, don't wait long.",
+                "Prognose: steigender Trend (im Schnitt etwa +${pctText(slopePct)} pro Tag) – wenn der Preis gut ist, warte nicht zu lange.",
             ),
             Verdict.Tone.GOOD,
         )
@@ -87,13 +90,14 @@ fun groupCostLine(w: Watch, best: Offer, currency: String, transferTotal: Int?):
     val total = best.price + (transferTotal ?: 0)
     val per = total / people
     val parts = buildList {
-        add(tr("jegy", "ticket"))
-        if (w.wantsBags && best.bagsIncluded) add(tr("poggyász", "bags"))
-        if (transferTotal != null && transferTotal > 0) add(tr("transzfer", "transfer"))
+        add(tr("jegy", "ticket", "Ticket"))
+        if (w.wantsBags && best.bagsIncluded) add(tr("poggyász", "bags", "Gepäck"))
+        if (transferTotal != null && transferTotal > 0) add(tr("transzfer", "transfer", "Transfer"))
     }.joinToString(" + ")
     return tr(
         "👥 Fejenként kb. ${formatPrice(per, currency)} ($people fő, $parts: ${formatPrice(total, currency)})",
         "👥 About ${formatPrice(per, currency)} per person ($people people, $parts: ${formatPrice(total, currency)})",
+        "👥 Etwa ${formatPrice(per, currency)} pro Person ($people Personen, $parts: ${formatPrice(total, currency)})",
     )
 }
 
@@ -126,23 +130,24 @@ object RefiCalendar {
         val to = o.toCode ?: w.to.substringBefore(',')
         val link = o.url?.takeIf { it.startsWith("https://") }
         fun notes(): String = listOfNotNull(
-            o.airline?.let { tr("Légitársaság: $it", "Airline: $it") },
+            o.airline?.let { tr("Légitársaság: $it", "Airline: $it", "Fluggesellschaft: $it") },
             tr(
                 "Ár a REFI szerint: ${formatPrice(o.price, Store.settings.value.currency)} (a foglaláskor ellenőrizd!)",
                 "Price according to REFI: ${formatPrice(o.price, Store.settings.value.currency)} (check it when booking!)",
+                "Preis laut REFI: ${formatPrice(o.price, Store.settings.value.currency)} (prüfe ihn bei der Buchung!)",
             ),
-            link?.let { tr("Foglalás: $it", "Booking: $it") },
+            link?.let { tr("Foglalás: $it", "Booking: $it", "Buchung: $it") },
         ).joinToString("\n")
         parse(o.departure)?.let { dep ->
             list += CalEvent(
                 "✈ $from → $to" + (o.airline?.let { " ($it)" } ?: ""),
-                dep, zoneFor(from), arrivalIf(from, to, o.arrival), zoneFor(to), tr("$from repülőtér", "$from airport"), notes(),
+                dep, zoneFor(from), arrivalIf(from, to, o.arrival), zoneFor(to), tr("$from repülőtér", "$from airport", "Flughafen $from"), notes(),
             )
         }
         parse(o.returnDeparture)?.let { dep ->
             list += CalEvent(
                 "✈ $to → $from" + (o.airline?.let { " ($it)" } ?: ""),
-                dep, zoneFor(to), arrivalIf(to, from, o.returnArrival), zoneFor(from), tr("$to repülőtér", "$to airport"), notes(),
+                dep, zoneFor(to), arrivalIf(to, from, o.returnArrival), zoneFor(from), tr("$to repülőtér", "$to airport", "Flughafen $to"), notes(),
             )
         }
         return list

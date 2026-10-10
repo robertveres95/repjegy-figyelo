@@ -122,12 +122,14 @@ object GoogleAuthDesktop {
             val html = if (ok) tr(
                 "<h2>REFI: sikeres bejelentkezés.</h2><p>Ezt a lapot bezárhatod, és visszatérhetsz az apphoz.</p>",
                 "<h2>REFI: you're signed in.</h2><p>You can close this tab and go back to the app.</p>",
+                "<h2>REFI: Anmeldung erfolgreich.</h2><p>Du kannst diesen Tab schließen und zur App zurückkehren.</p>",
             )
             else tr(
                 "<h2>REFI: a bejelentkezés nem sikerült.</h2><p>Próbáld újra az appban.</p>",
                 "<h2>REFI: sign-in didn't work.</h2><p>Please try again in the app.</p>",
+                "<h2>REFI: Die Anmeldung hat nicht geklappt.</h2><p>Bitte versuch es in der App noch einmal.</p>",
             )
-            val lang = if (Lang.en) "en" else "hu"
+            val lang = Lang.code
             val bytes = ("<!doctype html><html lang=$lang><meta charset=utf-8><body style='font-family:sans-serif;padding:40px'>$html").toByteArray(Charsets.UTF_8)
             ex.responseHeaders.add("Content-Type", "text/html; charset=utf-8")
             ex.sendResponseHeaders(200, bytes.size.toLong())

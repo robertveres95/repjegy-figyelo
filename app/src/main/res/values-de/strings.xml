@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">REFI</string>
+    <string name="widget_name">REFI Preise</string>
+    <string name="widget_description">Die besten Preise deiner beobachteten Reisen</string>
+</resources>

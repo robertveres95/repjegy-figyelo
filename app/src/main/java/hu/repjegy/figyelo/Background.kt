@@ -73,7 +73,7 @@ class AndroidPlatform private constructor(private val context: Context) : Platfo
     override val versionName: String get() = BuildConfig.VERSION_NAME
     override val buildNumber: Int get() = BuildConfig.VERSION_CODE
     override val installerSuffix = ".apk"
-    override val deviceWord: String get() = tr("telefonon", "on your phone")
+    override val deviceWord: String get() = tr("telefonon", "on your phone", "auf deinem Handy")
     override val updateSteps: String
         get() = tr(
             "1. Koppints a gombra, a böngésző letölti az új verziót.\n" +
@@ -82,11 +82,15 @@ class AndroidPlatform private constructor(private val context: Context) : Platfo
             "1. Tap the button and your browser downloads the new version.\n" +
                 "2. Open the downloaded file and install it (you may need to allow " +
                 "installing apps from unknown sources).",
+            "1. Tippe auf den Button, dein Browser lädt die neue Version herunter.\n" +
+                "2. Öffne die heruntergeladene Datei und installiere sie (eventuell musst du " +
+                "die Installation aus unbekannten Quellen erlauben).",
         )
     override val backgroundHint: String
         get() = tr(
             "Az Android energiatakarékossága miatt a háttér-ellenőrzés kicsit csúszhat.",
             "Because of Android's battery saving, background checks may run a little late.",
+            "Wegen des Energiesparmodus von Android können Prüfungen im Hintergrund etwas später laufen.",
         )
     override val appFont = FontFamily(
         Font(R.font.jakarta_regular, FontWeight.Normal),
@@ -131,7 +135,7 @@ class AndroidPlatform private constructor(private val context: Context) : Platfo
         val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
         return try {
             context.startActivity(
-                Intent.createChooser(send, tr("Figyelés megosztása", "Share watch")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                Intent.createChooser(send, tr("Figyelés megosztása", "Share watch", "Beobachtung teilen")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
             false
         } catch (_: RuntimeException) {
@@ -301,18 +305,18 @@ object Notifier {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.deleteNotificationChannel(OLD_CHANNEL_ID)
         manager.createNotificationChannel(
-            NotificationChannel(QUIET_CHANNEL_ID, tr("Árriasztások (csendes órák)", "Price alerts (quiet hours)"), NotificationManager.IMPORTANCE_LOW).apply {
-                description = tr("Csendes órákban érkező árriasztások, hang és rezgés nélkül", "Price alerts during quiet hours, without sound or vibration")
+            NotificationChannel(QUIET_CHANNEL_ID, tr("Árriasztások (csendes órák)", "Price alerts (quiet hours)", "Preisalarme (Ruhezeiten)"), NotificationManager.IMPORTANCE_LOW).apply {
+                description = tr("Csendes órákban érkező árriasztások, hang és rezgés nélkül", "Price alerts during quiet hours, without sound or vibration", "Preisalarme während der Ruhezeiten, ohne Ton und Vibration")
                 enableVibration(false)
                 setSound(null, null)
             }
         )
         val channel = NotificationChannel(
             CHANNEL_ID,
-            tr("Árriasztások", "Price alerts"),
+            tr("Árriasztások", "Price alerts", "Preisalarme"),
             NotificationManager.IMPORTANCE_HIGH,
         ).apply {
-            description = tr("Értesítés, ha egy figyelt jegy a célár alá esik", "Notifies you when a watched ticket drops below your target price")
+            description = tr("Értesítés, ha egy figyelt jegy a célár alá esik", "Notifies you when a watched ticket drops below your target price", "Benachrichtigung, wenn ein beobachtetes Ticket unter deinen Zielpreis fällt")
             enableVibration(true)
             vibrationPattern = VIBRATION
         }
@@ -329,8 +333,8 @@ object Notifier {
         ) return
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
-            NotificationChannel(UPDATE_CHANNEL_ID, tr("Frissítések", "Updates"), NotificationManager.IMPORTANCE_DEFAULT)
-                .apply { description = tr("Értesítés, ha az appból új verzió jelent meg", "Notifies you when a new version of the app is out") }
+            NotificationChannel(UPDATE_CHANNEL_ID, tr("Frissítések", "Updates", "Updates"), NotificationManager.IMPORTANCE_DEFAULT)
+                .apply { description = tr("Értesítés, ha az appból új verzió jelent meg", "Notifies you when a new version of the app is out", "Benachrichtigung, wenn eine neue Version der App erschienen ist") }
         )
         val intent = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val pending = PendingIntent.getActivity(
@@ -339,8 +343,8 @@ object Notifier {
         )
         val notification = NotificationCompat.Builder(context, UPDATE_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_flight)
-            .setContentTitle(tr("Új verzió érhető el", "New version available"))
-            .setContentText(tr("Megjelent a REFI ${release.version}. Koppints a frissítéshez.", "REFI ${release.version} is out. Tap to update."))
+            .setContentTitle(tr("Új verzió érhető el", "New version available", "Neue Version verfügbar"))
+            .setContentText(tr("Megjelent a REFI ${release.version}. Koppints a frissítéshez.", "REFI ${release.version} is out. Tap to update.", "REFI ${release.version} ist da. Tippe zum Aktualisieren."))
             .setContentIntent(pending)
             .setAutoCancel(true)
             .build()
@@ -417,9 +421,9 @@ object Notifier {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val text = buildString {
-            append(tr("A célár (${formatPrice(w.targetPrice, currency)}) alá esett.", "Dropped below your target price (${formatPrice(w.targetPrice, currency)})."))
-            best.outboundText()?.let { append(tr("\nIndulás: $it", "\nDeparture: $it")) }
-            best.returnText()?.let { append(tr("\nVissza: $it", "\nReturn: $it")) }
+            append(tr("A célár (${formatPrice(w.targetPrice, currency)}) alá esett.", "Dropped below your target price (${formatPrice(w.targetPrice, currency)}).", "Unter deinen Zielpreis (${formatPrice(w.targetPrice, currency)}) gefallen."))
+            best.outboundText()?.let { append(tr("\nIndulás: $it", "\nDeparture: $it", "\nAbflug: $it")) }
+            best.returnText()?.let { append(tr("\nVissza: $it", "\nReturn: $it", "\nRückflug: $it")) }
             append("\n")
             append(listOfNotNull(best.airline, best.source).distinct().joinToString(" · "))
             best.noteText?.let { append(" ($it)") }

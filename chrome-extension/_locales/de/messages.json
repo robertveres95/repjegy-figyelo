@@ -1,0 +1,14 @@
+{
+  "name": {
+    "message": "REFI – Flugpreis-Tracker"
+  },
+  "short_name": {
+    "message": "REFI"
+  },
+  "description": {
+    "message": "Ein schneller Blick auf die Flüge, die du in REFI beobachtest: aktueller Preis, Zielpreis, Preisverlauf."
+  },
+  "action_title": {
+    "message": "REFI – beobachtete Flüge"
+  }
+}
