@@ -15,6 +15,7 @@ a fejlesztői fiókban (Play Console, Google Cloud) végzendő kézi lépés.
 - [x] **targetSdk 36** (Android 16) – a Play 2026-os követelménye.
 - [x] **Adatkezelési tájékoztató** magyarul és angolul: `PRIVACY.md`, weboldalként `docs/privacy.html`.
 - [x] Nincs hirdetés, analitika, követés; csak a szükséges engedélyek (internet, értesítés, rezgés).
+- [x] **Angol nyelv** az appban, a Windows-változatban és a Chrome-bővítményben.
 
 ## Kézi teendők
 
@@ -42,8 +43,8 @@ a fejlesztői fiókban (Play Console, Google Cloud) végzendő kézi lépés.
    a Play-ből). Biztonságosabb nyilvános kiadáshoz: alapból csak a hivatalos, kulcsos források
    (SerpApi, Ignav – a felhasználó saját kulcsával), a többit „kísérleti” kapcsolóként kínálni.
    Kiadás előtt érdemes jogásszal átnézetni.
-9. **Angol nyelv:** a Play-en világszerte csak akkor érdemes megjelenni, ha az app angolul is tud.
-   Ez még nincs kész (az összes szöveg magyar) – nagyobb munka, külön verzióban.
+9. **Angol nyelv:** kész (1.4-től). A készülék nyelve dönt (magyar rendszeren magyar, máshol angol),
+   a Beállításokban átállítható. A Play Console-ban az angol (en-US / en-GB) adatlapot is töltsd ki (lent).
 
 ## Áruházi adatlap
 
@@ -71,3 +72,23 @@ A REFI figyeli a kiválasztott repülőjáratok árát, és értesít, amint az 
 - Titkosítva továbbít? **Igen** (minden kapcsolat HTTPS).
 - Kérhető az adatok törlése? **Igen** – az appban törölhetők a figyelések, a szinkronizálás
   kikapcsolható, a Drive-hozzáférés a Google-fiókban visszavonható.
+
+## Store listing (English)
+
+**Name:** REFI – flight price tracker
+
+**Short description (max 80 characters):**
+Tracks flight prices and tells you when they drop below your target.
+
+**Full description:**
+REFI watches the price of the flights you choose and notifies you as soon as it drops below your target price.
+
+• Searches several sources at once: Google Flights, Ryanair, Wizz Air – plus SerpApi and Ignav with a free key.
+• Adds low-cost baggage fees, so you compare real prices.
+• Flexible dates: ±1–3 days, or “every week” – for example any weekend in the next two months.
+• “Buy now or wait?” – based on the price history and Google’s usual price range.
+• “Anywhere, cheap” alerts: get notified when a trip to any destination drops below your price.
+• Transfer cost at remote airports, total cost per person, add flights to your calendar.
+• Share a watch with family in one message; the home-screen widget shows the best prices.
+• Sync between phone, Windows PC and the Chrome extension through your own Google account.
+• No ads, no registration, no data collection.

@@ -29,12 +29,14 @@ object WhatsNew {
 
     private val hungarian: List<Pair<String, List<String>>> = listOf(
         "1.4.0" to listOf(
-            "Új rugalmasság: „Minden héten” – pl. péntek–vasárnapot megadva bármelyik hétvégét figyeli a következő hetekben, és a legolcsóbbat mutatja.",
-            "Közös figyelés: ha egy megosztott figyelést újra elküldenek (pl. új dátummal), a meglévő frissül, nem lesz belőle kettő. A megosztott üzenetben az aktuális legjobb ár és a foglalási link is benne van.",
-            "„Vegyem most vagy várjak?” – már az első ellenőrzés után: a Google szokásos ársávja alapján megmondjuk, jó-e az ár.",
-            "Látod, mennyit nyersz a figyeléssel: mennyivel olcsóbb most, mint amikor figyelni kezdted.",
-            "Távoli repterek (pl. Stansted, Beauvais, Bergamo) esetén a belvárosi transzfer becsült ára is megjelenik.",
-            "A Chrome-bővítmény ikonján szám mutatja, hány figyelésed van célár alatt.",
+            "A REFI már angolul is beszél (Beállítások → Nyelv).",
+            "„Minden héten” rugalmasság: pl. péntek–vasárnapot megadva bármelyik hétvégét figyeli, és a legolcsóbbat mutatja.",
+            "„Bárhová, olcsón” riasztás a Felfedezésben: szólunk, ha bármelyik úti célra a megadott ár alá megy a jegy.",
+            "„Vegyem most vagy várjak?” már az első ellenőrzés után, és árelőrejelzés az eddigi árak alapján.",
+            "A kártyán: mennyit nyersz a figyeléssel, a távoli repterek transzferköltsége és a fejenkénti teljes költség.",
+            "Egy koppintással a naptárba teheted a járatot.",
+            "Közös figyelés: az újra elküldött figyelés frissül, nem lesz belőle kettő; az üzenetben az aktuális ár és a foglalási link is benne van.",
+            "Windowson az értesítés gombokkal jön: Megnyitás, Foglalás, Megosztás. A Chrome-bővítmény ikonján szám mutatja a célár alatti figyeléseket.",
         ),
         "1.3.3" to listOf(
             "Windowson a frissítés egy kattintás: a REFI maga tölti le és telepíti az új verziót.",
@@ -63,12 +65,14 @@ object WhatsNew {
     /** Az újdonságok angolul, verziónként. */
     private val englishNotes: Map<String, List<String>> = mapOf(
         english("1.4.0", listOf(
-            "New flexibility: “Every week” – e.g. set Friday–Sunday and REFI watches every weekend in the coming weeks and shows you the cheapest.",
-            "Shared watches: if someone sends a shared watch again (e.g. with a new date), the existing one is updated instead of being duplicated. The shared message now includes the current best price and the booking link.",
-            "“Buy now or wait?” – right after the first check: based on Google’s usual price range, we tell you whether the price is good.",
-            "See how much you save by watching: how much cheaper it is now than when you started watching.",
-            "For remote airports (e.g. Stansted, Beauvais, Bergamo) the estimated price of the transfer to the city centre is shown too.",
-            "The Chrome extension icon shows a number: how many of your watches are below the target price.",
+            "REFI now speaks English too (Settings → Language).",
+            "“Every week” flexibility: e.g. set Friday–Sunday and REFI watches every weekend and shows you the cheapest.",
+            "“Anywhere, cheap” alert in Discover: we tell you when a trip to any destination drops below your price.",
+            "“Buy now or wait?” right after the first check, plus a price forecast based on the prices so far.",
+            "On the card: how much you save by watching, the transfer cost at remote airports and the total cost per person.",
+            "Add the flight to your calendar with one tap.",
+            "Shared watches: a watch sent again is updated instead of duplicated; the message includes the current price and the booking link.",
+            "On Windows, notifications come with buttons: Open, Book, Share. The Chrome extension icon shows how many watches are below target.",
         )),
         english("1.3.3", listOf(
             "On Windows, updating is one click: REFI downloads and installs the new version itself.",
