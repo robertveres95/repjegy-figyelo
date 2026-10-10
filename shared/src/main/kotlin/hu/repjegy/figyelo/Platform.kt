@@ -34,7 +34,11 @@ interface PlatformApi {
     val backgroundHint: String
 
     /** Mit jelentenek a csendes órák ezen a platformon. */
-    val quietHint: String get() = "Ilyenkor a riasztás hang és rezgés nélkül érkezik; reggel ott vár az értesítések között."
+    val quietHint: String
+        get() = tr(
+            "Ilyenkor a riasztás hang és rezgés nélkül érkezik; reggel ott vár az értesítések között.",
+            "During these hours alerts arrive without sound or vibration; they'll be waiting in your notifications in the morning.",
+        )
 
     fun openUrl(url: String)
 

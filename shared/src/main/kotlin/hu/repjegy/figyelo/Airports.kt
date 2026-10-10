@@ -20,8 +20,8 @@ object Airports {
 
     private class Entry(val place: Place, val keys: List<String>, val rank: Int)
 
-    @Volatile
-    private var entries: List<Entry>? = null
+    /** A betöltött lista nyelvenként (true = angol): a városnevek és országnevek a felület nyelvén. */
+    private val entriesByLang = java.util.concurrent.ConcurrentHashMap<Boolean, List<Entry>>()
 
     /** Magyar városnevek, hogy pl. „Bécs” vagy „Kolozsvár” is találjon. */
     private val hungarianNames = mapOf(
@@ -47,6 +47,14 @@ object Airports {
         "KGS" to "Kósz", "SKG" to "Thesszaloniki", "EFL" to "Kefalónia", "MEX" to "Mexikóváros",
         "GRU" to "São Paulo", "EZE" to "Buenos Aires", "JNB" to "Johannesburg", "CPT" to "Fokváros",
         "TLV" to "Tel-Aviv", "DOH" to "Doha", "AUH" to "Abu-Dzabi", "BKK" to "Bangkok", "DMK" to "Bangkok",
+    )
+
+    /** A több repülőteres városok angol neve (angol felületen ez látszik; a keresés mindkettőt ismeri). */
+    private val groupEnglishNames = mapOf(
+        "Párizs" to "Paris", "Milánó" to "Milan", "Róma" to "Rome", "Velence" to "Venice",
+        "Brüsszel" to "Brussels", "Varsó" to "Warsaw", "Moszkva" to "Moscow", "Isztambul" to "Istanbul",
+        "Kréta" to "Crete", "Szicília" to "Sicily", "Ciprus" to "Cyprus", "Dubaj" to "Dubai",
+        "Tokió" to "Tokyo", "Peking" to "Beijing",
     )
 
     /** Több repülőteres városok: egyben is választhatók. */
@@ -115,9 +123,10 @@ object Airports {
 
     @Synchronized
     private fun load(): List<Entry> {
-        entries?.let { return it }
-        val hu = Locale.forLanguageTag("hu")
-        val countryName = { cc: String -> Locale("", cc).getDisplayCountry(hu).ifBlank { cc } }
+        val en = Lang.en
+        entriesByLang[en]?.let { return it }
+        val locale = Lang.locale
+        val countryName = { cc: String -> Locale("", cc).getDisplayCountry(locale).ifBlank { cc } }
 
         val airports = Platform.current.openAsset("airports.tsv").bufferedReader().useLines { lines ->
             lines.mapNotNull { line ->
@@ -130,7 +139,7 @@ object Airports {
                 countryCodes[code] = p[3]
                 val rank = p[4].toIntOrNull() ?: 2
                 val huName = hungarianNames[code]
-                val shownCity = huName ?: city
+                val shownCity = if (en) city else huName ?: city
                 val place = Place(
                     codes = code,
                     city = shownCity,
@@ -143,21 +152,24 @@ object Airports {
             }.toList()
         }
 
-        val groups = cityGroups.map { (city, cc, codes) ->
+        val groups = cityGroups.map { (huCity, cc, codes) ->
+            val enCity = groupEnglishNames[huCity] ?: huCity
+            val city = if (en) enCity else huCity
+            val title = if (en) "$city – all airports" else "$city – minden repülőtér"
             val place = Place(
                 codes = codes,
                 city = city,
-                title = "$city – minden repülőtér",
+                title = title,
                 subtitle = "${countryName(cc)} · ${codes.replace(",", ", ")}",
-                fieldText = "$city – minden repülőtér",
+                fieldText = title,
             )
             val englishCities = codes.split(',').mapNotNull { c ->
                 airports.firstOrNull { it.place.codes == c }?.keys?.getOrNull(1)
             }
-            Entry(place, (listOf(normalize(city)) + englishCities).distinct(), -1)
+            Entry(place, (listOf(normalize(huCity), normalize(enCity)) + englishCities).distinct(), -1)
         }
 
-        return (groups + airports).also { entries = it }
+        return (groups + airports).also { entriesByLang[en] = it }
     }
 
     private fun normalize(s: String): String =

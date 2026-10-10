@@ -55,7 +55,7 @@ class RefiWidget : GlanceAppWidget() {
                 title = w.routeTitle,
                 price = best?.let { formatPrice(it.price, currency) } ?: "—",
                 good = best != null && w.alertable(best),
-                sub = "célár ${formatPrice(w.targetPrice, currency)}",
+                sub = tr("célár ${formatPrice(w.targetPrice, currency)}", "target ${formatPrice(w.targetPrice, currency)}"),
             )
         }
 
@@ -74,7 +74,7 @@ class RefiWidget : GlanceAppWidget() {
             Text("REFI", style = TextStyle(color = green, fontSize = 14.sp, fontWeight = FontWeight.Bold))
             if (rows.isEmpty()) {
                 Spacer(GlanceModifier.height(6.dp))
-                Text("Még nincs figyelt út.", style = TextStyle(color = dim, fontSize = 13.sp))
+                Text(tr("Még nincs figyelt út.", "No watched trips yet."), style = TextStyle(color = dim, fontSize = 13.sp))
             }
             rows.forEach { r ->
                 Spacer(GlanceModifier.height(6.dp))

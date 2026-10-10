@@ -42,11 +42,12 @@ async function signIn(interactive) {
   const state = crypto.randomUUID();
   const redirect = await chrome.identity.launchWebAuthFlow({ url: authUrl(interactive, account, state), interactive });
   const params = new URLSearchParams(new URL(redirect).hash.slice(1));
-  if (params.get('state') !== state) throw new Error('érvénytelen válasz a Google-től – próbáld újra');
+  if (params.get('state') !== state) throw new Error(t('érvénytelen válasz a Google-től – próbáld újra', 'invalid response from Google – please try again'));
   const token = params.get('access_token');
-  if (!token) throw new Error(params.get('error') || 'nincs hozzáférés');
+  if (!token) throw new Error(params.get('error') || t('nincs hozzáférés', 'no access'));
   if (!(params.get('scope') || SCOPE).includes('drive.appdata')) {
-    throw new Error('A bejelentkezéskor nem kaptunk engedélyt a REFI adataihoz – jelöld be a jelölőnégyzetet a Google ablakában.');
+    throw new Error(t('A bejelentkezéskor nem kaptunk engedélyt a REFI adataihoz – jelöld be a jelölőnégyzetet a Google ablakában.',
+      "We didn't get permission for your REFI data – tick the checkbox in the Google window."));
   }
   // Közben kijelentkezett: ezt a (csendes) eredményt eldobjuk
   if (!interactive && gen !== generation) throw new Error('kijelentkezve');

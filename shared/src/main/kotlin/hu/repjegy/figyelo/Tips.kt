@@ -48,46 +48,78 @@ internal object Tips {
     /** Az összes tipp; a kulcsos tippek csak akkor, ha az a forrás még nincs beállítva. */
     fun all(s: Settings): List<Tip> = buildList {
         if (!s.useSerpApi) add(Tip(
-            "serpapi", "Megbízhatóbb Google-árak, ingyen",
-            "Egy ingyenes SerpApi-kulccsal a REFI akkor is lát Google-árat, amikor a sima keresés akadozik. " +
-                "Havonta 250 keresés ingyenes, és Google-fiókkal 2 perc alatt megvan. Végigvezetünk rajta.",
-            "Megmutatom, hogyan", KeyProvider.SERPAPI,
+            "serpapi", tr("Megbízhatóbb Google-árak, ingyen", "More reliable Google prices, for free"),
+            tr(
+                "Egy ingyenes SerpApi-kulccsal a REFI akkor is lát Google-árat, amikor a sima keresés akadozik. " +
+                    "Havonta 250 keresés ingyenes, és Google-fiókkal 2 perc alatt megvan. Végigvezetünk rajta.",
+                "With a free SerpApi key, REFI sees Google prices even when the plain search stalls. " +
+                    "250 searches a month are free, and with a Google account it takes 2 minutes. We’ll guide you through it.",
+            ),
+            tr("Megmutatom, hogyan", "Show me how"), KeyProvider.SERPAPI,
         ))
         if (!s.useIgnav) add(Tip(
-            "ignav", "Még egy kereső = több esély olcsó jegyre",
-            "Az Ignav saját adatforrásból keres, így olyan ajánlatot is találhat, amit a többi nem. Az első " +
-                "1000 keresés ingyenes, bankkártya nélkül. Lépésről lépésre segítünk.",
-            "Megmutatom, hogyan", KeyProvider.IGNAV,
+            "ignav", tr("Még egy kereső = több esély olcsó jegyre", "One more search source = more chances of a cheap ticket"),
+            tr(
+                "Az Ignav saját adatforrásból keres, így olyan ajánlatot is találhat, amit a többi nem. Az első " +
+                    "1000 keresés ingyenes, bankkártya nélkül. Lépésről lépésre segítünk.",
+                "Ignav searches its own data source, so it can find deals the others miss. The first " +
+                    "1000 searches are free, no bank card needed. We’ll help you step by step.",
+            ),
+            tr("Megmutatom, hogyan", "Show me how"), KeyProvider.IGNAV,
         ))
         add(Tip(
-            "flex", "Egy-két nap rugalmasság sokat érhet",
-            "Ha nem ragaszkodsz a pontos naphoz, állítsd a „Rugalmasság” mezőt ±1–3 napra: a REFI a környező " +
-                "napokat is végignézi, és a legolcsóbbat mutatja.",
+            "flex", tr("Egy-két nap rugalmasság sokat érhet", "A day or two of flexibility can be worth a lot"),
+            tr(
+                "Ha nem ragaszkodsz a pontos naphoz, állítsd a „Rugalmasság” mezőt ±1–3 napra: a REFI a környező " +
+                    "napokat is végignézi, és a legolcsóbbat mutatja.",
+                "If you’re not tied to an exact day, set “Flexibility” to ±1–3 days: REFI also checks the " +
+                    "surrounding days and shows you the cheapest.",
+            ),
         ))
         add(Tip(
-            "city", "Egész várost is figyelhetsz",
-            "Ha a „Hova” mezőbe városnevet írsz (pl. London, Milánó, Párizs), és a várost választod a listából, " +
-                "a REFI az összes ottani reptérre keres – a fapadosok gyakran a kisebb reptereket használják.",
+            "city", tr("Egész várost is figyelhetsz", "You can watch a whole city"),
+            tr(
+                "Ha a „Hova” mezőbe városnevet írsz (pl. London, Milánó, Párizs), és a várost választod a listából, " +
+                    "a REFI az összes ottani reptérre keres – a fapadosok gyakran a kisebb reptereket használják.",
+                "If you type a city name in “To” (e.g. London, Milan, Paris) and pick the city from the list, " +
+                    "REFI searches all its airports – low-cost airlines often use the smaller ones.",
+            ),
         ))
         add(Tip(
-            "bags", "Add meg a poggyászt is",
-            "A fapadosoknál a csomag külön kerül pénzbe. Ha megadod, mennyi poggyásszal utazol, a REFI " +
-                "beleszámolja a becsült díjat, így reális árakat hasonlítasz össze.",
+            "bags", tr("Add meg a poggyászt is", "Add your baggage too"),
+            tr(
+                "A fapadosoknál a csomag külön kerül pénzbe. Ha megadod, mennyi poggyásszal utazol, a REFI " +
+                    "beleszámolja a becsült díjat, így reális árakat hasonlítasz össze.",
+                "Low-cost airlines charge extra for bags. If you enter how much baggage you’re taking, REFI " +
+                    "adds the estimated fee, so you compare realistic prices.",
+            ),
         ))
         add(Tip(
-            "target", "Milyen célárat érdemes megadni?",
-            "Nézd meg a kártyán a „szokásos ár” sort (a Google adata): a sáv alsó része reális, de jó cél. " +
-                "Ha túl alacsony a célár, lehet, hogy sosem szól a REFI.",
+            "target", tr("Milyen célárat érdemes megadni?", "What target price should you set?"),
+            tr(
+                "Nézd meg a kártyán a „szokásos ár” sort (a Google adata): a sáv alsó része reális, de jó cél. " +
+                    "Ha túl alacsony a célár, lehet, hogy sosem szól a REFI.",
+                "Look at the “usual price” line on the card (Google’s data): the lower end of the range is a realistic but good target. " +
+                    "If the target price is too low, REFI may never alert you.",
+            ),
         ))
         add(Tip(
-            "weekday", "Nem mindegy, melyik nap indulsz",
-            "Kedden, szerdán vagy szombaton indulni sokszor olcsóbb, mint pénteken vagy vasárnap, amikor a " +
-                "legtöbben utaznak. Ha teheted, próbálj ki több napot (vagy használd a rugalmasságot).",
+            "weekday", tr("Nem mindegy, melyik nap indulsz", "The day you fly matters"),
+            tr(
+                "Kedden, szerdán vagy szombaton indulni sokszor olcsóbb, mint pénteken vagy vasárnap, amikor a " +
+                    "legtöbben utaznak. Ha teheted, próbálj ki több napot (vagy használd a rugalmasságot).",
+                "Flying on Tuesday, Wednesday or Saturday is often cheaper than on Friday or Sunday, when " +
+                    "most people travel. If you can, try a few days (or use flexibility).",
+            ),
         ))
         add(Tip(
-            "early", "Mikor érdemes figyelni kezdeni?",
-            "Európai utaknál általában 1–3 hónappal az indulás előtt a legjobb figyelni. Az utolsó két hétben " +
-                "az árak inkább emelkednek.",
+            "early", tr("Mikor érdemes figyelni kezdeni?", "When should you start watching?"),
+            tr(
+                "Európai utaknál általában 1–3 hónappal az indulás előtt a legjobb figyelni. Az utolsó két hétben " +
+                    "az árak inkább emelkednek.",
+                "For European trips it’s usually best to watch 1–3 months before departure. In the last two weeks " +
+                    "prices tend to go up.",
+            ),
         ))
     }
 
@@ -136,7 +168,9 @@ internal fun TipBubble(onOpenGuide: (KeyProvider) -> Unit) {
     var tip by remember { mutableStateOf(runCatching { Tips.next() }.getOrNull()) }
     var visible by remember { mutableStateOf(tip != null) }
     AnimatedVisibility(visible = visible && tip != null, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
-        val t = tip ?: return@AnimatedVisibility
+        val cur = tip ?: return@AnimatedVisibility
+        // Nyelvváltáskor a tipp szövege is az új nyelven jelenjen meg
+        val t = runCatching { Tips.all(Store.settings.value).firstOrNull { it.id == cur.id } }.getOrNull() ?: cur
         Column(
             Modifier
                 .fillMaxWidth()
@@ -155,7 +189,7 @@ internal fun TipBubble(onOpenGuide: (KeyProvider) -> Unit) {
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(onClick = { visible = false }) {
-                    Icon(Icons.Filled.Close, contentDescription = "Tipp bezárása", tint = Neon.TextDim)
+                    Icon(Icons.Filled.Close, contentDescription = tr("Tipp bezárása", "Close tip"), tint = Neon.TextDim)
                 }
             }
             Text(t.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 10.dp))
@@ -167,15 +201,15 @@ internal fun TipBubble(onOpenGuide: (KeyProvider) -> Unit) {
             }
             Row(horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 TextButton(onClick = { tip = runCatching { Tips.next() }.getOrNull(); if (tip == null) visible = false }) {
-                    Text("Következő tipp")
+                    Text(tr("Következő tipp", "Next tip"))
                 }
                 TextButton(onClick = { Tips.hide(t.id); visible = false }) {
-                    Text("Ezt a tippet ne mutasd", color = Neon.TextDim)
+                    Text(tr("Ezt a tippet ne mutasd", "Don’t show this tip"), color = Neon.TextDim)
                 }
             }
             Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                 TextButton(onClick = { Tips.allOff = true; visible = false }) {
-                    Text("Egyik tippet se mutasd", color = Neon.TextDim)
+                    Text(tr("Egyik tippet se mutasd", "Don’t show any tips"), color = Neon.TextDim)
                 }
             }
         }

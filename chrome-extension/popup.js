@@ -28,15 +28,15 @@ const store = {
 // A bejelentkezést a háttér-szkript végzi (background.js), mert ez az ablak bezárulhat közben
 async function signIn(interactive) {
   const r = await chrome.runtime.sendMessage({ type: 'signin', interactive });
-  if (!r || !r.token) throw new Error(friendlyAuthError((r && r.error) || 'nincs hozzáférés'));
+  if (!r || !r.token) throw new Error(friendlyAuthError((r && r.error) || t('nincs hozzáférés', 'no access')));
   return r.token;
 }
 
 /** A Chrome/Google angol hibaüzenetei helyett érthető szöveg. */
 function friendlyAuthError(msg) {
-  if (/did not approve|canceled|cancelled|closed/i.test(msg)) return 'A bejelentkezés megszakadt (bezárult a Google ablaka). Próbáld újra.';
-  if (/redirect_uri_mismatch/i.test(msg)) return 'A Google még nem ismeri fel a bővítményt (beállítás alatt) – próbáld újra néhány perc múlva.';
-  if (/access_denied/i.test(msg)) return 'A Google-fiók nem engedte a hozzáférést.';
+  if (/did not approve|canceled|cancelled|closed/i.test(msg)) return t('A bejelentkezés megszakadt (bezárult a Google ablaka). Próbáld újra.', 'Sign-in was interrupted (the Google window closed). Please try again.');
+  if (/redirect_uri_mismatch/i.test(msg)) return t('A Google még nem ismeri fel a bővítményt (beállítás alatt) – próbáld újra néhány perc múlva.', "Google doesn't recognise the extension yet (still being set up) – try again in a few minutes.");
+  if (/access_denied/i.test(msg)) return t('A Google-fiók nem engedte a hozzáférést.', "The Google account didn't allow access.");
   return msg;
 }
 
@@ -64,15 +64,16 @@ async function loadFile(token) {
   const id = list.files && list.files[0] && list.files[0].id;
   if (!id) return { watches: [], currency: 'HUF', updatedAt: null };
   const data = await (await drive(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`, token)).json();
-  if (data.format !== 'refi-sync' || (data.version || 1) > 2) throw new Error('Ismeretlen adatformátum – frissítsd a bővítményt.');
+  if (data.format !== 'refi-sync' || (data.version || 1) > 2) throw new Error(t('Ismeretlen adatformátum – frissítsd a bővítményt.', 'Unknown data format – please update the extension.'));
   // A kulcsokat (SerpApi, Ignav) nem tároljuk el és nem mutatjuk
   return { watches: data.watches || [], currency: data.currency || 'HUF', updatedAt: data.updatedAt || null };
 }
 
 // ------------------------------------------------------------ megjelenítés
 
-const fmtMonth = new Intl.DateTimeFormat('hu-HU', { month: 'short', day: 'numeric' });
-const fmtTime = new Intl.DateTimeFormat('hu-HU', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+const DATE_LOCALE = REFI_HU ? 'hu-HU' : 'en-GB';
+const fmtMonth = new Intl.DateTimeFormat(DATE_LOCALE, { month: 'short', day: 'numeric' });
+const fmtTime = new Intl.DateTimeFormat(DATE_LOCALE, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 function money(v, cur) {
   try {
@@ -166,25 +167,31 @@ function card(w, cur) {
   li.append(top);
 
   const pax = (w.adults || 1) + (w.children || 0) + (w.infantsInSeat || 0) + (w.infantsOnLap || 0);
-  const dates = w.returnDate ? `${day(w.outboundDate)} – ${day(w.returnDate)}` : `${day(w.outboundDate)} · csak oda`;
+  const dates = w.returnDate ? `${day(w.outboundDate)} – ${day(w.returnDate)}` : `${day(w.outboundDate)} · ${t('csak oda', 'one way')}`;
   const second = el('div', 'row');
+  const repeat = w.weeklyUntil
+    ? t(`, minden héten ${day(w.weeklyUntil)}-ig`, `, every week until ${day(w.weeklyUntil)}`)
+    : (w.flexDays ? t(` (±${w.flexDays} nap)`, ` (±${w.flexDays} ${w.flexDays === 1 ? 'day' : 'days'})`) : '');
+  const people = t(`${pax} fő`, pax === 1 ? '1 passenger' : `${pax} passengers`);
   second.append(
-    el('span', 'meta', `${dates}${w.weeklyUntil ? `, minden héten ${day(w.weeklyUntil)}-ig` : (w.flexDays ? ` (±${w.flexDays} nap)` : '')} · ${pax} fő`),
-    el('span', 'target', `célár: ${money(w.targetPrice, cur)}`),
+    el('span', 'meta', `${dates}${repeat} · ${people}`),
+    el('span', 'target', `${t('célár', 'target price')}: ${money(w.targetPrice, cur)}`),
   );
   li.append(second);
 
-  if (off) li.append(el('div', 'badge warn', 'AZ INDULÁS ELMÚLT'));
-  else if (ok) li.append(el('div', 'badge', '▼ CÉLÁR ALATT'));
+  if (off) li.append(el('div', 'badge warn', t('AZ INDULÁS ELMÚLT', 'DEPARTURE HAS PASSED')));
+  else if (ok) li.append(el('div', 'badge', t('▼ CÉLÁR ALATT', '▼ BELOW TARGET PRICE')));
   else if (w.lastError && price == null) li.append(el('div', 'badge warn', w.lastError.slice(0, 80)));
 
   const s = sparkline(w);
   if (s) li.append(s);
 
   const bottom = el('div', 'bottom');
-  bottom.append(el('span', 'meta', w.lastChecked ? `ellenőrizve: ${fmtTime.format(new Date(w.lastChecked))}` : 'még nem volt ellenőrzés'));
+  bottom.append(el('span', 'meta', w.lastChecked
+    ? `${t('ellenőrizve', 'checked')}: ${fmtTime.format(new Date(w.lastChecked))}`
+    : t('még nem volt ellenőrzés', 'not checked yet')));
   if (best && typeof best.url === 'string' && best.url.startsWith('https://')) {
-    const a = el('a', null, 'Megnyitás ›');
+    const a = el('a', null, t('Megnyitás ›', 'Open ›'));
     a.href = best.url;
     a.target = '_blank';
     a.rel = 'noopener';
@@ -202,8 +209,9 @@ function render(data) {
   watches.forEach((w) => list.append(card(w, data.currency)));
   const f = $('footer');
   f.textContent = data.updatedAt
-    ? `Utolsó szinkron: ${fmtTime.format(new Date(data.updatedAt))} · az árakat a REFI app ellenőrzi`
-    : 'Az árakat a REFI app ellenőrzi (telefonon vagy számítógépen).';
+    ? t(`Utolsó szinkron: ${fmtTime.format(new Date(data.updatedAt))} · az árakat a REFI app ellenőrzi`,
+      `Last sync: ${fmtTime.format(new Date(data.updatedAt))} · prices are checked by the REFI app`)
+    : t('Az árakat a REFI app ellenőrzi (telefonon vagy számítógépen).', 'Prices are checked by the REFI app (on your phone or computer).');
   show('footer');
 }
 
@@ -234,10 +242,10 @@ async function doRefresh(interactive) {
     if (interactive) {
       // Bejelentkezés közben az ablak bezárulhat; az eredményt a háttér elmenti
       $('signin-btn').disabled = true;
-      $('signin-btn').textContent = 'Bejelentkezés folyamatban…';
+      $('signin-btn').textContent = t('Bejelentkezés folyamatban…', 'Signing in…');
       try { token = await signIn(true); } finally {
         $('signin-btn').disabled = false;
-        $('signin-btn').textContent = 'Bejelentkezés Google-fiókkal';
+        $('signin-btn').textContent = t('Bejelentkezés Google-fiókkal', 'Sign in with Google');
       }
     } else {
       token = await validToken();
@@ -272,20 +280,32 @@ async function doRefresh(interactive) {
     render(data);
   } catch (e) {
     show('loading', false);
-    $('error').textContent = interactive ? e.message : `Nem sikerült betölteni: ${e.message}`;
+    $('error').textContent = interactive ? e.message : t(`Nem sikerült betölteni: ${e.message}`, `Couldn't load: ${e.message}`);
     show('error');
   } finally {
     btn.classList.remove('spin');
   }
 }
 
+/** A HTML-ben magyar szövegek: angol böngészőben a data-en / data-en-title értékekre cseréljük. */
+function localize() {
+  document.documentElement.lang = REFI_HU ? 'hu' : 'en';
+  if (REFI_HU) return;
+  document.querySelectorAll('[data-en]').forEach((e) => { e.textContent = e.dataset.en; });
+  document.querySelectorAll('[data-en-title]').forEach((e) => {
+    e.title = e.dataset.enTitle;
+    e.setAttribute('aria-label', e.dataset.enTitle);
+  });
+}
+
 async function start() {
+  localize();
   // Ha a bejelentkezés a háttérben befejeződik, amíg ez az ablak nyitva van, frissítünk
   if (hasChrome) {
     chrome.storage.onChanged.addListener((changes) => {
       if (changes.token && changes.token.newValue && !running) refresh(false);
       if (changes.authError && changes.authError.newValue) {
-        $('error').textContent = `A bejelentkezés nem sikerült: ${changes.authError.newValue}`;
+        $('error').textContent = t(`A bejelentkezés nem sikerült: ${changes.authError.newValue}`, `Sign-in failed: ${changes.authError.newValue}`);
         show('error');
       }
     });

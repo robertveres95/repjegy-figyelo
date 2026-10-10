@@ -73,12 +73,21 @@ class AndroidPlatform private constructor(private val context: Context) : Platfo
     override val versionName: String get() = BuildConfig.VERSION_NAME
     override val buildNumber: Int get() = BuildConfig.VERSION_CODE
     override val installerSuffix = ".apk"
-    override val deviceWord = "telefonon"
-    override val updateSteps =
-        "1. Koppints a gombra, a böngésző letölti az új verziót.\n" +
-            "2. Nyisd meg a letöltött fájlt, és telepítsd (idegen forrásból származó " +
-            "alkalmazás telepítését engedélyezni kell)."
-    override val backgroundHint = "Az Android energiatakarékossága miatt a háttér-ellenőrzés kicsit csúszhat."
+    override val deviceWord: String get() = tr("telefonon", "on your phone")
+    override val updateSteps: String
+        get() = tr(
+            "1. Koppints a gombra, a böngésző letölti az új verziót.\n" +
+                "2. Nyisd meg a letöltött fájlt, és telepítsd (idegen forrásból származó " +
+                "alkalmazás telepítését engedélyezni kell).",
+            "1. Tap the button and your browser downloads the new version.\n" +
+                "2. Open the downloaded file and install it (you may need to allow " +
+                "installing apps from unknown sources).",
+        )
+    override val backgroundHint: String
+        get() = tr(
+            "Az Android energiatakarékossága miatt a háttér-ellenőrzés kicsit csúszhat.",
+            "Because of Android's battery saving, background checks may run a little late.",
+        )
     override val appFont = FontFamily(
         Font(R.font.jakarta_regular, FontWeight.Normal),
         Font(R.font.jakarta_medium, FontWeight.Medium),
@@ -122,7 +131,7 @@ class AndroidPlatform private constructor(private val context: Context) : Platfo
         val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
         return try {
             context.startActivity(
-                Intent.createChooser(send, "Figyelés megosztása").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                Intent.createChooser(send, tr("Figyelés megosztása", "Share watch")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
             false
         } catch (_: RuntimeException) {
@@ -292,18 +301,18 @@ object Notifier {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.deleteNotificationChannel(OLD_CHANNEL_ID)
         manager.createNotificationChannel(
-            NotificationChannel(QUIET_CHANNEL_ID, "Árriasztások (csendes órák)", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "Csendes órákban érkező árriasztások, hang és rezgés nélkül"
+            NotificationChannel(QUIET_CHANNEL_ID, tr("Árriasztások (csendes órák)", "Price alerts (quiet hours)"), NotificationManager.IMPORTANCE_LOW).apply {
+                description = tr("Csendes órákban érkező árriasztások, hang és rezgés nélkül", "Price alerts during quiet hours, without sound or vibration")
                 enableVibration(false)
                 setSound(null, null)
             }
         )
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Árriasztások",
+            tr("Árriasztások", "Price alerts"),
             NotificationManager.IMPORTANCE_HIGH,
         ).apply {
-            description = "Értesítés, ha egy figyelt jegy a célár alá esik"
+            description = tr("Értesítés, ha egy figyelt jegy a célár alá esik", "Notifies you when a watched ticket drops below your target price")
             enableVibration(true)
             vibrationPattern = VIBRATION
         }
@@ -320,8 +329,8 @@ object Notifier {
         ) return
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
-            NotificationChannel(UPDATE_CHANNEL_ID, "Frissítések", NotificationManager.IMPORTANCE_DEFAULT)
-                .apply { description = "Értesítés, ha az appból új verzió jelent meg" }
+            NotificationChannel(UPDATE_CHANNEL_ID, tr("Frissítések", "Updates"), NotificationManager.IMPORTANCE_DEFAULT)
+                .apply { description = tr("Értesítés, ha az appból új verzió jelent meg", "Notifies you when a new version of the app is out") }
         )
         val intent = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val pending = PendingIntent.getActivity(
@@ -330,8 +339,8 @@ object Notifier {
         )
         val notification = NotificationCompat.Builder(context, UPDATE_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_flight)
-            .setContentTitle("Új verzió érhető el")
-            .setContentText("Megjelent a REFI ${release.version}. Koppints a frissítéshez.")
+            .setContentTitle(tr("Új verzió érhető el", "New version available"))
+            .setContentText(tr("Megjelent a REFI ${release.version}. Koppints a frissítéshez.", "REFI ${release.version} is out. Tap to update."))
             .setContentIntent(pending)
             .setAutoCancel(true)
             .build()
@@ -387,9 +396,9 @@ object Notifier {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val text = buildString {
-            append("A célár (${formatPrice(w.targetPrice, currency)}) alá esett.")
-            best.outboundText()?.let { append("\nIndulás: $it") }
-            best.returnText()?.let { append("\nVissza: $it") }
+            append(tr("A célár (${formatPrice(w.targetPrice, currency)}) alá esett.", "Dropped below your target price (${formatPrice(w.targetPrice, currency)})."))
+            best.outboundText()?.let { append(tr("\nIndulás: $it", "\nDeparture: $it")) }
+            best.returnText()?.let { append(tr("\nVissza: $it", "\nReturn: $it")) }
             append("\n")
             append(listOfNotNull(best.airline, best.source).distinct().joinToString(" · "))
             best.note?.let { append(" ($it)") }

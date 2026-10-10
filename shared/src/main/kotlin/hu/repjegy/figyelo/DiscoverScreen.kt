@@ -44,7 +44,7 @@ import kotlinx.coroutines.launch
 
 // ---------------------------------------------------------------- Kód beillesztése
 
-private val shortDayFormat = java.time.format.DateTimeFormatter.ofPattern("yyyy. MMM d.", HU)
+private val shortDayFormat get() = java.time.format.DateTimeFormatter.ofPattern(if (Lang.en) "d MMM yyyy" else "yyyy. MMM d.", Lang.locale)
 
 private fun shortDay(iso: String): String =
     runCatching { java.time.LocalDate.parse(iso).format(shortDayFormat) }.getOrDefault(iso)
@@ -61,17 +61,17 @@ internal fun ImportCodeDialog(initial: String, onDismiss: () -> Unit, onImported
     val existing = decoded?.let { ShareCode.existingFor(it.first, watches) }
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
-        title = { Text("Figyelés átvétele") },
+        title = { Text(tr("Figyelés átvétele", "Import a watch")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "Illeszd be a kapott üzenetet vagy a „REFI1:” kezdetű kódot.",
+                    tr("Illeszd be a kapott üzenetet vagy a „REFI1:” kezdetű kódot.", "Paste the message you received or the code starting with “REFI1:”."),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it.take(4000); error = null },
-                    label = { Text("Kód") },
+                    label = { Text(tr("Kód", "Code")) },
                     maxLines = 4,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -79,20 +79,24 @@ internal fun ImportCodeDialog(initial: String, onDismiss: () -> Unit, onImported
                     decoded != null -> Text(
                         "${decoded.first.routeTitle} · ${shortDay(decoded.first.outboundDate)}" +
                             (decoded.first.returnDate?.let { " – ${shortDay(it)}" } ?: "") +
-                            (decoded.first.weeklyUntil?.let { ", minden héten ${shortDay(it)}-ig" } ?: "") +
-                            " · célár ${formatPrice(decoded.first.targetPrice, decoded.second)}",
+                            (decoded.first.weeklyUntil?.let { tr(", minden héten ${shortDay(it)}-ig", ", every week until ${shortDay(it)}") } ?: "") +
+                            tr(" · célár ${formatPrice(decoded.first.targetPrice, decoded.second)}", " · target price ${formatPrice(decoded.first.targetPrice, decoded.second)}"),
                         style = MaterialTheme.typography.bodyMedium,
                         color = Neon.Green,
                     )
                     text.isNotBlank() -> Text(
-                        "Nem található érvényes REFI-kód a szövegben.",
+                        tr("Nem található érvényes REFI-kód a szövegben.", "No valid REFI code found in the text."),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
                 if (existing != null) Text(
-                    "Ez a figyelés már megvan nálad – a dátumait és beállításait a kapott kód szerint frissítjük " +
-                        "(az értesítés be- vagy kikapcsolása marad, ahogy nálad volt).",
+                    tr(
+                        "Ez a figyelés már megvan nálad – a dátumait és beállításait a kapott kód szerint frissítjük " +
+                            "(az értesítés be- vagy kikapcsolása marad, ahogy nálad volt).",
+                        "You already have this watch – we’ll update its dates and settings from the code you received " +
+                            "(your notification on/off setting stays as it was).",
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -112,16 +116,16 @@ internal fun ImportCodeDialog(initial: String, onDismiss: () -> Unit, onImported
                         val r = runCatching { Store.importWatches(listOf(w), cur) }
                         busy = false
                         if (r.isSuccess) {
-                            onImported(if (ex != null) "Frissítve: ${w.routeTitle}" else "Új figyelés: ${w.routeTitle}")
+                            onImported(if (ex != null) tr("Frissítve: ${w.routeTitle}", "Updated: ${w.routeTitle}") else tr("Új figyelés: ${w.routeTitle}", "New watch: ${w.routeTitle}"))
                             if (Store.settings.value.isReady) PriceChecker.checkOne(w.id)
                         } else {
-                            error = "Nem sikerült: ${r.exceptionOrNull()?.message}"
+                            error = tr("Nem sikerült: ${r.exceptionOrNull()?.message}", "That didn’t work: ${r.exceptionOrNull()?.message}")
                         }
                     }
                 },
-            ) { Text(if (existing != null) "Frissítés" else "Hozzáadás") }
+            ) { Text(if (existing != null) tr("Frissítés", "Update") else tr("Hozzáadás", "Add")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text("Mégse") } },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text(tr("Mégse", "Cancel")) } },
     )
 }
 
@@ -137,7 +141,7 @@ internal fun DiscoverScreen(
     val currency = Store.settings.collectAsState().value.currency
     val mem = Discover.Memory
     var from by remember { mutableStateOf<Place?>(Airports.placeFor(mem.fromCodes ?: "BUD", null)) }
-    val periods = remember { Discover.periods() }
+    val periods = remember(Lang.en) { Discover.periods() }
     var period by remember { mutableStateOf(mem.period.takeIf { p -> periods.any { it.first == p } } ?: 0) }
     var tripType by remember { mutableStateOf(mem.tripType) }
     var adults by remember { mutableStateOf(mem.adults) }
@@ -152,7 +156,7 @@ internal fun DiscoverScreen(
     fun startSearch() {
         val origin = from
         if (origin == null) {
-            formError = "Válassz indulási helyet."
+            formError = tr("Válassz indulási helyet.", "Choose where you’re flying from.")
             return
         }
         formError = null
@@ -177,14 +181,14 @@ internal fun DiscoverScreen(
                 mem.lastResults.value = it
             }
             // Hibánál a korábbi találatok maradnak
-            mem.lastError.value = r.exceptionOrNull()?.let { "Nem sikerült a keresés: ${it.message?.take(120)}" }
+            mem.lastError.value = r.exceptionOrNull()?.let { tr("Nem sikerült a keresés: ${it.message?.take(120)}", "The search didn’t work: ${it.message?.take(120)}") }
             mem.busy.value = false
         }
     }
 
     Scaffold(
         containerColor = Neon.Black,
-        topBar = { NeonTopBar("FELFEDEZÉS", onBack = onBack) },
+        topBar = { NeonTopBar(tr("FELFEDEZÉS", "DISCOVER"), onBack = onBack) },
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
@@ -194,31 +198,35 @@ internal fun DiscoverScreen(
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "Hova repülhetsz a legolcsóbban? Egy találatra koppintva figyelést készíthetsz belőle.",
+                        tr("Hova repülhetsz a legolcsóbban? Egy találatra koppintva figyelést készíthetsz belőle.", "Where can you fly the cheapest? Tap a result to make a watch from it."),
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    AirportField("Honnan", from) { from = it }
-                    ChoiceField("Mikor", periods, period) { period = it }
-                    ChoiceField("Út", Discover.TRIP_TYPES, tripType) { tripType = it }
+                    AirportField(tr("Honnan", "From"), from) { from = it }
+                    ChoiceField(tr("Mikor", "When"), periods, period) { period = it }
+                    ChoiceField(tr("Út", "Trip"), Discover.TRIP_TYPES, tripType) { tripType = it }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
                             value = maxPrice,
                             onValueChange = { v -> maxPrice = v.filter(Char::isDigit).take(7) },
-                            label = { Text("Max. ár / fő (${currencySymbol(currency)})") },
+                            label = { Text(tr("Max. ár / fő (${currencySymbol(currency)})", "Max. price / person (${currencySymbol(currency)})")) },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f),
                         )
                         Column(Modifier.weight(1f)) {
-                            ChoiceField("Felnőtt", (1..6).map { it to "$it fő" }, adults) { adults = it }
+                            ChoiceField(tr("Felnőtt", "Adults"), (1..6).map { it to tr("$it fő", if (it == 1) "1 person" else "$it people") }, adults) { adults = it }
                         }
                     }
                     Button(onClick = { startSearch() }, enabled = !loading, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (loading) "Keresés…" else "Keresés")
+                        Text(if (loading) tr("Keresés…", "Searching…") else tr("Keresés", "Search"))
                     }
                     Text(
-                        "Jelenleg a Ryanair járataiból keres (az ő árkeresője tud „bárhová” keresni). " +
-                            "Az ár egy főre szól, poggyász nélkül.",
+                        tr(
+                            "Jelenleg a Ryanair járataiból keres (az ő árkeresője tud „bárhová” keresni). " +
+                                "Az ár egy főre szól, poggyász nélkül.",
+                            "For now it searches Ryanair flights (their fare finder can search “anywhere”). " +
+                                "Prices are per person, without baggage.",
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -230,24 +238,24 @@ internal fun DiscoverScreen(
                             val origin = from
                             val limit = maxPrice.toIntOrNull()?.takeIf { it > 0 }
                             alertMsg = when {
-                                origin == null -> "Válassz indulási helyet."
-                                limit == null -> "Add meg a „Max. ár / fő” mezőt – ez alatt szólunk."
-                                alerts.size >= DealAlerts.MAX -> "Legfeljebb ${DealAlerts.MAX} ilyen riasztásod lehet."
+                                origin == null -> tr("Válassz indulási helyet.", "Choose where you’re flying from.")
+                                limit == null -> tr("Add meg a „Max. ár / fő” mezőt – ez alatt szólunk.", "Fill in “Max. price / person” – we’ll alert you below that.")
+                                alerts.size >= DealAlerts.MAX -> tr("Legfeljebb ${DealAlerts.MAX} ilyen riasztásod lehet.", "You can have at most ${DealAlerts.MAX} of these alerts.")
                                 else -> {
                                     val month = if (period <= 0) null
                                     else java.time.YearMonth.now().plusMonths((period - 1).toLong()).toString()
                                     val a = DealAlerts.create(origin, month, tripType, limit, currency)
                                     DealAlerts.add(a)
                                     AppScope.scope.launch { DealAlerts.checkOne(a) }
-                                    "Kész! 12 óránként megnézzük, és szólunk, ha bárhová ${formatPrice(limit, currency)}/fő alá megy."
+                                    tr("Kész! 12 óránként megnézzük, és szólunk, ha bárhová ${formatPrice(limit, currency)}/fő alá megy.", "Done! We’ll check every 12 hours and let you know if a trip anywhere drops below ${formatPrice(limit, currency)}/person.")
                                 }
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text("🔔 Szólj, ha bárhová ennyi alá megy") }
+                    ) { Text(tr("🔔 Szólj, ha bárhová ennyi alá megy", "🔔 Alert me if anywhere drops below this")) }
                     alertMsg?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Neon.Mint) }
                     if (alerts.isNotEmpty()) {
-                        SectionTitle("BÁRHOVÁ-RIASZTÁSAID")
+                        SectionTitle(tr("BÁRHOVÁ-RIASZTÁSAID", "YOUR ANYWHERE ALERTS"))
                         alerts.forEach { a -> DealAlertRow(a, currency) }
                     }
                     (formError ?: error)?.let { StatusText(it, true) }
@@ -255,11 +263,11 @@ internal fun DiscoverScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Neon.Green)
                             Spacer(Modifier.size(8.dp))
-                            Text("Keresés…", color = Neon.Green)
+                            Text(tr("Keresés…", "Searching…"), color = Neon.Green)
                         }
                     }
                     results?.let { list ->
-                        SectionTitle(if (list.isEmpty()) "Nincs találat" else "${list.size} CÉLÁLLOMÁS")
+                        SectionTitle(if (list.isEmpty()) tr("Nincs találat", "No results") else tr("${list.size} CÉLÁLLOMÁS", if (list.size == 1) "1 DESTINATION" else "${list.size} DESTINATIONS"))
                     }
                 }
             }
@@ -288,7 +296,7 @@ internal fun DiscoverScreen(
                         }
                         Column(horizontalAlignment = Alignment.End) {
                             Text(formatPrice(r.pricePerPerson, currency), style = MaterialTheme.typography.titleLarge)
-                            Text("/ fő", style = MaterialTheme.typography.labelSmall, color = Neon.TextDim)
+                            Text(tr("/ fő", "/ person"), style = MaterialTheme.typography.labelSmall, color = Neon.TextDim)
                         }
                     }
                     Spacer(Modifier.height(4.dp))
@@ -308,31 +316,34 @@ private fun DealAlertRow(a: DealAlert, currency: String) {
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(
-            "${a.fromLabel} → bárhová, ${DealAlerts.periodLabel(a)}",
+            tr("${a.fromLabel} → bárhová, ${DealAlerts.periodLabel(a)}", "${a.fromLabel} → anywhere, ${DealAlerts.periodLabel(a)}"),
             style = MaterialTheme.typography.titleSmall, color = Neon.Green,
         )
         Text(
-            "${Discover.TRIP_TYPES.firstOrNull { it.first == a.tripType }?.second ?: ""} · max. ${formatPrice(a.maxPrice, a.currency)}/fő",
+            tr(
+                "${Discover.TRIP_TYPES.firstOrNull { it.first == a.tripType }?.second ?: ""} · max. ${formatPrice(a.maxPrice, a.currency)}/fő",
+                "${Discover.TRIP_TYPES.firstOrNull { it.first == a.tripType }?.second ?: ""} · max. ${formatPrice(a.maxPrice, a.currency)}/person",
+            ),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (a.latest.isNotEmpty()) {
             a.latest.take(3).forEach { r ->
-                Text("✈ ${r.city}: ${formatPrice(r.pricePerPerson, currency)}/fő · ${Discover.describeDates(r)}", style = MaterialTheme.typography.bodySmall)
+                Text(tr("✈ ${r.city}: ${formatPrice(r.pricePerPerson, currency)}/fő · ${Discover.describeDates(r)}", "✈ ${r.city}: ${formatPrice(r.pricePerPerson, currency)}/person · ${Discover.describeDates(r)}"), style = MaterialTheme.typography.bodySmall)
             }
         } else if (a.lastChecked != null && a.lastError == null) {
-            Text("Most nincs a határ alatti út – szólunk, ha lesz.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(tr("Most nincs a határ alatti út – szólunk, ha lesz.", "No trips below your limit right now – we’ll let you know when there are."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        a.lastError?.let { StatusText("Legutóbb nem sikerült: $it", true) }
+        a.lastError?.let { StatusText(tr("Legutóbb nem sikerült: $it", "Last check failed: $it"), true) }
         Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-            TextButton(onClick = { AppScope.scope.launch { DealAlerts.checkOne(a) } }) { Text("Ellenőrzés most") }
-            TextButton(onClick = { confirm = true }) { Text("Törlés", color = MaterialTheme.colorScheme.error) }
+            TextButton(onClick = { AppScope.scope.launch { DealAlerts.checkOne(a) } }) { Text(tr("Ellenőrzés most", "Check now")) }
+            TextButton(onClick = { confirm = true }) { Text(tr("Törlés", "Delete"), color = MaterialTheme.colorScheme.error) }
         }
     }
     if (confirm) AlertDialog(
         onDismissRequest = { confirm = false },
-        title = { Text("Riasztás törlése?") },
-        text = { Text("${a.fromLabel} → bárhová, ${DealAlerts.periodLabel(a)}") },
-        confirmButton = { TextButton(onClick = { DealAlerts.remove(a.id); confirm = false }) { Text("Törlés") } },
-        dismissButton = { TextButton(onClick = { confirm = false }) { Text("Mégse") } },
+        title = { Text(tr("Riasztás törlése?", "Delete alert?")) },
+        text = { Text(tr("${a.fromLabel} → bárhová, ${DealAlerts.periodLabel(a)}", "${a.fromLabel} → anywhere, ${DealAlerts.periodLabel(a)}")) },
+        confirmButton = { TextButton(onClick = { DealAlerts.remove(a.id); confirm = false }) { Text(tr("Törlés", "Delete")) } },
+        dismissButton = { TextButton(onClick = { confirm = false }) { Text(tr("Mégse", "Cancel")) } },
     )
 }

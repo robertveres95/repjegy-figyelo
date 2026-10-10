@@ -147,12 +147,13 @@ const val THEME_DAY = "day"
 const val THEME_NIGHT = "night"
 const val THEME_EYE = "eye"
 
-val THEMES = listOf(
-    THEME_AUTO to "Automatikus (rendszer szerint)",
-    THEME_DAY to "Nappali",
-    THEME_NIGHT to "Éjszakai (kék)",
-    THEME_EYE to "Szemkímélő",
-)
+val THEMES: List<Pair<String, String>>
+    get() = listOf(
+        THEME_AUTO to tr("Automatikus (rendszer szerint)", "Automatic (follow system)"),
+        THEME_DAY to tr("Nappali", "Day"),
+        THEME_NIGHT to tr("Éjszakai (kék)", "Night (blue)"),
+        THEME_EYE to tr("Szemkímélő", "Eye comfort"),
+    )
 
 fun paletteFor(mode: String, systemDark: Boolean): AppPalette = when (mode) {
     THEME_DAY -> DayPalette
@@ -403,7 +404,7 @@ fun BellToggle(on: Boolean, onToggle: () -> Unit) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
                 Icons.Filled.Notifications,
-                contentDescription = if (on) "Értesítés bekapcsolva" else "Értesítés kikapcsolva",
+                contentDescription = if (on) tr("Értesítés bekapcsolva", "Notifications on") else tr("Értesítés kikapcsolva", "Notifications off"),
                 tint = tint,
                 modifier = Modifier.size(18.dp).rotate(shake.value),
             )
@@ -422,7 +423,7 @@ fun BellToggle(on: Boolean, onToggle: () -> Unit) {
         }
         Spacer(Modifier.width(6.dp))
         Text(
-            if (on) "BE" else "KI",
+            if (on) tr("BE", "ON") else tr("KI", "OFF"),
             color = tint,
             style = MaterialTheme.typography.labelMedium.copy(fontFamily = AppFont, fontWeight = FontWeight.Bold),
             fontSize = 12.sp,

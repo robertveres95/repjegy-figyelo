@@ -38,7 +38,7 @@ object SerpApi {
         val query = params.entries.joinToString("&") { (k, v) -> "$k=${URLEncoder.encode(v, "UTF-8")}" }
         val res = Http.request("https://serpapi.com/search.json?$query", timeoutMs = 90_000)
         val json = runCatching { JSONObject(res.body) }.getOrNull()
-            ?: throw IOException("Hibás válasz (HTTP ${res.code})")
+            ?: throw IOException(tr("Hibás válasz (HTTP ${res.code})", "Invalid response (HTTP ${res.code})"))
         if (json.has("error")) {
             val message = json.getString("error")
             if (message.contains("hasn't returned any results", ignoreCase = true)) return emptyList()
@@ -84,8 +84,8 @@ object SerpApi {
         raw?.takeIf { it.length >= 16 }?.replace(' ', 'T')?.substring(0, 16)
 
     private fun translateError(message: String): String = when {
-        message.contains("Invalid API key", ignoreCase = true) -> "érvénytelen kulcs"
-        message.contains("run out of searches", ignoreCase = true) -> "elfogyott a havi keret"
+        message.contains("Invalid API key", ignoreCase = true) -> tr("érvénytelen kulcs", "invalid key")
+        message.contains("run out of searches", ignoreCase = true) -> tr("elfogyott a havi keret", "monthly quota used up")
         else -> message
     }
 }

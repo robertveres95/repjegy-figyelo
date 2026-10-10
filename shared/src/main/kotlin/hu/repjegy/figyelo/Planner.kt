@@ -25,7 +25,10 @@ fun forecastFor(w: Watch, today: LocalDate = LocalDate.now(), nowMs: Long = Syst
     if (daysLeft < 0) return null
     if (daysLeft <= 21) {
         return Verdict(
-            "Előrejelzés: $daysLeft nap van az indulásig – ilyenkor az árak inkább emelkednek, nagy esés ritka.",
+            tr(
+                "Előrejelzés: $daysLeft nap van az indulásig – ilyenkor az árak inkább emelkednek, nagy esés ritka.",
+                "Forecast: $daysLeft ${if (daysLeft == 1L) "day" else "days"} until departure – prices tend to rise now, big drops are rare.",
+            ),
             Verdict.Tone.NEUTRAL,
         )
     }
@@ -36,11 +39,17 @@ fun forecastFor(w: Watch, today: LocalDate = LocalDate.now(), nowMs: Long = Syst
     val slopePct = trendPercentPerDay(recent) ?: return null
     return when {
         slopePct <= -0.5 -> Verdict(
-            "Előrejelzés: csökkenő trend (naponta átlagosan kb. ${pctText(slopePct)}) – ha nem sürgős, érdemes még figyelni.",
+            tr(
+                "Előrejelzés: csökkenő trend (naponta átlagosan kb. ${pctText(slopePct)}) – ha nem sürgős, érdemes még figyelni.",
+                "Forecast: falling trend (about ${pctText(slopePct)} a day on average) – if it's not urgent, keep watching.",
+            ),
             Verdict.Tone.WAIT,
         )
         slopePct >= 0.5 -> Verdict(
-            "Előrejelzés: emelkedő trend (naponta átlagosan kb. +${pctText(slopePct)}) – ha jó az ár, ne várj sokáig.",
+            tr(
+                "Előrejelzés: emelkedő trend (naponta átlagosan kb. +${pctText(slopePct)}) – ha jó az ár, ne várj sokáig.",
+                "Forecast: rising trend (about +${pctText(slopePct)} a day on average) – if the price is good, don't wait long.",
+            ),
             Verdict.Tone.GOOD,
         )
         else -> null // stabil: nincs mit mondani (a kártyát nem zsúfoljuk)
@@ -63,7 +72,7 @@ internal fun trendPercentPerDay(points: List<PricePoint>): Double? {
 
 private fun pctText(p: Double): String {
     val v = abs(p)
-    return if (v < 10) "%.1f%%".format(java.util.Locale.ROOT, v).replace('.', ',') else "${v.roundToInt()}%"
+    return if (v < 10) "%.1f%%".format(java.util.Locale.ROOT, v).let { if (Lang.en) it else it.replace('.', ',') } else "${v.roundToInt()}%"
 }
 
 // ---------------------------------------------------------------- Csoportos költség
@@ -78,11 +87,14 @@ fun groupCostLine(w: Watch, best: Offer, currency: String, transferTotal: Int?):
     val total = best.price + (transferTotal ?: 0)
     val per = total / people
     val parts = buildList {
-        add("jegy")
-        if (w.wantsBags) add("poggyász")
-        if (transferTotal != null && transferTotal > 0) add("transzfer")
+        add(tr("jegy", "ticket"))
+        if (w.wantsBags) add(tr("poggyász", "bags"))
+        if (transferTotal != null && transferTotal > 0) add(tr("transzfer", "transfer"))
     }.joinToString(" + ")
-    return "👥 Fejenként kb. ${formatPrice(per, currency)} ($people fő, $parts: ${formatPrice(total, currency)})"
+    return tr(
+        "👥 Fejenként kb. ${formatPrice(per, currency)} ($people fő, $parts: ${formatPrice(total, currency)})",
+        "👥 About ${formatPrice(per, currency)} per person ($people people, $parts: ${formatPrice(total, currency)})",
+    )
 }
 
 // ---------------------------------------------------------------- Naptár
@@ -114,20 +126,23 @@ object RefiCalendar {
         val to = o.toCode ?: w.to.substringBefore(',')
         val link = o.url?.takeIf { it.startsWith("https://") }
         fun notes(): String = listOfNotNull(
-            o.airline?.let { "Légitársaság: $it" },
-            "Ár a REFI szerint: ${formatPrice(o.price, Store.settings.value.currency)} (a foglaláskor ellenőrizd!)",
-            link?.let { "Foglalás: $it" },
+            o.airline?.let { tr("Légitársaság: $it", "Airline: $it") },
+            tr(
+                "Ár a REFI szerint: ${formatPrice(o.price, Store.settings.value.currency)} (a foglaláskor ellenőrizd!)",
+                "Price according to REFI: ${formatPrice(o.price, Store.settings.value.currency)} (check it when booking!)",
+            ),
+            link?.let { tr("Foglalás: $it", "Booking: $it") },
         ).joinToString("\n")
         parse(o.departure)?.let { dep ->
             list += CalEvent(
                 "✈ $from → $to" + (o.airline?.let { " ($it)" } ?: ""),
-                dep, zoneFor(from), parse(o.arrival), zoneFor(to), "$from repülőtér", notes(),
+                dep, zoneFor(from), parse(o.arrival), zoneFor(to), tr("$from repülőtér", "$from airport"), notes(),
             )
         }
         parse(o.returnDeparture)?.let { dep ->
             list += CalEvent(
                 "✈ $to → $from" + (o.airline?.let { " ($it)" } ?: ""),
-                dep, zoneFor(to), parse(o.returnArrival), zoneFor(from), "$to repülőtér", notes(),
+                dep, zoneFor(to), parse(o.returnArrival), zoneFor(from), tr("$to repülőtér", "$to airport"), notes(),
             )
         }
         return list

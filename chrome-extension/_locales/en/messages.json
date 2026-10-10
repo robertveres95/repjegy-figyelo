@@ -1,0 +1,14 @@
+{
+  "name": {
+    "message": "REFI – flight price tracker"
+  },
+  "short_name": {
+    "message": "REFI"
+  },
+  "description": {
+    "message": "A quick look at the flights you watch in REFI: current price, target price, price chart."
+  },
+  "action_title": {
+    "message": "REFI – watched flights"
+  }
+}

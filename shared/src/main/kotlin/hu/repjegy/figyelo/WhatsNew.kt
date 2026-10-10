@@ -23,7 +23,11 @@ import androidx.compose.ui.unit.dp
  * Kiadáskor ide kerül az új verzió pár pontja (a legújabb legyen elöl).
  */
 object WhatsNew {
-    val notes: List<Pair<String, List<String>>> = listOf(
+    /** A felület nyelvén (a magyar a mérvadó; angolul a [englishNotes] táblából, ha van fordítás). */
+    val notes: List<Pair<String, List<String>>>
+        get() = if (Lang.en) hungarian.map { (v, lines) -> v to (englishNotes[v] ?: lines) } else hungarian
+
+    private val hungarian: List<Pair<String, List<String>>> = listOf(
         "1.4.0" to listOf(
             "Új rugalmasság: „Minden héten” – pl. péntek–vasárnapot megadva bármelyik hétvégét figyeli a következő hetekben, és a legolcsóbbat mutatja.",
             "Közös figyelés: ha egy megosztott figyelést újra elküldenek (pl. új dátummal), a meglévő frissül, nem lesz belőle kettő. A megosztott üzenetben az aktuális legjobb ár és a foglalási link is benne van.",
@@ -52,6 +56,40 @@ object WhatsNew {
             "Tippek és trükkök a figyelés készítésekor – és egy varázsló, ami végigvezet az ingyenes kulcsok beállításán. A kulcsok a többi eszközödre is magától átkerülnek.",
             "Sok apró hibajavítás a háttérben.",
         ),
+    )
+
+    private fun english(version: String, lines: List<String>) = version to lines
+
+    /** Az újdonságok angolul, verziónként. */
+    private val englishNotes: Map<String, List<String>> = mapOf(
+        english("1.4.0", listOf(
+            "New flexibility: “Every week” – e.g. set Friday–Sunday and REFI watches every weekend in the coming weeks and shows you the cheapest.",
+            "Shared watches: if someone sends a shared watch again (e.g. with a new date), the existing one is updated instead of being duplicated. The shared message now includes the current best price and the booking link.",
+            "“Buy now or wait?” – right after the first check: based on Google’s usual price range, we tell you whether the price is good.",
+            "See how much you save by watching: how much cheaper it is now than when you started watching.",
+            "For remote airports (e.g. Stansted, Beauvais, Bergamo) the estimated price of the transfer to the city centre is shown too.",
+            "The Chrome extension icon shows a number: how many of your watches are below the target price.",
+        )),
+        english("1.3.3", listOf(
+            "On Windows, updating is one click: REFI downloads and installs the new version itself.",
+            "You can choose whether REFI starts with Windows.",
+            "Even more reliable sync if you use several devices – keys and currency included.",
+            "When you sign out, your other devices stay signed in; on the phone you can also pick an account the next time you sign in.",
+            "When leaving Settings, we ask if you haven’t saved your changes.",
+            "You can turn tips off one by one or all at once (and turn them back on in Settings).",
+            "More accurate Wizz Air and Ignav searches, a more readable look, and lots of small fixes.",
+        )),
+        english("1.3.2", listOf(
+            "A new, easier-on-the-eyes blue colour theme.",
+            "More detailed price chart: with dates, the highest and lowest price, and for trips without baggage Google’s 2-week price history too.",
+            "Discover: you can now search for cheap destinations up to a year ahead.",
+            "More reliable sync between phone and computer – a deleted watch won’t come back.",
+            "Fewer unnecessary notifications: we don’t tell you about the same price twice.",
+            "The app asks before deleting a watch and before signing out.",
+            "If signing in fails (e.g. no internet), you can still continue.",
+            "Tips and tricks when creating a watch – and a wizard that guides you through setting up the free keys. The keys also move to your other devices automatically.",
+            "Lots of small fixes behind the scenes.",
+        )),
     )
 
     private const val KEY = "seenVersion"
@@ -102,7 +140,7 @@ internal fun WhatsNewOverlay(items: List<Pair<String, List<String>>>, onClose: (
     ) {
         NeonCard(modifier = Modifier.fillMaxWidth().enterAnimation()) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("ÚJDONSÁGOK", style = MaterialTheme.typography.headlineMedium.glow(), color = Neon.Green)
+                Text(tr("ÚJDONSÁGOK", "WHAT’S NEW"), style = MaterialTheme.typography.headlineMedium.glow(), color = Neon.Green)
                 items.forEach { (version, lines) ->
                     Text("REFI $version", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     lines.forEach { line ->
@@ -113,7 +151,7 @@ internal fun WhatsNewOverlay(items: List<Pair<String, List<String>>>, onClose: (
                     }
                 }
                 Button(onClick = onClose, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
-                    Text("Rendben", fontWeight = FontWeight.Bold)
+                    Text(tr("Rendben", "OK"), fontWeight = FontWeight.Bold)
                 }
             }
         }

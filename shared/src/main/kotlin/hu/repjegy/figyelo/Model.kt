@@ -372,48 +372,48 @@ data class Settings(
     val isReady: Boolean get() = googleOn || ryanairOn || wizzOn || useSerpApi || useIgnav
 }
 
-val TRAVEL_CLASSES = listOf(
-    1 to "Turista",
-    2 to "Prémium turista",
+val TRAVEL_CLASSES: List<Pair<Int, String>> get() = listOf(
+    1 to tr("Turista", "Economy"),
+    2 to tr("Prémium turista", "Premium economy"),
     3 to "Business",
-    4 to "Első osztály",
+    4 to tr("Első osztály", "First class"),
 )
 
-val STOP_OPTIONS = listOf(
-    0 to "Mindegy",
-    1 to "Csak közvetlen járat",
-    2 to "Legfeljebb 1 átszállás",
-    3 to "Legfeljebb 2 átszállás",
+val STOP_OPTIONS: List<Pair<Int, String>> get() = listOf(
+    0 to tr("Mindegy", "Any"),
+    1 to tr("Csak közvetlen járat", "Direct flights only"),
+    2 to tr("Legfeljebb 1 átszállás", "At most 1 stop"),
+    3 to tr("Legfeljebb 2 átszállás", "At most 2 stops"),
 )
 
-val CURRENCIES = listOf(
-    "HUF" to "Forint (Ft)",
-    "EUR" to "Euró (€)",
-    "USD" to "Dollár ($)",
-    "GBP" to "Font (£)",
+val CURRENCIES: List<Pair<String, String>> get() = listOf(
+    "HUF" to tr("Forint (Ft)", "Hungarian forint (Ft)"),
+    "EUR" to tr("Euró (€)", "Euro (€)"),
+    "USD" to tr("Dollár ($)", "US dollar ($)"),
+    "GBP" to tr("Font (£)", "British pound (£)"),
 )
 
-val TEXT_SCALES = listOf(
-    100 to "Normál",
-    115 to "Nagy",
-    130 to "Extra nagy",
+val TEXT_SCALES: List<Pair<Int, String>> get() = listOf(
+    100 to tr("Normál", "Normal"),
+    115 to tr("Nagy", "Large"),
+    130 to tr("Extra nagy", "Extra large"),
 )
 
-val INTERVALS = listOf(
-    0 to "Ki (csak kézi ellenőrzés)",
-    3 to "3 óránként",
-    6 to "6 óránként",
-    12 to "12 óránként",
-    24 to "Naponta egyszer",
+val INTERVALS: List<Pair<Int, String>> get() = listOf(
+    0 to tr("Ki (csak kézi ellenőrzés)", "Off (manual checks only)"),
+    3 to tr("3 óránként", "Every 3 hours"),
+    6 to tr("6 óránként", "Every 6 hours"),
+    12 to tr("12 óránként", "Every 12 hours"),
+    24 to tr("Naponta egyszer", "Once a day"),
 )
 
 internal fun normalizeAirline(s: String): String = s.lowercase().filter { it.isLetterOrDigit() }
 
-val FLEX_OPTIONS = listOf(
-    0 to "Pontos dátum",
-    1 to "±1 nap",
-    2 to "±2 nap",
-    3 to "±3 nap",
+val FLEX_OPTIONS: List<Pair<Int, String>> get() = listOf(
+    0 to tr("Pontos dátum", "Exact date"),
+    1 to tr("±1 nap", "±1 day"),
+    2 to tr("±2 nap", "±2 days"),
+    3 to tr("±3 nap", "±3 days"),
 )
 
 /** „Minden héten” mód: legfeljebb ennyi hetet nézünk (a kérések száma ne nőjön túl). */
@@ -429,11 +429,13 @@ fun lastWeekly(first: LocalDate, until: LocalDate): LocalDate {
 }
 
 
-val HOUR_FROM_OPTIONS: List<Pair<Int?, String>> =
-    listOf<Pair<Int?, String>>(null to "Bármikor") + listOf(5, 6, 7, 8, 9, 10, 12, 14, 16, 18).map { it to "%02d:00-tól".format(it) }
+val HOUR_FROM_OPTIONS: List<Pair<Int?, String>>
+    get() = listOf<Pair<Int?, String>>(null to tr("Bármikor", "Any time")) +
+        listOf(5, 6, 7, 8, 9, 10, 12, 14, 16, 18).map { it to tr("%02d:00-tól".format(it), "From %02d:00".format(it)) }
 
-val HOUR_TO_OPTIONS: List<Pair<Int?, String>> =
-    listOf<Pair<Int?, String>>(null to "Bármikor") + listOf(9, 10, 12, 14, 16, 18, 20, 22).map { it to "%02d:00-ig".format(it) }
+val HOUR_TO_OPTIONS: List<Pair<Int?, String>>
+    get() = listOf<Pair<Int?, String>>(null to tr("Bármikor", "Any time")) +
+        listOf(9, 10, 12, 14, 16, 18, 20, 22).map { it to tr("%02d:00-ig".format(it), "Until %02d:00".format(it)) }
 
 val QUIET_HOURS = (0..23).map { it to "%02d:00".format(it) }
 
@@ -474,7 +476,8 @@ internal fun JSONObject.longOrNull(key: String): Long? =
 
 // ---------------------------------------------------------------- Időpontok kiírása
 
-private val legDateFormat = java.time.format.DateTimeFormatter.ofPattern("MMM d., EEE", HU)
+private val legDateFormat: java.time.format.DateTimeFormatter
+    get() = java.time.format.DateTimeFormatter.ofPattern(if (Lang.en) "d MMM, EEE" else "MMM d., EEE", Lang.locale)
 
 /**
  * Egy út szöveges leírása, pl. "nov. 5., cs 06:25 → 08:10 (BUD → STN), közvetlen".
@@ -491,13 +494,13 @@ fun describeLeg(departure: String?, arrival: String?, stops: Int?, from: String?
             append(" → ")
             append("%02d:%02d".format(arr.hour, arr.minute))
             val days = java.time.temporal.ChronoUnit.DAYS.between(dep.toLocalDate(), arr.toLocalDate())
-            if (days != 0L) append(" (${if (days > 0) "+" else ""}$days nap)")
+            if (days != 0L) append(" (${if (days > 0) "+" else ""}$days ${tr("nap", if (kotlin.math.abs(days) == 1L) "day" else "days")})")
         }
         if (from != null && to != null) append(" · $from → $to")
         when (stops) {
             null -> Unit
-            0 -> append(" · közvetlen")
-            else -> append(" · $stops átszállás")
+            0 -> append(" · " + tr("közvetlen", "direct"))
+            else -> append(" · " + tr("$stops átszállás", if (stops == 1) "1 stop" else "$stops stops"))
         }
     }
 }
@@ -518,15 +521,15 @@ fun legParts(departure: String?, arrival: String?, stops: Int?, from: String?, t
             append(" → ")
             append("%02d:%02d".format(arr.hour, arr.minute))
             val days = java.time.temporal.ChronoUnit.DAYS.between(dep.toLocalDate(), arr.toLocalDate())
-            if (days != 0L) append(" (${if (days > 0) "+" else ""}$days nap)")
+            if (days != 0L) append(" (${if (days > 0) "+" else ""}$days ${tr("nap", if (kotlin.math.abs(days) == 1L) "day" else "days")})")
         }
     }
     val route = listOfNotNull(
         if (from != null && to != null) "$from → $to" else null,
         when (stops) {
             null -> null
-            0 -> "közvetlen"
-            else -> "$stops átszállás"
+            0 -> tr("közvetlen", "direct")
+            else -> tr("$stops átszállás", if (stops == 1) "1 stop" else "$stops stops")
         },
     ).joinToString(" · ").ifBlank { null }
     return LegParts(dep.format(legDateFormat), times, route)

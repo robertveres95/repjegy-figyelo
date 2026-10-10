@@ -119,9 +119,16 @@ object GoogleAuthDesktop {
                 return@createContext
             }
             val ok = params["code"] != null && params["state"] == state
-            val html = if (ok) "<h2>REFI: sikeres bejelentkezés.</h2><p>Ezt a lapot bezárhatod, és visszatérhetsz az apphoz.</p>"
-            else "<h2>REFI: a bejelentkezés nem sikerült.</h2><p>Próbáld újra az appban.</p>"
-            val bytes = ("<!doctype html><meta charset=utf-8><body style='font-family:sans-serif;padding:40px'>$html").toByteArray(Charsets.UTF_8)
+            val html = if (ok) tr(
+                "<h2>REFI: sikeres bejelentkezés.</h2><p>Ezt a lapot bezárhatod, és visszatérhetsz az apphoz.</p>",
+                "<h2>REFI: you're signed in.</h2><p>You can close this tab and go back to the app.</p>",
+            )
+            else tr(
+                "<h2>REFI: a bejelentkezés nem sikerült.</h2><p>Próbáld újra az appban.</p>",
+                "<h2>REFI: sign-in didn't work.</h2><p>Please try again in the app.</p>",
+            )
+            val lang = if (Lang.en) "en" else "hu"
+            val bytes = ("<!doctype html><html lang=$lang><meta charset=utf-8><body style='font-family:sans-serif;padding:40px'>$html").toByteArray(Charsets.UTF_8)
             ex.responseHeaders.add("Content-Type", "text/html; charset=utf-8")
             ex.sendResponseHeaders(200, bytes.size.toLong())
             ex.responseBody.use { it.write(bytes) }

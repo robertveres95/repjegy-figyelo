@@ -145,7 +145,7 @@ object Store {
     ): Pair<List<Watch>, Map<String, Long>> {
         // Közben pénznemet váltott: a felhőből jött (a régi pénznemre átváltott) árakat most nem keverjük be
         if (expectedCurrency != null && settings.value.currency != expectedCurrency) {
-            throw java.io.IOException("pénznemváltás közben – a következő szinkronizálás rendezi")
+            throw java.io.IOException(tr("pénznemváltás közben – a következő szinkronizálás rendezi", "currency is being changed – the next sync will sort it out"))
         }
         val merged = Sync.merge(_watches.value, tombstones(), remote, remoteTomb, dropLocalOnlyBefore)
         if (merged.first != _watches.value) persist(merged.first)
@@ -186,7 +186,7 @@ object Store {
                 val target = if (to == "HUF") (Math.round(raw / 100.0) * 100).toInt() else Math.round(raw).toInt()
                 cleared.copy(targetPrice = target.coerceAtLeast(1))
             } else {
-                cleared.copy(notify = false, lastError = "${PriceChecker.CURRENCY_HINT_PREFIX}: add meg újra a célárat, és kapcsold vissza az értesítést.")
+                cleared.copy(notify = false, lastError = currencyHint())
             }
         })
         saveSettings(_settings.value.copy(currency = to))
@@ -325,10 +325,16 @@ object Store {
                 val target = if (to == "HUF") (Math.round(raw / 100.0) * 100).toInt() else Math.round(raw).toInt()
                 cleared.copy(targetPrice = target.coerceAtLeast(1))
             } else {
-                cleared.copy(notify = false, lastError = "${PriceChecker.CURRENCY_HINT_PREFIX}: add meg újra a célárat, és kapcsold vissza az értesítést.")
+                cleared.copy(notify = false, lastError = currencyHint())
             }
         }
     }
+
+    /** Pénznemváltási figyelmeztetés (a [PriceChecker.isCurrencyHint] mindkét nyelven felismeri). */
+    private fun currencyHint(): String = tr(
+        "${PriceChecker.CURRENCY_HINT_PREFIX}: add meg újra a célárat, és kapcsold vissza az értesítést.",
+        "${PriceChecker.CURRENCY_HINT_PREFIX}: enter the target price again and turn notifications back on.",
+    )
 
     private fun persist(list: List<Watch>) {
         val arr = JSONArray()

@@ -75,13 +75,22 @@ object Fees {
             ?: return o.copy(
                 bagsIncluded = !w.wantsBags,
                 partial = includeInfants && w.infantsOnLap > 0,
-                note = listOfNotNull(o.note, "poggyász-/csecsemődíj nélkül").joinToString(", "),
+                note = listOfNotNull(o.note, tr("poggyász-/csecsemődíj nélkül", "without baggage/infant fees")).joinToString(", "),
             )
+        val bags = w.wantsBags
+        val infants = includeInfants && w.infantsOnLap > 0
         val what = buildList {
-            if (w.wantsBags) add("poggyász")
-            if (includeInfants && w.infantsOnLap > 0) add("csecsemő")
+            if (bags) add("poggyász")
+            if (infants) add("csecsemő")
         }.joinToString(" és ")
-        val tag = "becsült $what-díjjal (+${formatPrice(extra, currency)})"
+        val whatEn = buildList {
+            if (bags) add("baggage")
+            if (infants) add("infant")
+        }.joinToString(" and ")
+        val tag = tr(
+            "becsült $what-díjjal (+${formatPrice(extra, currency)})",
+            "incl. estimated $whatEn ${if (bags && infants) "fees" else "fee"} (+${formatPrice(extra, currency)})",
+        )
         return o.copy(
             price = o.price + extra,
             bagsIncluded = true,

@@ -28,7 +28,11 @@ class PartialSourceException(
     /** Letiltás miatt maradt félbe: a külső ciklus (pl. rugalmas dátumok) se próbálkozzon tovább. */
     val fatal: Boolean = false,
 ) :
-    IOException("részleges válasz: $failed/$total kérés hibázott" + (cause?.message?.let { " ($it)" } ?: "").take(120), cause)
+    IOException(
+        tr("részleges válasz: $failed/$total kérés hibázott", "partial answer: $failed/$total requests failed") +
+            (cause?.message?.let { " ($it)" } ?: "").take(120),
+        cause,
+    )
 
 /** Több kérés (reptérpár vagy dátum) eredményének összegzése: hiba, részleges vagy teljes. */
 internal inline fun <K> collectOffers(keys: List<K>, betweenEach: () -> Unit = {}, search: (K) -> List<Offer>): List<Offer> {
@@ -117,7 +121,7 @@ object Http {
             val n = input.read(buf)
             if (n < 0) break
             out.write(buf, 0, n)
-            if (out.size() > limit) throw IOException("Túl nagy válasz")
+            if (out.size() > limit) throw IOException(tr("Túl nagy válasz", "Response too large"))
         }
         return out.toString(Charsets.UTF_8.name())
     }

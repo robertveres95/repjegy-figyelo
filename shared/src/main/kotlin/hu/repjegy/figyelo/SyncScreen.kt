@@ -27,7 +27,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-private val syncTime = DateTimeFormatter.ofPattern("MMM d. HH:mm", HU)
+private val syncTime get() = DateTimeFormatter.ofPattern(if (Lang.en) "d MMM HH:mm" else "MMM d. HH:mm", Lang.locale)
 
 /** Beállítások: szinkronizálás a Google-fiókkal (telefon ↔ Windows). */
 @Composable
@@ -37,52 +37,56 @@ internal fun SyncSection() {
     if (confirmLogout) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { confirmLogout = false },
-            title = { Text("Kijelentkezel?") },
-            text = { Text("A REFI használatához be kell jelentkezni, így kijelentkezés után rögtön a bejelentkezés jön. A figyeléseid megmaradnak.") },
-            confirmButton = { TextButton(onClick = { confirmLogout = false; Sync.disable() }) { Text("Kijelentkezés") } },
-            dismissButton = { TextButton(onClick = { confirmLogout = false }) { Text("Mégse") } },
+            title = { Text(tr("Kijelentkezel?", "Sign out?")) },
+            text = { Text(tr("A REFI használatához be kell jelentkezni, így kijelentkezés után rögtön a bejelentkezés jön. A figyeléseid megmaradnak.", "You need to be signed in to use REFI, so after signing out the sign-in screen comes up right away. Your watches stay safe.")) },
+            confirmButton = { TextButton(onClick = { confirmLogout = false; Sync.disable() }) { Text(tr("Kijelentkezés", "Sign out")) } },
+            dismissButton = { TextButton(onClick = { confirmLogout = false }) { Text(tr("Mégse", "Cancel")) } },
         )
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            "A figyeléseid a Google-fiókodba mentődnek (egy rejtett, csak a REFI által látható helyre), " +
-                "és minden eszközödön, ahol bejelentkezel, ugyanazok lesznek.",
+            tr(
+                "A figyeléseid a Google-fiókodba mentődnek (egy rejtett, csak a REFI által látható helyre), " +
+                    "és minden eszközödön, ahol bejelentkezel, ugyanazok lesznek.",
+                "Your watches are saved to your Google account (in a hidden place only REFI can see), " +
+                    "and they’ll be the same on every device where you sign in.",
+            ),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (!s.enabled) {
             Button(onClick = { AppScope.scope.launch { Sync.enable() } }, enabled = !s.busy) {
-                Text(if (s.busy) "Bejelentkezés…" else "Bejelentkezés Google-fiókkal")
+                Text(if (s.busy) tr("Bejelentkezés…", "Signing in…") else tr("Bejelentkezés Google-fiókkal", "Sign in with Google"))
             }
             if (s.busy) {
-                TextButton(onClick = { Platform.current.googleCancelSignIn() }) { Text("Mégse") }
+                TextButton(onClick = { Platform.current.googleCancelSignIn() }) { Text(tr("Mégse", "Cancel")) }
             }
         } else {
             Text(
-                "Bejelentkezve: ${s.account ?: "Google-fiók"}",
+                tr("Bejelentkezve: ${s.account ?: "Google-fiók"}", "Signed in: ${s.account ?: "Google account"}"),
                 style = MaterialTheme.typography.bodyMedium,
                 color = Neon.Green,
             )
             Text(
                 when {
-                    s.running -> "Szinkronizálás…"
-                    s.lastSync != null -> "Utoljára: " + Instant.ofEpochMilli(s.lastSync!!).atZone(ZoneId.systemDefault()).format(syncTime)
-                    else -> "Még nem volt szinkronizálás."
+                    s.running -> tr("Szinkronizálás…", "Syncing…")
+                    s.lastSync != null -> tr("Utoljára: ", "Last sync: ") + Instant.ofEpochMilli(s.lastSync!!).atZone(ZoneId.systemDefault()).format(syncTime)
+                    else -> tr("Még nem volt szinkronizálás.", "No sync yet.")
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { AppScope.scope.launch { Sync.syncNow() } }, enabled = !s.busy) {
-                    Text("Szinkronizálás most")
+                    Text(tr("Szinkronizálás most", "Sync now"))
                 }
-                TextButton(onClick = { confirmLogout = true }) { Text("Kijelentkezés") }
+                TextButton(onClick = { confirmLogout = true }) { Text(tr("Kijelentkezés", "Sign out")) }
             }
         }
         s.error?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             if (s.enabled) {
-                TextButton(onClick = { AppScope.scope.launch { Sync.enable() } }, enabled = !s.busy) { Text("Újra bejelentkezés") }
+                TextButton(onClick = { AppScope.scope.launch { Sync.enable() } }, enabled = !s.busy) { Text(tr("Újra bejelentkezés", "Sign in again")) }
             }
         }
     }
@@ -110,15 +114,23 @@ internal fun LoginGate(onSkip: () -> Unit = {}) {
                     style = MaterialTheme.typography.headlineMedium.glow(),
                     color = Neon.Green,
                 )
-                Text("Jelentkezz be a Google-fiókoddal", style = MaterialTheme.typography.titleLarge)
+                Text(tr("Jelentkezz be a Google-fiókoddal", "Sign in with your Google account"), style = MaterialTheme.typography.titleLarge)
                 Text(
-                    "A figyeléseidet a Google-fiókodban tároljuk, így minden eszközödön – telefonon és " +
-                        "számítógépen – ugyanazok lesznek, és telefoncserénél sem vesznek el.",
+                    tr(
+                        "A figyeléseidet a Google-fiókodban tároljuk, így minden eszközödön – telefonon és " +
+                            "számítógépen – ugyanazok lesznek, és telefoncserénél sem vesznek el.",
+                        "We store your watches in your Google account, so they’re the same on all your devices – phone and " +
+                            "computer – and you won’t lose them when you change phones.",
+                    ),
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Text(
-                    "A REFI csak a saját, rejtett adatterületét látja a Google Drive-odon; a többi fájlodhoz, " +
-                        "leveleidhez nem fér hozzá.",
+                    tr(
+                        "A REFI csak a saját, rejtett adatterületét látja a Google Drive-odon; a többi fájlodhoz, " +
+                            "leveleidhez nem fér hozzá.",
+                        "REFI only sees its own hidden data area in your Google Drive; it can’t access your other files " +
+                            "or emails.",
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -127,15 +139,15 @@ internal fun LoginGate(onSkip: () -> Unit = {}) {
                     enabled = !s.busy,
                     modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
                 ) {
-                    Text(if (s.busy) "Bejelentkezés folyamatban…" else "Bejelentkezés Google-fiókkal")
+                    Text(if (s.busy) tr("Bejelentkezés folyamatban…", "Signing in…") else tr("Bejelentkezés Google-fiókkal", "Sign in with Google"))
                 }
                 if (s.busy) {
                     Text(
-                        "Válaszd ki a fiókodat a megnyíló Google-ablakban.",
+                        tr("Válaszd ki a fiókodat a megnyíló Google-ablakban.", "Choose your account in the Google window that opens."),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    TextButton(onClick = { Platform.current.googleCancelSignIn() }) { Text("Mégse") }
+                    TextButton(onClick = { Platform.current.googleCancelSignIn() }) { Text(tr("Mégse", "Cancel")) }
                 }
                 s.error?.let {
                     Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
@@ -143,17 +155,17 @@ internal fun LoginGate(onSkip: () -> Unit = {}) {
                         // Ha nem megy (nincs internet, nincs Google Play, nem nyílik böngésző), ne zárja ki
                         // a figyeléseiből: erre az indításra tovább lehet lépni, legközelebb újra kéri
                         Text(
-                            "Ha most nem sikerül (pl. nincs internet), később a Beállításokban is bejelentkezhetsz.",
+                            tr("Ha most nem sikerül (pl. nincs internet), később a Beállításokban is bejelentkezhetsz.", "If it doesn’t work now (e.g. no internet), you can sign in later in Settings."),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         OutlinedButton(onClick = onSkip, modifier = androidx.compose.ui.Modifier.fillMaxWidth()) {
-                            Text("Folytatás most bejelentkezés nélkül")
+                            Text(tr("Folytatás most bejelentkezés nélkül", "Continue without signing in for now"))
                         }
                     }
                 }
                 TextButton(onClick = { Platform.current.openUrl("https://github.com/robertveres95/repjegy-figyelo/blob/main/PRIVACY.md") }) {
-                    Text("Adatkezelési tájékoztató")
+                    Text(tr("Adatkezelési tájékoztató", "Privacy policy"))
                 }
             }
         }

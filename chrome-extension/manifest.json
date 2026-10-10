@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "REFI – repjegy-árfigyelő",
-  "short_name": "REFI",
-  "version": "1.1.0",
-  "description": "Gyors áttekintés a REFI-ben figyelt repülőjegyekről: aktuális ár, célár, árgörbe.",
+  "name": "__MSG_name__",
+  "short_name": "__MSG_short_name__",
+  "version": "1.2.0",
+  "description": "__MSG_description__",
+  "default_locale": "en",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvHPjJOC/kTPsV1z8cKRNA07VkjS7dQ31PvmpCS2qGqTIDQygc96FFCsEsRV9YPb3IhSq8+xTZDKmVq7JlsluVWaRN9mthHo1Zsm4QzzXisUCqO+wyDWwTnh1gldAT//4IzUY6r8sPaZckZUsSr+O/epFiOB9QasEnjzhbLZaK16JGNQJ/vpCXMukQWzrBuR3smwKdsLzV/MO7vJ6F1ZK4DL17tUF9o4a//Vevpw7dRfrPisNA7UnkDJtzGg3KzyDi/JZ5ne7WM60kNryxBpMctpVucQ6ZxX1xnNyyMknjPSqWptz1RfpwKw4hS9rw27YMZRDAzuvWyavGorF9dIz+QIDAQAB",
   "icons": {
     "16": "icons/icon16.png",
@@ -12,7 +13,7 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_title": "REFI – figyelt repjegyek",
+    "default_title": "__MSG_action_title__",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",

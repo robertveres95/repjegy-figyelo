@@ -1,0 +1,14 @@
+{
+  "name": {
+    "message": "REFI – repjegy-árfigyelő"
+  },
+  "short_name": {
+    "message": "REFI"
+  },
+  "description": {
+    "message": "Gyors áttekintés a REFI-ben figyelt repülőjegyekről: aktuális ár, célár, árgörbe."
+  },
+  "action_title": {
+    "message": "REFI – figyelt repjegyek"
+  }
+}
