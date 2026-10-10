@@ -93,3 +93,14 @@ jobs:
             [ -f "$f" ] && upload "$f" "$(basename "$f")" "$( [[ $f == *.png ]] && echo image/png || echo text/plain )"
           done
           echo "kész"
+
+      # A jelentés feltöltése után: ha egységteszt bukott, a futás is legyen piros (ne csak a diag.txt-ben látsszon)
+      - name: Egységtesztek eredménye
+        shell: bash
+        run: |
+          bad=$(cat desktop/build/test-results/test/*.xml 2>/dev/null | grep -oE '(failures|errors)="[1-9][0-9]*"' | wc -l)
+          if [ "$bad" -gt 0 ] || grep -q "tests completed, [0-9]* failed" unit.log 2>/dev/null; then
+            grep -E "FAILED" unit.log | sed 's/^/::error::/' | head -20
+            exit 1
+          fi
+          echo "::notice::Minden egységteszt rendben"
