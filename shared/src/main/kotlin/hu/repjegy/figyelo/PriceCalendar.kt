@@ -24,10 +24,16 @@ object PriceCalendar {
     fun roundTrip(from: String, to: String, ym: YearMonth, nights: Int, currency: String, today: LocalDate = LocalDate.now()): Map<LocalDate, Day> {
         val out = month(from, to, ym, currency, today)
         if (out.isEmpty()) return emptyMap()
-        val back = month(to, from, ym, currency, today).toMutableMap()
-        val next = ym.plusMonths(1)
-        if (!next.atDay(1).isAfter(maxTravelDate(today))) {
-            runCatching { month(to, from, next, currency, today) }.getOrNull()?.let { back.putAll(it) }
+        // A visszautak a [nights] éjjel későbbi napokra: csak az érintett hónapokat kérjük le
+        val n = nights.toLong()
+        val s = maxOf(ym.atDay(1), today).plusDays(n)
+        val e = minOf(ym.atEndOfMonth().plusDays(n), maxTravelDate(today))
+        if (s.isAfter(e)) return emptyMap()
+        val back = mutableMapOf<LocalDate, Day>()
+        var m = YearMonth.from(s)
+        while (!m.isAfter(YearMonth.from(e))) {
+            runCatching { month(to, from, m, currency, today) }.getOrNull()?.let { back.putAll(it) }
+            m = m.plusMonths(1)
         }
         return out.mapNotNull { (d, o) ->
             val r = back[d.plusDays(nights.toLong())] ?: return@mapNotNull null

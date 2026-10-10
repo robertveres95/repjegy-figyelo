@@ -110,16 +110,20 @@ object Discover {
                 lastError = e
             }
         }
-        // Wizz Air „olcsó járatok” (csak egyirányú utaknál): további úti célok, amerre a Ryanair nem repül
+        // Wizz Air „olcsó járatok”: további úti célok, amerre a Ryanair nem repül (oda-vissza útnál a visszaúttal)
         // A fapados-bázisok előre (pl. London: STN, LTN), legfeljebb 4 reptér; annyi hónapot kérünk, hogy az időszak vége is benne legyen
         if (Store.settings.value.wizzOn) {
+            val wizzOneWay = mutableListOf<Result>()
             val months = (ChronoUnit.MONTHS.between(YearMonth.from(today), YearMonth.from(end)) + 1).toInt().coerceIn(1, 12)
             for (origin in origins.sortedBy { if (it in LOW_COST_BASES) 0 else 1 }.take(4)) {
-                runCatching {
-                    val oneWay = wizz(origin, start, end, currency, months)
-                    // Oda-vissza út: a legolcsóbb néhány célhoz a visszaút legolcsóbb napja a kért éjszakaszámon belül
-                    all += if (nights == null) oneWay else wizzRoundTrip(origin, oneWay, nights, maxPrice, currency)
-                }
+                runCatching { wizzOneWay += wizz(origin, start, end, currency, months) }
+            }
+            // Oda-vissza út: az összes indulási helyről együtt a legolcsóbb néhány célhoz kérjük le a visszaút
+            // legolcsóbb napját (célonként egy kérés) – ahol a Ryanair oda-vissza ára már olcsóbb, ott nem
+            all += if (nights == null) wizzOneWay else {
+                val ryanairBest = all.filter { r -> r.nights()?.let { it in nights } == true }
+                    .groupBy { it.code }.mapValues { (_, l) -> l.minOf { it.pricePerPerson } }
+                wizzRoundTrip(wizzOneWay.filter { w -> (ryanairBest[w.code] ?: Int.MAX_VALUE) > w.pricePerPerson }, nights, maxPrice, currency)
             }
         }
         if (all.isEmpty() && lastError != null) throw lastError
@@ -136,7 +140,7 @@ object Discover {
     /** Ennyi (a legolcsóbb odaútú) úti célnak nézzük meg a visszaútját – célonként egy kérés. */
     private const val WIZZ_ROUND_TRIP_TARGETS = 8
 
-    private fun wizzRoundTrip(origin: String, oneWay: List<Result>, nights: IntRange, maxPrice: Int?, currency: String): List<Result> =
+    private fun wizzRoundTrip(oneWay: List<Result>, nights: IntRange, maxPrice: Int?, currency: String): List<Result> =
         oneWay.groupBy { it.code }.map { (_, l) -> l.minBy { it.pricePerPerson } }
             .filter { maxPrice == null || it.pricePerPerson < maxPrice }
             .sortedBy { it.pricePerPerson }

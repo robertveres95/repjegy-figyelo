@@ -3,7 +3,6 @@ package hu.repjegy.figyelo
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import androidx.core.app.NotificationManagerCompat
 
@@ -17,11 +16,10 @@ class NotificationActionActivity : Activity() {
         super.onCreate(savedInstanceState)
         val id = intent.getIntExtra(EXTRA_NOTIFICATION_ID, 0)
         if (id != 0) runCatching { NotificationManagerCompat.from(this).cancel(id) }
-        val target: Intent? = if (Build.VERSION.SDK_INT >= 33) {
-            intent.getParcelableExtra(EXTRA_TARGET, Intent::class.java)
-        } else {
-            @Suppress("DEPRECATION") intent.getParcelableExtra(EXTRA_TARGET)
-        }
+        // Az IntentCompat kerüli az Android 13 típusos getParcelableExtra hibáját
+        val target: Intent? = runCatching {
+            androidx.core.content.IntentCompat.getParcelableExtra(intent, EXTRA_TARGET, Intent::class.java)
+        }.getOrNull()
         // Csak a saját, ismert célok (biztonság: kívülről érkező Intent nem indíthat tetszőleges dolgot)
         if (target != null && isAllowed(target)) runCatching { startActivity(target) }
         finish()
@@ -39,6 +37,8 @@ class NotificationActionActivity : Activity() {
 
         fun wrap(context: Context, notificationId: Int, target: Intent): Intent =
             Intent(context, NotificationActionActivity::class.java)
+                // Egyedi adat: a rendszer az extrákat nem nézi, így két figyelés gombjai nem írhatják felül egymást
+                .setData(android.net.Uri.parse("refi-action://$notificationId/${target.action ?: "open"}"))
                 .putExtra(EXTRA_NOTIFICATION_ID, notificationId)
                 .putExtra(EXTRA_TARGET, target)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_HISTORY or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)

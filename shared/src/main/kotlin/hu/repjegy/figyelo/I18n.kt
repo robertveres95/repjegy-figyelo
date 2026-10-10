@@ -18,6 +18,8 @@ object Lang {
     const val EN_CODE = "en"
     const val DE_CODE = "de"
     private const val KEY = "language"
+    /** A nyelvet ezen az eszközön választották, még nem került a szinkronfájlba (a bővítmény ezt követi). */
+    const val DIRTY_KEY = "languageDirty"
     private val CODES = listOf(HU_CODE, EN_CODE, DE_CODE)
 
     /**
@@ -98,6 +100,7 @@ object Lang {
         // A reptérlista az új nyelven a háttérben töltődjön be (ne a felület szálán, az első kártyánál)
         runCatching { AppScope.scope.launch { runCatching { Airports.preload() } } }
         // A Chrome-bővítmény is váltson (a szinkronfájlban az app nyelve)
+        runCatching { Store.prefs.edit { putBoolean(DIRTY_KEY, true) } }
         runCatching { Sync.scheduleSoon() }
     }
 

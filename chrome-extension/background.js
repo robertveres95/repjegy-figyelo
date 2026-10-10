@@ -2,6 +2,8 @@
 // A Google-bejelentkezés a háttérben fut: a bővítmény kis ablaka (popup) bezárul, amikor a Google
 // bejelentkező ablaka megnyílik, ezért ott a bejelentkezés eredménye elveszne.
 importScripts('config.js', 'badge.js');
+// Az appban választott nyelv (a legutóbb letöltött adatból) – a háttér minden ébredéskor újra beolvassa
+chrome.storage.local.get('data').then(({ data }) => { if (data && data.uiLang) refiUseLang(data.uiLang); }).catch(() => {});
 
 const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
 let generation = 0;   // kijelentkezéskor nő: egy közben futó bejelentkezés eredménye eldobandó

@@ -214,11 +214,15 @@ object Sync {
         val (alerts, alertTomb) = DealAlerts.mergeFromSync(remote?.alerts.orEmpty(), remote?.alertTombstones.orEmpty())
 
         // 3. Feltöltés (csak ha változott a felhőben lévőhöz képest)
-        val body = serialize(merged.first, merged.second, currency, keys, alerts, alertTomb)
+        // Az app nyelve (a Chrome-bővítménynek): csak akkor írjuk át, ha ezen az eszközön választottak nyelvet –
+        // különben két eltérő nyelvű eszköz minden szinkronnál felülírná egymást
+        val langDirty = runCatching { Store.prefs.getBoolean(Lang.DIRTY_KEY, false) }.getOrDefault(false)
+        val uiLang = if (langDirty || remote?.uiLang == null) Lang.code else remote.uiLang
+        val body = serialize(merged.first, merged.second, currency, keys, alerts, alertTomb, uiLang)
         val sameAlerts = remote != null && remote.alerts.size == alerts.size &&
             remote.alerts.sortedBy { it.createdAt }.zip(alerts.sortedBy { it.createdAt }).all { (a, b) -> a.sameSettings(b) } &&
             remote.alertTombstones == alertTomb
-        if (remote != null && remote.currency == currency && sameAlerts && remote.uiLang == Lang.code &&
+        if (remote != null && remote.currency == currency && sameAlerts && remote.uiLang == uiLang &&
             remote.watches.associateBy { it.id } == merged.first.associateBy { it.id } &&
             remote.tombstones == merged.second &&
             (remote.keys == keys || (remote.keys == null && keys.editedAt == 0L))
@@ -245,6 +249,7 @@ object Sync {
         if (res.code == 412) throw ConflictException()
         check401(res.code, res.body)
         if (res.code !in 200..299) throw IOException(tr("Drive feltöltés HTTP ${res.code}", "Drive upload HTTP ${res.code}", "Drive-Upload HTTP ${res.code}"))
+        if (langDirty) runCatching { Store.prefs.edit { putBoolean(Lang.DIRTY_KEY, false) } }
     }
 
     private fun check401(code: Int, body: String = "") {
@@ -282,6 +287,7 @@ object Sync {
     internal fun serialize(
         watches: List<Watch>, tombstones: Map<String, Long>, currency: String, keys: Store.SyncedKeys? = null,
         alerts: List<DealAlert> = emptyList(), alertTombstones: Map<String, Long> = emptyMap(),
+        uiLang: String = Lang.code,
     ): String =
         JSONObject()
             .put("format", FORMAT)
@@ -293,7 +299,7 @@ object Sync {
             .put("currency", currency)
             .put("updatedAt", System.currentTimeMillis())
             // Az app nyelve: a Chrome-bővítmény is ezen a nyelven szól
-            .put("uiLang", Lang.code)
+            .put("uiLang", uiLang)
             .put("watches", JSONArray().apply { watches.forEach { put(it.toJson()) } })
             .put("tombstones", JSONObject().apply { tombstones.forEach { (k, v) -> put(k, v) } })
             // „Bárhová, olcsón” riasztások beállításai (az 1-es verziójú fájlban is lehetnek)
