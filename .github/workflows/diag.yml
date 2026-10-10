@@ -98,8 +98,9 @@ jobs:
       - name: Egységtesztek eredménye
         shell: bash
         run: |
-          bad=$(cat desktop/build/test-results/test/*.xml 2>/dev/null | grep -oE '(failures|errors)="[1-9][0-9]*"' | wc -l)
-          if [ "$bad" -gt 0 ] || grep -q "tests completed, [0-9]* failed" unit.log 2>/dev/null; then
+          # Csak az egységteszt-futás összesítő sorai (a jelentésben is ezek látszanak)
+          bad=$(cat unit-results/*.xml 2>/dev/null | grep -oE '<testsuite [^>]*' | grep -cE '(failures|errors)="[1-9]')
+          if [ "$bad" -gt 0 ] || grep -qE "tests completed, [0-9]+ failed" unit.log 2>/dev/null; then
             grep -E "FAILED" unit.log | sed 's/^/::error::/' | head -20
             exit 1
           fi
