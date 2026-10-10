@@ -260,6 +260,64 @@ object WizzAir {
         )
     }
 
+    /**
+     * Napi legolcsóbb árak (egy főre, csak oda) egy időszakra – az árnaptárhoz. A Wizz egy kérésben
+     * legfeljebb ~6 hetet ad vissza.
+     */
+    internal fun dayFares(origin: String, destination: String, from: java.time.LocalDate, to: java.time.LocalDate): List<DayFare> {
+        val body = JSONObject()
+            .put("flightList", JSONArray().put(
+                JSONObject().put("departureStation", origin).put("arrivalStation", destination)
+                    .put("from", from.toString()).put("to", to.toString())
+            ))
+            .put("priceType", "regular").put("adultCount", 1).put("childCount", 0).put("infantCount", 0)
+        var res = Http.request("${base(forceNew = false)}/search/timetableV2", method = "POST", headers = apiHeaders(), body = body.toString())
+        if (res.code == 401 || res.code == 403) {
+            res = Http.request("${base(forceNew = true)}/search/timetableV2", method = "POST", headers = apiHeaders(), body = body.toString())
+        }
+        if (res.code == 400 && res.body.contains("InvalidMarket")) return emptyList()
+        if (res.code !in 200..299) throw IOException("Wizz HTTP ${res.code}")
+        val flights = JSONObject(res.body).optJSONArray("outboundFlights") ?: return emptyList()
+        return (0 until flights.length()).mapNotNull { i ->
+            val f = flights.optJSONObject(i) ?: return@mapNotNull null
+            val price = f.optJSONObject("price") ?: return@mapNotNull null
+            val amount = price.optDouble("amount", Double.NaN)
+            if (amount.isNaN() || amount <= 0 || f.optString("priceType") == "soldOut") return@mapNotNull null
+            DayFare(amount, price.optString("currencyCode", "EUR"), f.optString("departureDate").take(10),
+                f.optString("departureStation").takeIf { it.length == 3 }, f.optString("arrivalStation").takeIf { it.length == 3 })
+        }
+    }
+
+    /** A legutóbbi „olcsó járatok” válasz eleje – diagnosztikához. */
+    @Volatile
+    var lastCheapRaw: String = ""
+
+    /**
+     * „Olcsó járatok innen” (a Wizz Air oldalán a „Cheap flights” ajánló): egyirányú legolcsóbb árak
+     * minden úti célra a következő hónapokban. Hiba vagy ismeretlen formátum esetén üres lista.
+     */
+    internal fun cheapFlights(origin: String, months: Int = 6): List<DayFare> {
+        val body = JSONObject().put("departureStation", origin).put("months", months).put("discountedOnly", false)
+        var res = Http.request("${base(forceNew = false)}/search/CheapFlights", method = "POST", headers = apiHeaders(), body = body.toString())
+        if (res.code == 401 || res.code == 403) {
+            res = Http.request("${base(forceNew = true)}/search/CheapFlights", method = "POST", headers = apiHeaders(), body = body.toString())
+        }
+        lastCheapRaw = "HTTP ${res.code}: ${res.body.take(600)}"
+        if (res.code !in 200..299) throw IOException("Wizz HTTP ${res.code}")
+        val root = JSONObject(res.body)
+        val items = root.optJSONArray("items") ?: root.optJSONArray("flights") ?: return emptyList()
+        return (0 until items.length()).mapNotNull { i ->
+            val f = items.optJSONObject(i) ?: return@mapNotNull null
+            val to = f.optString("arrivalStation").takeIf { it.length == 3 } ?: return@mapNotNull null
+            val price = f.optJSONObject("price") ?: f.optJSONObject("regularPrice") ?: return@mapNotNull null
+            val amount = price.optDouble("amount", Double.NaN)
+            if (amount.isNaN() || amount <= 0) return@mapNotNull null
+            val date = listOf("std", "departureDate", "date").map { f.optString(it) }.firstOrNull { it.length >= 10 }
+            DayFare(amount, price.optString("currencyCode", "EUR"), date?.let { if (it.length >= 16) it.take(16) else it.take(10) },
+                f.optString("departureStation").takeIf { it.length == 3 } ?: origin, to)
+        }
+    }
+
     internal class DayFare(
         val amount: Double,
         val currency: String,

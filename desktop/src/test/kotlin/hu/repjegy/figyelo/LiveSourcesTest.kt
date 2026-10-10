@@ -76,6 +76,20 @@ class LiveSourcesTest {
         out.appendLine("=== Árfolyam: 1 EUR = ${runCatching { Rates.convert(1.0, "EUR", "HUF") }.getOrElse { "HIBA: $it" }} HUF")
         out.appendLine("=== Frissítésfigyelő: ${runCatching { Updater.check()?.toString() ?: "nincs újabb (vagy nincs .msi)" }.getOrElse { "HIBA: $it" }}")
         File("build/diag").mkdirs()
+        // Árnaptár (Ryanair + Wizz napi árak) és a Wizz „olcsó járatok” ajánló
+        val ym = java.time.YearMonth.now().plusMonths(1)
+        out.appendLine("=== ÁRNAPTÁR BUD→London $ym: " + runCatching {
+            val m = PriceCalendar.month("BUD", "LHR,LGW,STN,LTN,LCY,SEN", ym, "HUF")
+            "${m.size} nap; legolcsóbb: " + m.values.sortedBy { it.pricePerPerson }.take(3).joinToString { "${it.date} ${it.pricePerPerson} Ft (${it.source})" }
+        }.getOrElse { "HIBA: $it" })
+        out.appendLine("=== WIZZ OLCSÓ JÁRATOK BUD: " + runCatching {
+            val l = WizzAir.cheapFlights("BUD")
+            "${l.size} db; " + l.take(5).joinToString { "${it.to} ${it.amount} ${it.currency} ${it.departure}" }
+        }.getOrElse { "HIBA: $it" } + " | nyers: " + WizzAir.lastCheapRaw.take(300))
+        out.appendLine("=== FELFEDEZÉS (csak oda, 30 nap) BUD: " + runCatching {
+            val r = Discover.search("BUD", 0, 0, null, "HUF")
+            "${r.size} úti cél; " + r.take(5).joinToString { "${it.code} ${it.pricePerPerson}" }
+        }.getOrElse { "HIBA: $it" })
         File("build/diag/live.txt").writeText(out.toString())
         println(out)
     }

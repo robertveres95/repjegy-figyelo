@@ -135,4 +135,29 @@ class SyncTest {
         val (m, _) = Sync.merge(listOf(w("a", edited = future)), emptyMap(), emptyList(), mapOf("a" to Store.stamp(future)))
         assertTrue(m.isEmpty())
     }
+
+    @Test fun dealAlertsSyncMergeAndTombstones() {
+        // Helyi riasztás + egy másik eszközön létrehozott + egy, amit ott töröltek
+        DealAlerts.mergeFromSync(emptyList(), emptyMap())
+        DealAlerts.all.value.forEach { DealAlerts.remove(it.id) }
+        val mine = DealAlert("m1", "BUD", "Budapest", null, 1, 20000, "HUF", 1000L, editedAt = 1000L, notified = mapOf("BCN" to 15000))
+        DealAlerts.add(mine)
+        val stored = DealAlerts.all.value.single()
+        val other = DealAlert("o1", "VIE", "Wien", "2026-12", 2, 30000, "HUF", 2000L, editedAt = 2000L)
+        val newerMine = stored.copy(maxPrice = 25000, editedAt = stored.editedAt + 10, notified = emptyMap())
+        val (merged, tomb) = DealAlerts.mergeFromSync(listOf(other, newerMine), mapOf("gone" to 5L))
+        assertEquals(listOf("m1", "o1"), merged.map { it.id })
+        assertEquals(25000, merged.first { it.id == "m1" }.maxPrice, "a később módosított nyer")
+        assertTrue(merged.first { it.id == "m1" }.notified.isEmpty(), "más határnál a jelzések törlődnek")
+        assertEquals(5L, tomb["gone"])
+        // A felhőfájlban 2-es verzió, és visszaolvasható
+        val text = Sync.serialize(emptyList(), emptyMap(), "HUF", null, merged, tomb)
+        assertEquals(2, org.json.JSONObject(text).getInt("version"))
+        val snap = assertNotNull(Sync.parse(text))
+        assertEquals(merged.map { it.toSyncJson().toString() }, snap.alerts.map { it.toSyncJson().toString() })
+        // Törlés egy másik eszközön: a törlésjel erősebb a régebbi beállításnál
+        val (afterDelete, _) = DealAlerts.mergeFromSync(snap.alerts, mapOf("o1" to 99_999_999_999L))
+        assertEquals(listOf("m1"), afterDelete.map { it.id })
+        DealAlerts.all.value.forEach { DealAlerts.remove(it.id) }
+    }
 }

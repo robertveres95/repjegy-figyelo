@@ -378,6 +378,27 @@ object Notifier {
         }
     }
 
+    /** Gombok az árértesítésen: Foglalás (a legjobb ajánlat oldala), Megosztás (a családnak), Megnyitás (az app). */
+    private fun priceActions(context: Context, w: Watch, best: Offer, currency: String): List<NotificationCompat.Action> {
+        val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        val base = w.id.hashCode()
+        val list = mutableListOf<NotificationCompat.Action>()
+        best.url?.takeIf(::isSafeWebUrl)?.let { url ->
+            val book = Intent(Intent.ACTION_VIEW, Uri.parse(url.trim())).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            list += NotificationCompat.Action(0, tr("Foglalás", "Book", "Buchen"),
+                PendingIntent.getActivity(context, base + 1, book, flags))
+        }
+        val send = Intent(Intent.ACTION_SEND).setType("text/plain")
+            .putExtra(Intent.EXTRA_TEXT, ShareCode.message(w, currency))
+        val chooser = Intent.createChooser(send, tr("Megosztás", "Share", "Teilen")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        list += NotificationCompat.Action(0, tr("Megosztás", "Share", "Teilen"),
+            PendingIntent.getActivity(context, base + 2, chooser, flags))
+        val open = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        list += NotificationCompat.Action(0, tr("Megnyitás", "Open", "Öffnen"),
+            PendingIntent.getActivity(context, base + 3, open, flags))
+        return list
+    }
+
     fun priceDrop(context: Context, w: Watch, currency: String) {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
@@ -413,6 +434,7 @@ object Notifier {
             .apply { if (!quiet) setVibrate(VIBRATION) else setSilent(true) }
             .setContentIntent(pending)
             .setAutoCancel(true)
+            .apply { priceActions(context, w, best, currency).forEach { addAction(it) } }
             .build()
         try {
             NotificationManagerCompat.from(context).notify(w.id.hashCode(), notification)

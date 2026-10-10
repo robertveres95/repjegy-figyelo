@@ -1117,6 +1117,22 @@ internal fun EditScreen(id: String?, template: Watch? = null, onDone: () -> Unit
                 retDate = it.plusDays(days)
                 if (span >= 0) weeklyUntil = it.plusDays(span)
             }
+            // Havi árnaptár: melyik nap a legolcsóbb (a fapadosok árnaptárából)
+            val calFrom = fromPlace
+            val calTo = toPlace
+            if (calFrom != null && calTo != null) {
+                var showCal by remember { mutableStateOf(false) }
+                TextButton(onClick = { showCal = true }, contentPadding = PaddingValues(0.dp)) {
+                    Text(tr("📅 Árnaptár – melyik nap a legolcsóbb?", "📅 Price calendar – which day is cheapest?", "📅 Preiskalender – welcher Tag ist am günstigsten?"))
+                }
+                if (showCal) PriceCalendarDialog(calFrom.codes, calTo.codes, outDate, onPick = { picked ->
+                    val days = java.time.temporal.ChronoUnit.DAYS.between(outDate, retDate).coerceAtLeast(0)
+                    val span = java.time.temporal.ChronoUnit.DAYS.between(outDate, weeklyUntil)
+                    outDate = picked
+                    retDate = picked.plusDays(days)
+                    if (span >= 0) weeklyUntil = picked.plusDays(span)
+                }, onClose = { showCal = false })
+            }
             if (roundTrip) {
                 DateField(tr("Visszaút", "Return"), retDate, minDate = outDate, onValidChange = { retValid = it }) { retDate = it }
             }

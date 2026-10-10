@@ -207,9 +207,15 @@ object Sync {
         // A kulcsok: a később módosított változat nyer (új eszközön a felhőben lévő)
         val keys = Store.adoptSyncedKeys(remote?.keys)
 
+        // A „bárhová” riasztások beállításai
+        val (alerts, alertTomb) = DealAlerts.mergeFromSync(remote?.alerts.orEmpty(), remote?.alertTombstones.orEmpty())
+
         // 3. Feltöltés (csak ha változott a felhőben lévőhöz képest)
-        val body = serialize(merged.first, merged.second, currency, keys)
-        if (remote != null && remote.currency == currency &&
+        val body = serialize(merged.first, merged.second, currency, keys, alerts, alertTomb)
+        val sameAlerts = remote != null && remote.alerts.size == alerts.size &&
+            remote.alerts.sortedBy { it.createdAt }.zip(alerts.sortedBy { it.createdAt }).all { (a, b) -> a.sameSettings(b) } &&
+            remote.alertTombstones == alertTomb
+        if (remote != null && remote.currency == currency && sameAlerts &&
             remote.watches.associateBy { it.id } == merged.first.associateBy { it.id } &&
             remote.tombstones == merged.second &&
             (remote.keys == keys || (remote.keys == null && keys.editedAt == 0L))
@@ -265,18 +271,28 @@ object Sync {
         val currency: String,
         val skipped: Int = 0,
         val keys: Store.SyncedKeys? = null,
+        val alerts: List<DealAlert> = emptyList(),
+        val alertTombstones: Map<String, Long> = emptyMap(),
     )
 
-    internal fun serialize(watches: List<Watch>, tombstones: Map<String, Long>, currency: String, keys: Store.SyncedKeys? = null): String =
+    internal fun serialize(
+        watches: List<Watch>, tombstones: Map<String, Long>, currency: String, keys: Store.SyncedKeys? = null,
+        alerts: List<DealAlert> = emptyList(), alertTombstones: Map<String, Long> = emptyMap(),
+    ): String =
         JSONObject()
             .put("format", FORMAT)
             // 2: „minden héten” figyelés is van benne. A régebbi appok (1.3.x) ezt nem ismerik, ezért
             // ilyenkor nem olvassák és nem írják felül (különben elveszne a beállítás) – frissítést kérnek
-            .put("version", if (watches.any { it.weeklyUntil != null }) 2 else 1)
+            .put("version", if (watches.any { it.weeklyUntil != null } || alerts.isNotEmpty() || alertTombstones.isNotEmpty()) 2 else 1)
             .put("currency", currency)
             .put("updatedAt", System.currentTimeMillis())
             .put("watches", JSONArray().apply { watches.forEach { put(it.toJson()) } })
             .put("tombstones", JSONObject().apply { tombstones.forEach { (k, v) -> put(k, v) } })
+            // „Bárhová, olcsón” riasztások beállításai (a 2-es formátumtól)
+            .apply {
+                if (alerts.isNotEmpty()) put("alerts", JSONArray().apply { alerts.forEach { put(it.toSyncJson()) } })
+                if (alertTombstones.isNotEmpty()) put("alertTombstones", JSONObject().apply { alertTombstones.forEach { (k, v) -> put(k, v) } })
+            }
             // A kulcsos források (SerpApi, Ignav) kulcsai: csak a saját, rejtett Drive-területen
             .apply {
                 if (keys != null && keys.editedAt > 0) put("keys", JSONObject()
@@ -306,7 +322,11 @@ object Sync {
                 it.optString("ignavKey", "").take(200), it.optBoolean("ignavOn", false), it.optLong("ignavEditedAt", legacy),
             )
         }
-        return Snapshot(list, tomb, cur, skipped = arr.length() - list.size, keys = k)
+        val al = json.optJSONArray("alerts") ?: JSONArray()
+        val alerts = (0 until al.length()).mapNotNull { i -> al.optJSONObject(i)?.let(DealAlert::fromJson) }
+        val at = json.optJSONObject("alertTombstones")
+        val atomb = at?.keys()?.asSequence()?.associateWith { at.optLong(it, 0L) }.orEmpty()
+        return Snapshot(list, tomb, cur, skipped = arr.length() - list.size, keys = k, alerts = alerts, alertTombstones = atomb)
     }
 
     /** Más pénznemben tárolt figyelések célárának átváltása (az árak törlődnek, a következő ellenőrzés frissíti). */

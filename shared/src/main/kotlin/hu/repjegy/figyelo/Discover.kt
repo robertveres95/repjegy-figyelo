@@ -110,6 +110,12 @@ object Discover {
                 lastError = e
             }
         }
+        // Wizz Air „olcsó járatok” (csak egyirányú utaknál): további úti célok, amerre a Ryanair nem repül
+        if (nights == null && Store.settings.value.wizzOn) {
+            for (origin in origins.take(3)) {
+                runCatching { all += wizz(origin, start, end, currency) }
+            }
+        }
         if (all.isEmpty() && lastError != null) throw lastError
         return all
             .filter { r -> nights == null || r.nights()?.let { it in nights } == true }
@@ -119,6 +125,24 @@ object Discover {
             .sortedBy { it.pricePerPerson }
             .take(60)
     }
+
+    /** A Wizz Air ajánlói egy reptérről, a keresett időszakra szűrve. */
+    private fun wizz(origin: String, start: LocalDate, end: LocalDate, currency: String): List<Result> =
+        WizzAir.cheapFlights(origin).mapNotNull { f ->
+            val day = f.departure?.take(10)?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return@mapNotNull null
+            if (day.isBefore(start) || day.isAfter(end)) return@mapNotNull null
+            val to = f.to ?: return@mapNotNull null
+            val price = runCatching { Rates.convert(f.amount, f.currency, currency) }.getOrNull() ?: return@mapNotNull null
+            Result(
+                code = to,
+                city = Airports.cityName(to) ?: to,
+                country = Airports.countryName(to) ?: "",
+                pricePerPerson = ceil(price).toInt(),
+                departure = f.departure?.takeIf { it.length >= 16 } ?: "${day}T00:00",
+                returnDeparture = null,
+                fromCode = f.from ?: origin,
+            )
+        }
 
     internal fun Result.nights(): Int? {
         val o = outDate ?: return null

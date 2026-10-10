@@ -29,7 +29,18 @@ data class DealAlert(
     val notified: Map<String, Int> = emptyMap(),
     /** a legutóbbi találatok (a legolcsóbbak), a képernyőn ezek látszanak */
     val latest: List<Discover.Result> = emptyList(),
+    /** Utolsó felhasználói módosítás (szinkronizáláshoz). */
+    val editedAt: Long = createdAt,
 ) {
+    /** A szinkronizált rész: csak a beállítások (az eszközönkénti állapot – jelzett árak, találatok – nem). */
+    fun toSyncJson(): JSONObject = JSONObject()
+        .put("id", id).put("fromCodes", fromCodes).put("fromLabel", fromLabel).putOpt("month", month)
+        .put("tripType", tripType).put("maxPrice", maxPrice).put("currency", currency)
+        .put("createdAt", createdAt).put("editedAt", editedAt)
+
+    /** Ugyanazok-e a beállítások (az eszközönkénti állapottól függetlenül). */
+    fun sameSettings(o: DealAlert) = toSyncJson().toString() == o.toSyncJson().toString()
+
     /** Az indulási hely neve a felület nyelvén. */
     val fromName: String get() = Airports.cityName(fromCodes) ?: fromLabel
 
@@ -45,7 +56,7 @@ data class DealAlert(
     fun toJson(): JSONObject = JSONObject()
         .put("id", id).put("fromCodes", fromCodes).put("fromLabel", fromLabel)
         .putOpt("month", month).put("tripType", tripType).put("maxPrice", maxPrice).put("currency", currency)
-        .put("createdAt", createdAt).putOpt("lastChecked", lastChecked).putOpt("lastError", lastError)
+        .put("createdAt", createdAt).put("editedAt", editedAt).putOpt("lastChecked", lastChecked).putOpt("lastError", lastError)
         .put("notified", JSONObject().apply { notified.forEach { (k, v) -> put(k, v) } })
         .put("latest", JSONArray().apply {
             latest.forEach { r ->
@@ -68,6 +79,7 @@ data class DealAlert(
                 maxPrice = o.getInt("maxPrice").also { require(it > 0) },
                 currency = o.optString("currency", "HUF"),
                 createdAt = o.optLong("createdAt", 0L),
+                editedAt = o.optLong("editedAt", o.optLong("createdAt", 0L)),
                 lastChecked = o.optLong("lastChecked", 0L).takeIf { it > 0 },
                 lastError = o.optString("lastError", "").takeIf { it.isNotBlank() },
                 notified = n?.keys()?.asSequence()?.associateWith { n.optInt(it) }.orEmpty(),
@@ -113,7 +125,8 @@ object DealAlerts {
     fun add(a: DealAlert): Boolean {
         ensureLoaded()
         if (_all.value.size >= MAX) return false
-        save(_all.value + a)
+        save(_all.value + a.copy(editedAt = Store.stamp(a.createdAt)))
+        Sync.scheduleSoon()
         return true
     }
 
@@ -121,6 +134,57 @@ object DealAlerts {
     fun remove(id: String) {
         ensureLoaded()
         save(_all.value.filterNot { it.id == id })
+        // Törlésjel: a többi eszközön is törlődjön (és onnan ne jöjjön vissza)
+        saveTombstones(tombstones() + (id to Store.stamp(0L)))
+        Sync.scheduleSoon()
+    }
+
+    private const val TOMB_KEY = "dealAlertTombstones"
+
+    @Synchronized
+    fun tombstones(): Map<String, Long> {
+        val o = runCatching { JSONObject(Store.prefs.getString(TOMB_KEY, "{}") ?: "{}") }.getOrNull() ?: return emptyMap()
+        return o.keys().asSequence().associateWith { o.optLong(it, 0L) }
+    }
+
+    @Synchronized
+    private fun saveTombstones(t: Map<String, Long>) {
+        val cutoff = System.currentTimeMillis() - 120L * 24 * 3_600_000L
+        val o = JSONObject()
+        t.filterValues { it >= cutoff }.forEach { (k, v) -> o.put(k, v) }
+        Store.prefs.edit { putString(TOMB_KEY, o.toString()) }
+    }
+
+    /**
+     * Összefésülés a felhőben lévővel: azonosító szerint a később módosított beállítás nyer, a törlésjel
+     * erősebb a nála régebbi módosításnál; az eszközönkénti állapot (jelzett árak, találatok) helyi marad.
+     */
+    @Synchronized
+    fun mergeFromSync(remote: List<DealAlert>, remoteTomb: Map<String, Long>): Pair<List<DealAlert>, Map<String, Long>> {
+        ensureLoaded()
+        val localTomb = tombstones()
+        val tomb = (localTomb.keys + remoteTomb.keys).associateWith { maxOf(localTomb[it] ?: 0L, remoteTomb[it] ?: 0L) }
+        val local = _all.value.associateBy { it.id }
+        val rem = remote.associateBy { it.id }
+        val merged = (local.keys + rem.keys).mapNotNull { id ->
+            val l = local[id]
+            val r = rem[id]
+            val newer = when {
+                l == null -> r!!
+                r == null -> l
+                r.editedAt > l.editedAt -> l.copy(
+                    fromCodes = r.fromCodes, fromLabel = r.fromLabel, month = r.month, tripType = r.tripType,
+                    maxPrice = r.maxPrice, currency = r.currency, editedAt = r.editedAt,
+                    // Más feltételek: a korábbi jelzések már nem érvényesek
+                    notified = if (r.maxPrice == l.maxPrice && r.currency == l.currency) l.notified else emptyMap(),
+                )
+                else -> l
+            }
+            newer.takeUnless { (tomb[id] ?: 0L) >= newer.editedAt }
+        }.sortedBy { it.createdAt }.take(MAX)
+        save(merged)
+        saveTombstones(tomb)
+        return merged to tomb
     }
 
     @Synchronized
