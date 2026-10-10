@@ -1,0 +1,5 @@
+# Szándékosan nyilvános értékek (nem titkok):
+# - a Chrome-bővítmény manifest.json "key" mezője: nyilvános kulcs, a stabil bővítmény-azonosítóhoz
+# - a Windows-app Google OAuth „asztali” kliensének secretje: a Google szerint telepített appnál nem titok (PKCE véd)
+1e0b3fe6af599128c99ea5a9ff3e35e1c6f0c3bd:chrome-extension/manifest.json:generic-api-key:7
+9802eb3e13389d34a7995602381c11c67e71cdf9:desktop/src/main/kotlin/hu/repjegy/figyelo/GoogleAuthDesktop.kt:generic-api-key:27

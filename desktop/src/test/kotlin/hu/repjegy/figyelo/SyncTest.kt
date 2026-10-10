@@ -94,7 +94,7 @@ class SyncTest {
 
     @Test fun newerFormatAndBrokenWatchesAreNotSilentlyDropped() {
         // Egy későbbi app-verzió formátumát nem fésüljük össze (különben a régi app felülírná)
-        val v2 = Sync.serialize(listOf(w("a")), emptyMap(), "HUF").replace("\"version\":1", "\"version\":2")
+        val v2 = Sync.serialize(listOf(w("a")), emptyMap(), "HUF").replace("\"version\":1", "\"version\":${Sync.FORMAT_VERSION + 1}")
         assertNull(Sync.parse(v2))
         // Egy beolvashatatlan figyelés: számon tartjuk, hogy a feltöltés ne törölje ki a felhőből
         val broken = Sync.serialize(listOf(w("a"), w("b")), emptyMap(), "HUF")
