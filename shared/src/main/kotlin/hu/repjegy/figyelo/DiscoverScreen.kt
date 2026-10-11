@@ -77,7 +77,7 @@ internal fun ImportCodeDialog(initial: String, onDismiss: () -> Unit, onImported
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    tr("Illeszd be a kapott üzenetet vagy a „REFI1:” kezdetű kódot.", "Paste the message you received or the code starting with “REFI1:”.", "Füge die erhaltene Nachricht oder den Code ein, der mit „REFI1:“ beginnt."),
+                    tr("Illeszd be a kapott üzenetet vagy a „REFI” kezdetű kódot.", "Paste the message you received or the code starting with “REFI”.", "Füge die erhaltene Nachricht oder den Code ein, der mit „REFI“ beginnt."),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 OutlinedTextField(

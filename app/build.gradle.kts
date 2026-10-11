@@ -65,6 +65,15 @@ android {
         compose = true
         buildConfig = true
     }
+
+    // Az appon belüli nyelvválasztó miatt minden nyelv szövegei a telepítőben legyenek: a Google Play
+    // különben csak a telefon nyelvét tölti le, és pl. magyar telefonon a német felület
+    // értesítés-szövegei (values-de) hiányoznának
+    bundle {
+        language {
+            enableSplit = false
+        }
+    }
 }
 
 dependencies {

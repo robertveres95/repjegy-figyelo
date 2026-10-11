@@ -68,13 +68,16 @@ object ShareCode {
             encode(w, currency)
     }
 
-    /** Megkeresi a kódot egy (akár hosszabb) szövegben, és figyeléssé alakítja. */
+    /** Van-e a szövegben REFI-kód (egyszerű vagy „minden héten” figyelésé). */
+    fun looksLikeCode(text: String): Boolean = text.contains(PREFIX) || text.contains(PREFIX2)
+
     /** A már meglévő figyelés, amelyből (vagy amellyel közös forrásból) ez a megosztott figyelés származik. */
     fun existingFor(w: Watch, list: List<Watch>): Watch? {
         val src = w.sharedFrom ?: return null
         return list.firstOrNull { it.id == src } ?: list.firstOrNull { it.sharedFrom == src }
     }
 
+    /** Megkeresi a kódot egy (akár hosszabb) szövegben, és figyeléssé alakítja. */
     fun decode(text: String): Pair<Watch, String>? {
         val (start, prefix) = listOf(PREFIX, PREFIX2).map { text.indexOf(it) to it }
             .filter { it.first >= 0 }.minByOrNull { it.first } ?: return null

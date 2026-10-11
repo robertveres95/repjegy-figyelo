@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -48,7 +49,7 @@ import java.time.format.TextStyle
  */
 @Composable
 fun PriceCalendarDialog(from: String, to: String, initial: LocalDate, onPick: (LocalDate) -> Unit, onClose: () -> Unit, nights: Int? = null) {
-    val currency = Store.settings.value.currency
+    val currency = Store.settings.collectAsState().value.currency
     val today = remember { LocalDate.now() }
     var month by remember { mutableStateOf(YearMonth.from(maxOf(initial, today))) }
     val lastMonth = remember { YearMonth.from(maxTravelDate(today)) }

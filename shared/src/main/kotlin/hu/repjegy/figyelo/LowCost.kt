@@ -43,7 +43,18 @@ private fun lowCostNote(w: Watch): String? {
 }
 
 private fun searchPairs(w: Watch, maxPairs: Int, block: (String, String) -> List<Offer>): List<Offer> =
-    collectOffers(pairsOf(w, maxPairs)) { (o, d) -> block(o, d) }
+    try {
+        collectOffers(pairsOf(w, maxPairs)) { (o, d) -> block(o, d) }.distinctFlights()
+    } catch (e: PartialSourceException) {
+        throw PartialSourceException(e.offers.distinctFlights(), e.failed, e.total, e.cause as? Exception, e.fatal)
+    }
+
+/**
+ * A Wizz a város bármelyik repterére kérve ugyanazt a járatot adja (pl. London: LGW-re, STN-re kérve is a
+ * lutoni járatot): egy járat csak egyszer számít (különben a forrás „3 ajánlat”-ot mutatna egy helyett).
+ */
+internal fun List<Offer>.distinctFlights(): List<Offer> =
+    distinctBy { o -> if (o.departure == null) Any() else listOf(o.source, o.fromCode, o.toCode, o.departure, o.returnDeparture, o.price) }
 
 // ---------------------------------------------------------------- Ryanair
 

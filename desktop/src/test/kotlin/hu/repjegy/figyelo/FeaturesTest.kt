@@ -615,4 +615,24 @@ class FeaturesTest {
         fun r(code: String, p: Int) = Discover.Result(code, code, "", p, null, null, "BUD")
         assertEquals(listOf("BCN"), DealAlerts.fresh(a, listOf(r("BCN", 7_000_000), r("MAD", 9_000_000)), limit = 8_000_000, notified = emptyMap()).map { it.code })
     }
+
+    // ---------------- Hibakeresés (teszt-109)
+    @Test fun weeklyShareCodeIsRecognisedOnPaste() {
+        val weekly = watch(out = "2026-11-13", ret = "2026-11-15").copy(weeklyUntil = "2026-12-04", flexDays = 0)
+        val msg = ShareCode.message(weekly, "HUF")
+        assertTrue("REFI2:" in msg, "a heti figyelés REFI2-kódot kap")
+        assertTrue(ShareCode.looksLikeCode(msg), "a vágólapról beillesztve is felismerjük")
+        assertTrue(ShareCode.looksLikeCode(ShareCode.message(watch(), "HUF")))
+        assertFalse(ShareCode.looksLikeCode("Szia, holnap repülünk!"))
+        assertEquals("2026-12-04", ShareCode.decode(msg)?.first?.weeklyUntil)
+    }
+
+    @Test fun sameLowCostFlightCountsOnce() {
+        val ltn = Offer(33780, "Wizz Air", "Wizz Air", "BUD", "LTN", "2026-11-14T12:50", returnDeparture = "2026-11-19T15:15")
+        val other = ltn.copy(departure = "2026-11-14T17:30")
+        val list = listOf(ltn, ltn.copy(), ltn.copy(), other).distinctFlights()
+        assertEquals(2, list.size)
+        // Időpont nélküli ajánlatokat nem vonunk össze (nem tudjuk, ugyanaz-e)
+        assertEquals(2, listOf(Offer(1, "x"), Offer(1, "x")).distinctFlights().size)
+    }
 }

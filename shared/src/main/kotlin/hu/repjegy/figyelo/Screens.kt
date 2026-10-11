@@ -476,7 +476,7 @@ internal fun HomeScreen(
                                 text = { Text(tr("Kód beillesztése", "Paste code", "Code einfügen")) },
                                 onClick = {
                                     menuOpen = false
-                                    codeDialog = Platform.current.readClipboard()?.takeIf { it.contains("REFI1:") } ?: ""
+                                    codeDialog = Platform.current.readClipboard()?.takeIf { ShareCode.looksLikeCode(it) } ?: ""
                                 },
                             )
                             DropdownMenuItem(
