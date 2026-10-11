@@ -719,6 +719,8 @@ private fun WatchCard(
     var showAll by remember { mutableStateOf(false) }
     // Fokozatos feltárás: alapból csak a lényeg (ár, tanács), a részletek egy koppintásra
     var expanded by androidx.compose.runtime.saveable.rememberSaveable(w.id) { mutableStateOf(expandCardsInitially) }
+    val hasDetails = best != null || w.sourceStatus.isNotEmpty() || w.history.isNotEmpty() ||
+        (w.market?.points?.isNotEmpty() == true)
 
     NeonCard(
         modifier = modifier.fillMaxWidth(),
@@ -839,7 +841,8 @@ private fun WatchCard(
                     color = Neon.TextDim,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = { expanded = !expanded }) {
+                // Még ellenőrizetlen figyelésnél nincs mit lenyitni: a kapcsoló ilyenkor nem látszik
+                if (hasDetails) TextButton(onClick = { expanded = !expanded }) {
                     Text(
                         if (expanded) tr("Kevesebb", "Less", "Weniger") else tr("Részletek", "Details", "Details"),
                         maxLines = 1,
@@ -855,7 +858,7 @@ private fun WatchCard(
 
             // ---- Részletek (lenyitva)
             AnimatedVisibility(
-                visible = expanded,
+                visible = expanded && hasDetails,
                 enter = expandVertically(tween(300)) + fadeIn(tween(300)),
                 exit = shrinkVertically(tween(250)) + fadeOut(tween(200)),
             ) {

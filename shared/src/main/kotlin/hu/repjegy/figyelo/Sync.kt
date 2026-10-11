@@ -226,7 +226,12 @@ object Sync {
             remote.watches.associateBy { it.id } == merged.first.associateBy { it.id } &&
             remote.tombstones == merged.second &&
             (remote.keys == keys || (remote.keys == null && keys.editedAt == 0L))
-        ) return
+        ) {
+            // A felhőben már ez a nyelv van: a választás „elküldöttnek” számít (különben egy későbbi,
+            // másik eszközön választott nyelvet ez az eszköz minden szinkronnál visszaírna)
+            if (langDirty && Lang.code == uiLang) runCatching { Store.prefs.edit { putBoolean(Lang.DIRTY_KEY, false) } }
+            return
+        }
         val res = if (fileId == null) {
             val boundary = "refi" + System.nanoTime()
             val meta = JSONObject().put("name", FILE_NAME).put("parents", JSONArray().put("appDataFolder")).toString()
@@ -249,7 +254,8 @@ object Sync {
         if (res.code == 412) throw ConflictException()
         check401(res.code, res.body)
         if (res.code !in 200..299) throw IOException(tr("Drive feltöltés HTTP ${res.code}", "Drive upload HTTP ${res.code}", "Drive-Upload HTTP ${res.code}"))
-        if (langDirty) runCatching { Store.prefs.edit { putBoolean(Lang.DIRTY_KEY, false) } }
+        // (ha közben újra nyelvet váltott, a jelzés marad: a következő szinkron azt is felviszi)
+        if (langDirty && Lang.code == uiLang) runCatching { Store.prefs.edit { putBoolean(Lang.DIRTY_KEY, false) } }
     }
 
     private fun check401(code: Int, body: String = "") {
