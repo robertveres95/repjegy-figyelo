@@ -41,6 +41,15 @@ object WhatsNew {
         }
 
     private val hungarian: List<Pair<String, List<String>>> = listOf(
+        "1.5.0" to listOf(
+            "Megújult, letisztultabb felület: a kártyán csak a lényeg (ár, tanács), a részletek egy koppintásra; jobban olvasható árgörbe a Google árelőzményével.",
+            "A beállítások azonnal mentődnek, és csoportokba rendezve, átláthatóbban jelennek meg.",
+            "Áttekinthetőbb szerkesztő: szakaszokra bontva, a Mentés gomb mindig kéznél van.",
+            "Oda-vissza árnaptár: oda-vissza útnál a teljes út legolcsóbb napját mutatja.",
+            "A Felfedezés oda-vissza útjainál a Wizz Air ajánlatai is megjelennek.",
+            "A Chrome-bővítmény az appban választott nyelven szól; az értesítés gombjai után eltűnik az értesítés.",
+            "Sok hibajavítás (pl. a „minden héten” figyelés kódja is beilleszthető, pontosabb Wizz-találatok).",
+        ),
         "1.4.0" to listOf(
             "A REFI már angolul és németül is beszél (Beállítások → Nyelv) – a városnevek is a választott nyelven.",
             "„Minden héten” rugalmasság: pl. péntek–vasárnapot megadva bármelyik hétvégét figyeli, és a legolcsóbbat mutatja.",
@@ -77,6 +86,15 @@ object WhatsNew {
 
     /** Az újdonságok angolul, verziónként. */
     private val englishNotes: Map<String, List<String>> = mapOf(
+        english("1.5.0", listOf(
+            "A refreshed, cleaner look: the card shows just the essentials (price, advice), with details one tap away; a more readable price chart with Google's price history.",
+            "Settings are saved instantly and are grouped more clearly.",
+            "A clearer editor: split into sections, with the Save button always at hand.",
+            "Round-trip price calendar: for return trips it shows the cheapest day for the whole trip.",
+            "Discover now shows Wizz Air deals for return trips too.",
+            "The Chrome extension speaks the language you chose in the app; notifications disappear after you tap their buttons.",
+            "Lots of fixes (e.g. “every week” watch codes can be pasted too, more accurate Wizz results).",
+        )),
         english("1.4.0", listOf(
             "REFI now speaks English and German too (Settings → Language) – city names follow the chosen language as well.",
             "“Every week” flexibility: e.g. set Friday–Sunday and REFI watches every weekend and shows you the cheapest.",
@@ -113,6 +131,15 @@ object WhatsNew {
 
     /** Az újdonságok németül, verziónként. */
     private val germanNotes: Map<String, List<String>> = mapOf(
+        german("1.5.0", listOf(
+            "Ein aufgefrischtes, klareres Design: Die Karte zeigt nur das Wichtigste (Preis, Tipp), Details mit einem Tippen; ein besser lesbarer Preisverlauf mit Googles Preisverlauf.",
+            "Einstellungen werden sofort gespeichert und übersichtlicher gruppiert.",
+            "Ein übersichtlicherer Editor: in Abschnitte gegliedert, die Speichern-Schaltfläche immer griffbereit.",
+            "Preiskalender für Hin- und Rückflug: zeigt den günstigsten Tag für die ganze Reise.",
+            "„Entdecken“ zeigt jetzt auch Wizz-Air-Angebote für Hin- und Rückflüge.",
+            "Die Chrome-Erweiterung spricht die in der App gewählte Sprache; Benachrichtigungen verschwinden nach dem Tippen auf ihre Schaltflächen.",
+            "Viele Fehlerbehebungen (z. B. lassen sich auch Codes für „Jede Woche“-Beobachtungen einfügen, genauere Wizz-Ergebnisse).",
+        )),
         german("1.4.0", listOf(
             "REFI spricht jetzt auch Englisch und Deutsch (Einstellungen → Sprache) – auch die Städtenamen in der gewählten Sprache.",
             "„Jede Woche“-Flexibilität: z. B. Freitag–Sonntag wählen, und REFI beobachtet jedes Wochenende und zeigt das günstigste.",
